@@ -52,6 +52,7 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `LIVE_TTL_SECONDS` | `300` | how long a live feed copy counts as fresh |
 | `LIVE_WAIT_SECONDS` | `25` | how long a request waits for a live download |
 | `LIVE_WARMUP` | on | `0` skips the boot download |
+| `OHMIGO_QA` | off | `1` turns on QA mode: every result carries the quarter-hour `timeline` and a `debug` block, and the assistant is told to show them. Never in production |
 | `NAP_STATUS_URL` | MOBI.E's `evActualStatus` | the live feed |
 
 Secrets (`CEME_API_KEY`) go in the hosting platform's secret variables, never

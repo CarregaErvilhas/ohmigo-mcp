@@ -67,6 +67,10 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
 
 ## Known limits
 
+- **The energy price follows the clock.** Each quarter-hour of the session
+  is priced at its own off-peak/peak period and OMIE price, from the start
+  time the assistant passes (default now). Ask for `detail` to see it
+  quarter by quarter ([02](docs/02-cost-math.md)).
 - **Durations are modelled**, not measured. Without the car's curve or 10-80 %
   time, they're rough.
 - **Live status is up to 5 minutes old**, and the first question after a quiet

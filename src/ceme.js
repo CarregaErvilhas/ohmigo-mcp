@@ -50,10 +50,30 @@ function cached(key, fn) {
   return value;
 }
 
-// All tariffs quoted for `kwh` at instant `at`, cheapest first. kWh is rounded
-// to 0.1 and `at` to the quarter-hour so nearby requests share a cache entry;
-// the quarter-hour is the OMIE pricing unit, so that rounding is exact.
-export function simulate({ kwh, at = new Date(), region = 'CONT' }) {
+// All tariffs quoted for a session, cheapest first.
+//
+// With `profile` (the session cut into quarter-hour slices, see profile.js),
+// ceme-v2 prices every slice at its own off-peak/peak period, OMIE quarter,
+// losses and TAR day. We still send `kwh` and `at` (the sum and the start):
+// a ceme-v2 that doesn't know `profile` yet ignores it and prices the whole
+// session at the start, and the reply then has no `profile` field, which
+// quote.js turns into an assumption.
+//
+// Without a profile, kWh is rounded to 0.1 and `at` to the quarter-hour so
+// nearby requests share a cache entry (the quarter-hour is the OMIE unit).
+// With one, the key is the profile itself: points with the same power and
+// start share it, so a ranking needs one call per distinct charging speed.
+//   detail: ask for each tariff's per-slice breakdown (period, price, OMIE).
+export function simulate({ kwh, at = new Date(), region = 'CONT', profile = null, detail = false }) {
+  if (profile?.length) {
+    const slices = profile.map(({ at, kwh }) => ({ at, kwh }));
+    const sum = slices.reduce((a, x) => a + x.kwh, 0);
+    const key = `simp|${region}|${detail ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',')}`;
+    return cached(key, () => call('/v1/simulate', {
+      method: 'POST',
+      body: JSON.stringify({ kwh: Math.round(sum * 1000) / 1000, at: slices[0].at, region, useSpot: true, profile: slices, detail }),
+    }));
+  }
   const k = Math.max(0.1, Math.round(kwh * 10) / 10);
   const q = new Date(Math.floor(at.getTime() / 900_000) * 900_000);
   return cached(`sim|${region}|${k}|${q.toISOString()}`, () => call('/v1/simulate', {

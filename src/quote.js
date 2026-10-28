@@ -2,7 +2,9 @@
 //
 // This is where the pieces meet:
 //   charging.js  -> how many kWh and minutes
-//   ceme.js      -> the energy part, from ceme-v2 (one call, all CEME tariffs)
+//   profile.js   -> when each kWh is delivered (quarter-hour slices)
+//   ceme.js      -> the energy part, from ceme-v2 (one call, all CEME tariffs,
+//                   each slice priced at its own period and OMIE quarter)
 //   opc.js       -> the charger operator's fee
 //   offers.js    -> walk-up, operator app, eMSP and subscription prices (offers/)
 //   live.js      -> live status and, as a fallback, the operator fee from the NAP
@@ -27,6 +29,7 @@
 
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
+import { localOffset, localTime, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { describePlan, opcCost } from './opc.js';
@@ -66,11 +69,31 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
   return { options, headline, best, missing: false };
 }
 
+// kwhByPeriod is there when the session crosses periods for this tariff
+// (each tariff has its own cycle, so one session can cross for one and not
+// for another): { VAZIO: 12.4, FORA_VAZIO: 20.1 }.
 const cemeOption = (t, opcWithVat) => ({
   kind: 'ceme', label: `${t.ceme} · ${t.name}`, total: r2(t.totalEur + opcWithVat),
   tariffId: t.id, ceme: t.ceme, name: t.name, tariffKind: t.kind, period: t.period,
+  ...(t.kwhByPeriod && Object.keys(t.kwhByPeriod).length > 1 && { kwhByPeriod: t.kwhByPeriod }),
   requiresOtherContract: !!t.bundle, energyEur: t.totalEur,
 });
+
+// The per-quarter story of a session, for a driver (or a QA run) who asks
+// how the price was built: when each kWh goes in, and for each CEME tariff
+// shown, the period, price and OMIE of every slice.
+function timeline(region, slices, tariffs, sim) {
+  return {
+    timeZone: REGION_TZ[region] || REGION_TZ.CONT,
+    omieQuartersKnown: sim.profile ? `${sim.profile.withSpot}/${sim.profile.slices}` : null,
+    slices: slices.map(s => ({ ...s, local: localTime(s.at, region), utcOffset: localOffset(s.at, region) })),
+    tariffs: tariffs.filter(Boolean).map(t => ({
+      tariffId: t.id, label: `${t.ceme} · ${t.name}`,
+      slices: (t.slices || []).map(x => ({ at: x.at, period: x.period, eurKwhExVat: x.final,
+        ...(x.omie != null && { omieEurKwh: Math.round(x.omie * 1e5) / 1e5, omieSpot: x.omieSpot }) })),
+    })),
+  };
+}
 
 // The OPC fee plan for a point and where it came from. MOBI.E's tariff file
 // first (it has the per-minute tiers); the NAP live feed when the socket is
@@ -96,25 +119,37 @@ function adhocOption(point, session, t) {
 
 // Direct offers at this point: kWh x the offer's price for the point's power
 // band. A subscription's fee is listed, not added, since one fee covers every
-// session in the month/year.
-function directOptions(direct, session, t) {
+// session in the month/year. These prices are final with mainland VAT (23 %);
+// on the islands (lower VAT) nobody tells us whether they change, so we show
+// them as they are and say so.
+function directOptions(direct, session, t, region) {
+  const island = region && region !== 'CONT';
   return direct.map(({ offer, eurPerKwh }) => ({
     kind: 'direct', offerId: offer.id, label: offer.label, provider: offer.provider,
     total: r2(eurPerKwh * session.kwh), eurPerKwh, walkUp: !!offer.walkUp,
     subscription: offer.subscription ? { ...(offer.fee || {}), text: offer.fee ? t('option.fee', offer.fee) : t('option.feeUnknown') } : null,
     note: t('option.direct.note', { source: offer.origin === 'custofinal' ? SOURCE.blog : offer.source, checked: offer.checkedAt })
       + (offer.walkUp ? ` ${t('option.walkUp')}` : '')
-      + (isStale(offer) ? ` ${t('option.stale')}` : ''),
-    stale: isStale(offer),
+      + (isStale(offer) ? ` ${t('option.stale')}` : '')
+      + (island ? ` ${t('option.islandVat')}` : ''),
+    stale: isStale(offer), vatUnverified: island || undefined,
   })).sort((a, b) => a.total - b.total);
 }
 
 // Quotes one point. `simCache` lets a caller ranking many points share the
 // ceme-v2 call: the billed kWh only differs between AC and DC (different
 // losses), so a whole ranking needs one or two calls.
-export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, simCache = new Map() } = {}) {
+//   detail: add `timeline` (every quarter-hour slice, and its period and
+//           price for each tariff shown). qa: also `debug` (what went to
+//           ceme-v2 and what came back).
+export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, detail = false, qa = false, simCache = new Map() } = {}) {
   const t = translator(lang);
   const session = estimateSession(point, car, t);
+  // The session starts at `at` (or now), to the minute so points share the
+  // ceme-v2 call, and runs for `minutes`.
+  const start = new Date(Math.floor((at ?? new Date()).getTime() / 60_000) * 60_000);
+  const end = new Date(start.getTime() + session.minutes * 60_000);
+  const slices = sessionProfile(session.segments, start);
   const lp = live?.get(site.id, point.id) ?? null;
   const base = {
     pointId: `${site.id}/${point.id}`, siteId: site.id, code: site.code,
@@ -125,6 +160,8 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     session: {
       kwhBilled: r2(session.kwh), kwhToBattery: r2(session.batteryKwh),
       minutes: Math.round(session.minutes), peakKw: session.peakKw, targetPct: session.targetPct,
+      start: start.toISOString(), end: end.toISOString(),
+      startLocal: localTime(start, site.region), endLocal: localTime(end, site.region),
     },
     assumptions: [...session.assumptions],
     options: [],
@@ -137,7 +174,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // We estimate as if it were a final €/kWh and mark it, and the ranking
     // never mixes these with MOBI.E.
     const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
-    base.options.push(...directOptions(direct, session, t));
+    base.options.push(...directOptions(direct, session, t, base.region));
     if (!direct.length && nap != null) {
       base.options.push({ kind: 'opc_direct', label: t('option.opcDirect', { operator: site.operator ?? 'Operator' }),
         total: r2(nap * session.kwh), asterisk: true, note: t('option.opcDirect.note', { price: t.num(nap) }) });
@@ -153,12 +190,17 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   // ad hoc price here: the published offer is more current (IONITY: MOBI.E's
   // file says 0.51 €/kWh, IONITY itself says 0.63).
   const adhoc = ownWalkUp(site, direct) ? null : adhocOption(point, session, t);
-  const key = `${base.region}|${Math.round(session.kwh * 10)}`;
-  if (!simCache.has(key)) simCache.set(key, simulate({ kwh: session.kwh, at, region: base.region }));
+  const want = detail || qa;
+  const key = `${base.region}|${want ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',') || `${start.toISOString()}=${session.kwh}`}`;
+  if (!simCache.has(key)) simCache.set(key, simulate({ kwh: session.kwh, at: start, region: base.region, profile: slices, detail: want }));
   const sim = await simCache.get(key);
+  // A ceme-v2 without profile support priced everything at the start.
+  base.assumptions.push(sim.profile
+    ? t('assume.window', { from: base.session.startLocal, to: base.session.endLocal })
+    : t('assume.startOnly', { from: base.session.startLocal }));
   const picked = pickTariffs(sim.data, point, tariffIds, shown);
   const ceme = picked.headline;
-  const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t)];
+  const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region)];
   if (!ceme) {
     base.total = null;
     base.note = picked.missing ? t('note.noUserTariff') : t('note.noTariff');
@@ -198,6 +240,13 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   base.best = bestOption(base.options, base.total);
   base.omieSpotEurKwh = sim.omieSpot?.eurKwh ?? null;
   base.pricedAt = sim.at;
+  if (want) {
+    // Same order as the options the driver sees.
+    const byId = new Map(sim.data.map(q => [q.id, q]));
+    const shown = [...new Set(base.options.filter(o => o.kind === 'ceme').map(o => o.tariffId))].map(id => byId.get(id));
+    base.timeline = timeline(base.region, slices, shown, sim);
+  }
+  if (qa) base.debug = { segments: session.segments, profileSent: slices, ceme: { at: sim.at, kwh: sim.kwh, profile: sim.profile ?? null, omieSpot: sim.omieSpot ?? null }, feeSource: source, feePlan: plan };
   return base;
 }
 

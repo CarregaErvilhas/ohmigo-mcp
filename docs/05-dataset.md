@@ -15,10 +15,10 @@ offers (`offers/`, see [04](04-operator-offers.md)).
  Monday 06:00 UTC, nap-dashboard's refresh.yml
    │  downloads the NAP static XML (~170 MB) and MOBI.E's tariff CSV
    │  runs its pipeline, then scripts/ohmigo_dataset.py
-   │  uploads the result as the "chargers.json" asset of the ohmigo-dataset release
+   │  uploads the result as the "ohmigo-dataset" Actions artifact
    ▼
  nap-dashboard's pages.yml
-   │  copies it next to the dashboard
+   │  copies the newest one next to the dashboard
    ▼
  https://nap.ocarroeletrico.com/ohmigo/chargers.json      (GitHub Pages, a CDN)
    │

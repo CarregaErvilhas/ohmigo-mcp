@@ -15,7 +15,7 @@ import { createServer as createHttp } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
-import { createServer } from './mcp.js';
+import { createServer, QA } from './mcp.js';
 
 const PORT = Number(process.env.PORT || 3002);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -82,6 +82,8 @@ createHttp(async (req, res) => {
 
   let body;
   try { body = await readJson(req); } catch (e) { return send(res, e.status || 400, { error: e.message }); }
+  // QA mode logs every call, so a tester can see what the client actually sent.
+  if (QA) console.log('[ohmigo] qa:', body?.method, body?.params?.name ?? '', JSON.stringify(body?.params?.arguments ?? {}));
   const server = createServer(() => ds, live);
   // Responses go out as a stream (SSE), not one JSON blob, so a progress
   // message can reach the user while a tool waits for the live feed.

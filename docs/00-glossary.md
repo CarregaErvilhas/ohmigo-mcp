@@ -80,10 +80,8 @@ never recomputes it.
 **NAP / PAN** — *National Access Point* (*Ponto de Acesso Nacional* in
 Portuguese). The government's open data portal where MOBI.E publishes the
 network, in a European XML format called **DATEX II**. Two feeds:
-- *static*: every site and charger, plugs, power, address, payment methods
-  (~170 MB; once a week is plenty);
-- *dynamic*: the live status of every charger plus the OPC fees (~38 MB,
-  republished every few minutes).
+- *static*: every site and charger, plugs, power, address, payment methods (once a week is plenty);
+- *dynamic*: the live status of every charger plus the OPC fees (republished every few minutes).
 
 **MOBI.E tariff file** — a CSV with every socket's official OPC fee, including
 per-minute tiers ("0.18 €/min after 30 min") and the ad hoc price.

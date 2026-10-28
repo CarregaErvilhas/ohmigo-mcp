@@ -22,6 +22,8 @@ export const MESSAGES = {
     // status of every charger. In Portuguese it's the PAN.
     'progress.live': () => 'Getting live charger status from the NAP…',
 
+    'assume.window': ({ from, to }) => `Energy priced quarter-hour by quarter-hour for a session from ${from} to ${to} (local time): off-peak hours and OMIE changes during the session count`,
+    'assume.startOnly': ({ from }) => `Energy priced as if the whole session happened at ${from} (local time); a session crossing into off-peak hours may cost less`,
     'assume.losses': ({ pct, kind }) => `${pct}% charging losses (${kind}), billed at the charger's meter`,
     'assume.carLimitUnknown': ({ kind, kw }) => `car's max ${kind} power unknown, assumed ${kw} kW`,
     'assume.chargerKwUnknown': () => 'charger power not published, assumed the car limit',
@@ -43,6 +45,7 @@ export const MESSAGES = {
     'option.fee': ({ eur, per }) => `+ ${fmt('en', eur, 2)} €/${per === 'year' ? 'year' : 'month'} subscription`,
     'option.feeUnknown': () => '+ subscription fee',
     'option.stale': () => '(checked a while ago: may be out of date)',
+    'option.islandVat': () => '(listed with mainland VAT; island VAT is lower, so check the price on the app or at the charger)',
 
     'note.outside': () => 'Outside MOBI.E: pay the operator directly, no CEME.',
     'note.noUserTariff': () => "None of the user's tariffs apply at this socket.",
@@ -65,6 +68,8 @@ export const MESSAGES = {
   pt: {
     'progress.live': () => 'A obter o estado dos postos em tempo real no PAN…',
 
+    'assume.window': ({ from, to }) => `Energia cotada quarto de hora a quarto de hora, para um carregamento das ${from} às ${to} (hora local): contam as horas de vazio e as mudanças do OMIE durante o carregamento`,
+    'assume.startOnly': ({ from }) => `Energia cotada como se o carregamento todo fosse às ${from} (hora local); um carregamento que entre no vazio pode sair mais barato`,
     'assume.losses': ({ pct, kind }) => `${pct}% de perdas no carregamento (${kind}), medidas no contador do posto`,
     'assume.carLimitUnknown': ({ kind, kw }) => `potência máxima ${kind} do carro desconhecida, assumidos ${kw} kW`,
     'assume.chargerKwUnknown': () => 'potência do posto não publicada, assumido o limite do carro',
@@ -86,6 +91,7 @@ export const MESSAGES = {
     'option.fee': ({ eur, per }) => `+ ${fmt('pt', eur, 2)} €/${per === 'year' ? 'ano' : 'mês'} de subscrição`,
     'option.feeUnknown': () => '+ mensalidade',
     'option.stale': () => '(verificado há algum tempo: pode estar desactualizado)',
+    'option.islandVat': () => '(preço com IVA do continente; nas ilhas o IVA é mais baixo, confirme o preço na app ou no posto)',
 
     'note.outside': () => 'Fora da MOBI.E: paga-se directamente ao operador, sem CEME.',
     'note.noUserTariff': () => 'Nenhum dos tarifários do utilizador se aplica a esta tomada.',

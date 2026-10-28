@@ -127,5 +127,9 @@ npm test                           # validates all three files
   within one network can't be told apart.
 - "Alguns Mobi.E" offers are left out until someone knows which chargers
   they mean.
+- **Island VAT.** The blog's prices carry mainland VAT (23 %). Madeira and
+  the Azores have lower VAT, and nobody says whether these apps charge less
+  there. On island chargers each direct option keeps its price, gets
+  `vatUnverified: true`, and its note tells the user to confirm it.
 - The blog is one person's work. If it stops, the weekly job keeps the last
   prices and `isStale` starts warning users after 90 days.

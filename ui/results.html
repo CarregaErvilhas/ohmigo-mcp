@@ -73,7 +73,9 @@
       adhoc: 'Card / QR at charger', direct: 'Operator direct', contract: 'needs another contract', cheapest: 'cheapest overall',
       sub: 'subscription', breakdown: 'Breakdown', energy: 'Energy', operator: 'Operator', notPublished: 'not published',
       cardQr: 'Card / QR', own: 'Direct', note: 'Note', assumes: 'Assumes', point: 'Point', directions: 'Directions',
+      period: { VAZIO: 'off-peak', FORA_VAZIO: 'peak', UNICO: 'flat' }, timeline: 'Quarter by quarter',
       foot: (at, stale, day) => `Estimates. ${at ? `Status from the NAP at ${at}${stale ? ' (may be stale)' : ''}.` : 'Live status unavailable.'} Chargers as of ${day}.`,
+      credit: 'Direct prices: Preços (finais) kWh Portugal, custofinal.blogspot.com.',
       status: { available: 'Available', charging: 'In use', outOfOrder: 'Out of order', inoperative: 'Out of order', blocked: 'Blocked', unknown: 'Status unknown', planned: 'Planned' },
     },
     pt: {
@@ -83,7 +85,9 @@
       adhoc: 'Cartão / QR no posto', direct: 'Operador directo', contract: 'exige outro contrato', cheapest: 'o mais barato',
       sub: 'subscrição', breakdown: 'Detalhe', energy: 'Energia', operator: 'Operador', notPublished: 'não publicada',
       cardQr: 'Cartão / QR', own: 'Directo', note: 'Nota', assumes: 'Pressupostos', point: 'Ponto', directions: 'Direcções',
+      period: { VAZIO: 'vazio', FORA_VAZIO: 'fora de vazio', UNICO: 'simples' }, timeline: 'Quarto a quarto',
       foot: (at, stale, day) => `Estimativas. ${at ? `Estado do PAN às ${at}${stale ? ' (pode estar desactualizado)' : ''}.` : 'Estado em tempo real indisponível.'} Postos de ${day}.`,
+      credit: 'Preços directos: Preços (finais) kWh Portugal, custofinal.blogspot.com.',
       status: { available: 'Livre', charging: 'Ocupado', outOfOrder: 'Avariado', inoperative: 'Avariado', blocked: 'Bloqueado', unknown: 'Estado desconhecido', planned: 'Planeado' },
     },
   };
@@ -110,6 +114,18 @@
     const rows = [...(data?.results || []), ...(data?.outsideMobie || []).map(q => ({ ...q, outside: true }))];
     if (!rows.length) { list.className = 'empty'; list.textContent = s.none; return; }
     list.className = '';
+    // Only when the tool was called with detail (or in QA): each quarter's
+    // kWh, and the headline tariff's period and price (excl. VAT) in it.
+    const timelineHtml = (q, h, s) => {
+      const tl = q.timeline;
+      if (!tl) return '';
+      const per = (tl.tariffs.find(x => h && x.tariffId === h.tariffId) || tl.tariffs[0] || { slices: [] }).slices;
+      const lines = tl.slices.map((x, i) => {
+        const p = per[i];
+        return `${esc(x.local)} ${km(x.kwh)} kWh${p ? ` · ${esc(s.period[p.period] || p.period)} ${esc(p.eurKwhExVat?.toFixed(4))} €/kWh${p.omieEurKwh != null ? ` (OMIE ${esc(p.omieEurKwh.toFixed(4))}${p.omieSpot ? '' : '~'})` : ''}` : ''}`;
+      });
+      return `<dt>${s.timeline}</dt><dd>${lines.join('<br>')}</dd>`;
+    };
     list.innerHTML = rows.map((q, i) => {
       const range = q.total && q.total.low !== q.total.high ? `${eur(q.total.low)}–${eur(q.total.high)}` : '';
       const dist = q.km != null ? `${km(q.km)} ${s.away}` : q.alongKm != null ? s.route(Math.round(q.alongKm), km(q.offRouteKm)) : '';
@@ -121,11 +137,12 @@
       return `${head}<div class="row${i === 0 && q.total ? ' best' : ''}">
         <div class="n">${i + 1}</div>
         <div class="where">${esc(q.operator)}<br><span style="font-weight:400">${esc(q.address)}${q.city ? ', ' + esc(q.city) : ''}</span></div>
-        <div class="eur">${q.best ? eur(q.best.total) : (q.total?.asterisk ? '' : q.total ? '≥ ' : '') + eur(q.total?.eur) + (q.total?.asterisk ? '*' : '')}<small>${q.session.minutes} min</small></div>
+        <div class="eur">${q.best ? eur(q.best.total) : (q.total?.asterisk ? '' : q.total ? '≥ ' : '') + eur(q.total?.eur) + (q.total?.asterisk ? '*' : '')}<small>${q.session.minutes} min${q.session.startLocal ? ` · ${esc(q.session.startLocal)}–${esc(q.session.endLocal)}` : ''}</small></div>
         <div class="sub">${q.status ? `<span class="st st-${esc(q.status)}">${esc(s.status[q.status] || q.status)}</span> · ` : ''}${esc(q.kw)} kW ${esc(q.connector)}${q.dc ? ' DC' : ' AC'} · ${km(q.session.kwhBilled)} kWh · ${esc(dist)}${range ? ` · ${s.range} ${range}` : ''}</div>
         ${opts ? `<ul class="opts">${opts}</ul>` : ''}
         <details><summary>${s.breakdown}</summary><dl>
-          ${h ? `<dt>${s.energy}</dt><dd>${eur(h.energyEur)} · ${esc(h.ceme)} ${esc(h.name)}</dd>` : ''}
+          ${h ? `<dt>${s.energy}</dt><dd>${eur(h.energyEur)} · ${esc(h.ceme)} ${esc(h.name)}${h.kwhByPeriod ? ' · ' + Object.entries(h.kwhByPeriod).map(([p, k]) => `${km(k)} kWh ${esc(s.period[p] || p)}`).join(', ') : ''}</dd>` : ''}
+          ${timelineHtml(q, h, s)}
           ${q.opc ? `<dt>${s.operator}</dt><dd>${eur(q.opc.eurWithVat)} · ${esc(q.opc.tariff ?? s.notPublished)}</dd>` : ''}
           ${(q.options || []).filter(o => o.kind === 'adhoc' || o.kind === 'opc_direct').map(o => `<dt>${o.kind === 'adhoc' ? s.cardQr : s.direct}</dt><dd>${o.tariff ? esc(o.tariff) + ' · ' : ''}${esc(o.note || '')}</dd>`).join('')}
           ${(q.options || []).find(o => o.kind === 'direct') ? `<dt>${s.own}</dt><dd>${esc(q.options.find(o => o.kind === 'direct').note)}</dd>` : ''}
@@ -138,7 +155,8 @@
     }).join('');
     const lv = data.live || {};
     const at = lv.publishedAt ? new Date(lv.publishedAt).toLocaleTimeString(lang === 'pt' ? 'pt-PT' : 'en', { hour: '2-digit', minute: '2-digit' }) : null;
-    document.getElementById('foot').textContent = s.foot(at, !lv.fresh, (data.dataAsOf || '').slice(0, 10));
+    document.getElementById('foot').textContent = s.foot(at, !lv.fresh, (data.dataAsOf || '').slice(0, 10))
+      + (JSON.stringify(data).includes('"kind":"direct"') ? ' ' + s.credit : '');
   }
 
   document.addEventListener('click', e => {

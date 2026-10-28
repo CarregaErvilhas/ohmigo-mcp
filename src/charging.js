@@ -66,6 +66,11 @@ function curveKwAt(points, soc) {
 //   1. curve (kW at each SoC)      -> integrate it, 1 % at a time
 //   2. dc10to80Minutes             -> the car's real average speed below 80 %
 //   3. nothing                     -> generic shares of the peak power
+//
+// Besides the totals it returns `segments`: the session as consecutive
+// stretches of constant power, [{ minutes, kwh }] (billed kWh). The energy
+// price changes with the clock (off-peak hours, OMIE every 15 minutes), so
+// profile.js lays these out from the start time to know which kWh fall when.
 export function estimateSession(point, car, t = translator('en')) {
   const assumptions = [];
   const target = car.targetPct ?? DEFAULTS.targetPct;
@@ -87,6 +92,7 @@ export function estimateSession(point, car, t = translator('en')) {
   const peak = Math.min(chargerKw, carKw);
 
   let minutes;
+  const segments = [];
   if (point.dc && car.curve?.length >= 2) {
     // The curve is battery-side power, so time uses battery kWh, not billed.
     const pts = [...car.curve].sort((a, b) => a.soc - b.soc);
@@ -94,7 +100,9 @@ export function estimateSession(point, car, t = translator('en')) {
     for (let s = car.startPct; s < target; s += 1) {
       const step = Math.min(1, target - s);
       const kw = Math.max(1, Math.min(curveKwAt(pts, s + step / 2), chargerKw));
-      minutes += car.batteryKwh * step / 100 / kw * 60;
+      const m = car.batteryKwh * step / 100 / kw * 60;
+      minutes += m;
+      segments.push({ minutes: m, kwh: car.batteryKwh * step / 100 / eff });
     }
     assumptions.push(t('assume.curve', { kw: chargerKw }));
   } else if (point.dc) {
@@ -113,10 +121,16 @@ export function estimateSession(point, car, t = translator('en')) {
     }
     // Split the session at 80 % and charge each part at its average power.
     const share = Math.max(0, Math.min(target, 80) - car.startPct) / (target - car.startPct || 1);
-    minutes = (kwh * share / below + kwh * (1 - share) / above) * 60;
+    const m1 = kwh * share / below * 60, m2 = kwh * (1 - share) / above * 60;
+    minutes = m1 + m2;
+    segments.push({ minutes: m1, kwh: kwh * share }, { minutes: m2, kwh: kwh * (1 - share) });
   } else {
     minutes = kwh / (peak * DEFAULTS.acShare) * 60;
+    segments.push({ minutes, kwh });
   }
-  if (!(toBattery > 0)) minutes = 0;
-  return { kwh, batteryKwh: toBattery, minutes, peakKw: Number.isFinite(peak) ? peak : chargerKw, targetPct: target, assumptions };
+  if (!(toBattery > 0)) { minutes = 0; segments.length = 0; }
+  return {
+    kwh, batteryKwh: toBattery, minutes, peakKw: Number.isFinite(peak) ? peak : chargerKw, targetPct: target, assumptions,
+    segments: segments.filter(x => x.kwh > 0 && x.minutes > 0),
+  };
 }

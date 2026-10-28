@@ -43,7 +43,9 @@ Follow one `find_cheapest_charging` call through the code:
    and keeps the plugs that pass the filters.
 5. **`src/quote.js`** prices every plug:
    - **`src/charging.js`**: how many kWh the meter will count, and how long it takes;
-   - **`src/ceme.js`**: one call to ceme-v2 for every CEME tariff's energy price;
+   - **`src/profile.js`**: when each of those kWh goes in, cut into quarter-hours;
+   - **`src/ceme.js`**: one call to ceme-v2 for every CEME tariff's energy price,
+     each quarter at its own off-peak/peak period and OMIE price;
    - **`src/opc.js`**: the operator's fee for that energy and time;
    - **`src/offers.js`**: walk-up, app, eMSP and subscription prices that apply here.
 
@@ -65,7 +67,8 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/data.js` | Loads the dataset; searches by distance and along a route |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |
 | `src/quote.js` | Prices one plug for every way to pay; ranks plugs |
-| `src/charging.js` | Session energy and duration |
+| `src/charging.js` | Session energy and duration, as constant-power segments |
+| `src/profile.js` | Lays the session on the clock: kWh per quarter-hour, local times |
 | `src/opc.js` | Operator fee math (flat, per kWh, per-minute tiers) |
 | `src/ceme.js` | Client for ceme-v2's API, with a cache |
 | `src/offers.js` | Loads the direct offers, picks the ones for a charger; finds missing operators |

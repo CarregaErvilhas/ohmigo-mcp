@@ -29,6 +29,57 @@ AC sessions are simpler: the power stays nearly flat until the end.
 Every guess goes into `assumptions`, in the user's language, so the assistant
 can say things like "this assumes 7 % losses and a 28-minute 10-80 % time".
 
+## 1b. When each kWh goes in (`profile.js`)
+
+A session takes minutes to hours, and the energy price can change while it
+runs:
+
+- a **bi-hourly** tariff has an off-peak price ("vazio", nights and weekends)
+  and a peak one ("fora de vazio"). Plug in at 21:30 on a slow AC charger and
+  the first half hour is peak, the rest off-peak;
+- an **indexed** tariff follows the wholesale price (OMIE), which changes
+  every 15 minutes;
+- a session past midnight can land on a day with a new grid fee (TAR), and
+  one on the last Sunday of March or October crosses a clock change.
+
+So `charging.js` also returns the session as `segments`: stretches of
+constant power, back to back (one per 1 % with a curve; below and above 80 %
+on DC; one on AC). `profile.js` lays them out from the start time (`at`,
+default now, rounded down to the minute) and cuts them at every quarter-hour
+(:00, :15, :30, :45 UTC), giving the kWh delivered in each quarter. That list
+goes to ceme-v2 as `profile`, and **ceme-v2 prices each slice** at its own
+period, OMIE quarter, losses and TAR day. ohmigo never works out a period or
+an OMIE price itself; that math stays in ceme-v2, with its tests for the
+clock changes, Saturdays and the islands.
+
+Everything is in UTC instants, so the clock changes need no special case:
+in October the 01:00-02:00 hour happens twice, and a 60-minute session that
+spans it still has four quarters. Local times are only for showing
+(`session.startLocal`/`endLocal`, and the `utcOffset` next to each slice in
+the timeline, so the repeated hour isn't ambiguous).
+
+What the driver gets:
+
+- always: the window (`session.start`/`end`, and the local times), an
+  assumption saying the energy was priced quarter by quarter in that window,
+  and `kwhByPeriod` on each CEME option whose session crossed periods (each
+  tariff has its own cycle, so one can cross and another not);
+- with `detail: true` on the tool: `timeline`, every quarter's kWh and
+  power, and for each CEME tariff shown, the period, price (excl. VAT) and
+  OMIE of each quarter (`omieSpot: false` means that quarter's OMIE wasn't
+  published yet, so ceme-v2 used the period's average);
+- in QA mode (`OHMIGO_QA=1`, [06](06-run-and-deploy.md)): the timeline on
+  every result, plus `debug` with the segments, the profile sent and what
+  ceme-v2 said about it.
+
+If ceme-v2 answers without a `profile` field (a version that doesn't know
+it), the session was priced at its start; the assumption says so.
+
+Limits: the start time is a guess unless the user gives one, OMIE for
+tomorrow only exists after the day-ahead market publishes (early afternoon),
+and the operator fee doesn't depend on the clock (MOBI.E's tariff file has no
+time-of-day fees).
+
 ## 2. The operator fee (`opc.js`)
 
 MOBI.E publishes each socket's OPC fee as components:
