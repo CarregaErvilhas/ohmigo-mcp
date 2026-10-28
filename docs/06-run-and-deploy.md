@@ -83,10 +83,13 @@ answers before the live feed finishes downloading.
 
 ### Shipping a new version
 
-Push to `main`, then deploy. Until the service is connected to this repo in
-the Zerops console (service → Build, Deploy, Run Pipeline Settings → Connect
-with a GitHub repository → push to `main`, setup `mcp`), deploy by hand from a
-clean copy of `main`:
+Merge to `main`. Zerops is connected to this repo (service `mcp` → Build,
+Deploy, Run Pipeline Settings: push to `main`, setup `mcp`) and builds and
+deploys on every push, in about two minutes. No Zerops credential lives in
+GitHub. A deploy that fails its readiness check is dropped and the previous
+version keeps serving.
+
+By hand, only as a last resort, from a clean copy of `main`:
 
 ```bash
 git archive main | tar -x -C /some/empty/dir
