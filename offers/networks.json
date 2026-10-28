@@ -1,0 +1,21 @@
+{
+  "about": "What each 'Postos' label in the custofinal blog tables means, in NAP operator ids. scope 'mobie' = every MOBI.E charger; 'unknown' = can't tell which chargers, so the offer is left out. When the weekly scrape finds a label that isn't here, it lists it as unmapped: add it (operator ids from `npm run offers:gaps` or the dataset).",
+  "networks": {
+    "Rede Mobi.E": { "scope": "mobie" },
+    "Alguns Mobi.E": { "scope": "unknown", "why": "'some MOBI.E chargers': the blog doesn't say which" },
+    "Atlante": { "operatorIds": ["ATLA"] },
+    "Cepsa/Moeve": { "operatorIds": ["CEPS"] },
+    "Continente": { "operatorIds": ["CONT"] },
+    "DTE": { "operatorIds": ["DTEI"] },
+    "Enable": { "operatorIds": ["ENBL"] },
+    "EVIO": { "operatorIds": ["EVIO"] },
+    "Galp": { "operatorIds": ["GLPP", "GLPG"] },
+    "Helexia": { "operatorIds": ["HELX"] },
+    "Iberdrola BP Pulse": { "operatorIds": ["FCTO"] },
+    "Ionity": { "operatorIds": ["IONY"] },
+    "Powerdot": { "operatorIds": ["HORZ"] },
+    "Prio": { "operatorIds": ["PRIO"] },
+    "REMO": { "operatorIds": ["REMO"] },
+    "Tesla Supercharger": { "operatorIds": ["TSLA"] }
+  }
+}

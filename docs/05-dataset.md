@@ -7,7 +7,7 @@ operator fees from MOBI.E's tariff file. It's one JSON file, about 6 MB
 
 What's **not** in it: live status (changes by the minute, see
 [03](03-live-status.md)), CEME prices (ceme-v2's job), and operator direct
-prices (`offers/`, see [04](04-operator-offers.md)).
+offers (`offers/`, see [04](04-operator-offers.md)).
 
 ## Where it comes from
 

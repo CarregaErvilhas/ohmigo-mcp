@@ -1,0 +1,56 @@
+{
+  "about": "Hand-maintained corrections and additions to offers/custofinal.json (the scraped blog). An entry whose id exists there overrides the fields it lists; {\"id\": ..., \"disable\": true} removes it; a new id adds an offer (all fields required). Every entry needs source and checkedAt. Guide: docs/04-operator-offers.md.",
+  "offers": [
+    {
+      "id": "ionity-tpa-ionity",
+      "prices": { "dcMax": 0.63 },
+      "source": "https://fleetmagazine.pt/ionity-portugal/",
+      "checkedAt": "2026-10-28",
+      "why": "IONITY's own launch of direct sales in Portugal (20 Oct 2026) says walk-up from 0.63 €/kWh; the blog's 14 Oct post says 0.62."
+    },
+    {
+      "id": "ionity-motion-6-mes-ionity",
+      "fee": { "eur": 5.99, "per": "month" },
+      "source": "https://fleetmagazine.pt/ionity-portugal/",
+      "checkedAt": "2026-10-28",
+      "why": "the blog rounds the fee to 6 €"
+    },
+    {
+      "id": "ionity-power-12-mes-ionity",
+      "fee": { "eur": 11.99, "per": "month" },
+      "source": "https://fleetmagazine.pt/ionity-portugal/",
+      "checkedAt": "2026-10-28",
+      "why": "the blog rounds the fee to 12 €"
+    },
+    {
+      "id": "ionity-app-ionity",
+      "label": "IONITY - App (no subscription)",
+      "provider": "IONITY", "plan": "App", "network": "Ionity",
+      "scope": { "operatorIds": ["IONY"] },
+      "walkUp": false, "subscription": false, "fee": null,
+      "prices": { "dcMax": 0.59 },
+      "source": "https://fleetmagazine.pt/ionity-portugal/",
+      "checkedAt": "2026-10-28"
+    },
+    {
+      "id": "ionity-motion-365-ionity",
+      "label": "IONITY - Motion 365 59,99€/ano",
+      "provider": "IONITY", "plan": "Motion 365", "network": "Ionity",
+      "scope": { "operatorIds": ["IONY"] },
+      "walkUp": false, "subscription": true, "fee": { "eur": 59.99, "per": "year" },
+      "prices": { "dcMax": 0.46 },
+      "source": "https://fleetmagazine.pt/ionity-portugal/",
+      "checkedAt": "2026-10-28"
+    },
+    {
+      "id": "ionity-power-365-ionity",
+      "label": "IONITY - Power 365 119,99€/ano",
+      "provider": "IONITY", "plan": "Power 365", "network": "Ionity",
+      "scope": { "operatorIds": ["IONY"] },
+      "walkUp": false, "subscription": true, "fee": { "eur": 119.99, "per": "year" },
+      "prices": { "dcMax": 0.38 },
+      "source": "https://fleetmagazine.pt/ionity-portugal/",
+      "checkedAt": "2026-10-28"
+    }
+  ]
+}

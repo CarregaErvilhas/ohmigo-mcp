@@ -46,7 +46,7 @@ This server stores nothing about the user. Remember the car, its charging specs 
 When presenting results: give the total in euros and the duration, name the tariff used, and mention the main assumptions (charging losses, estimated duration, per-minute fees). Each charger lists every way to pay in options:
 - "ceme": a CEME card/app on MOBI.E;
 - "adhoc": bank card / QR code at the charger, no CEME. Always mention it when present: it's what someone without a CEME card pays;
-- "operator": the operator's own app, walk-up price or subscription (e.g. IONITY). Subscriptions show a monthly/yearly fee that is NOT included in the session total; say so. These are "from" prices typed from the operator's announcement (see note and checked date);
+- "direct": paying outside the CEME system: a card terminal (TPA) or QR at the charger, the operator's own app or subscription (IONITY Power, Atlante GO...), or a roaming app (Electroverse, Elli, Electromaps...). Final prices with VAT, from a public price list (see note and checked date). Subscriptions show a monthly/yearly fee that is NOT included in the session total; say so;
 - "opc_direct": chargers outside MOBI.E (Continente, Tesla...), listed apart in outsideMobie. Their price is an asterisked guess, say so.
 Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract). Lead with it, and point out when a subscription or another CEME would be cheaper.
 

@@ -4,14 +4,16 @@
 //   charging.js  -> how many kWh and minutes
 //   ceme.js      -> the energy part, from ceme-v2 (one call, all CEME tariffs)
 //   opc.js       -> the charger operator's fee
-//   operators.js -> operators' own direct prices (offers/operator-offers.json)
+//   offers.js    -> walk-up, operator app, eMSP and subscription prices (offers/)
 //   live.js      -> live status and, as a fallback, the operator fee from the NAP
 //
 // Each way to pay becomes one entry in `options`, tagged with a `kind`:
 //   ceme         pay through a CEME card/app on MOBI.E:
 //                ceme-v2's total (energy + TAR + taxes + VAT) + OPC fee + VAT on it
 //   adhoc        bank card / QR at the charger, no CEME: MOBI.E's AD_HOC_PAYMENT price
-//   operator     the operator's own app / walk-up / subscription (offers/operator-offers.json)
+//   direct       anything outside the CEME system: a walk-up card terminal or
+//                QR, the operator's own app or subscription, a roaming app
+//                (Electroverse, Elli...). From offers/ (see src/offers.js).
 //   opc_direct   chargers outside MOBI.E (Continente, Tesla): the NAP's single
 //                price, with an asterisk because nobody says what it covers
 // New ways to pay (CEME subscriptions, eMSP flat prices) slot in as new kinds.
@@ -28,7 +30,7 @@ import { estimateSession } from './charging.js';
 import { translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { describePlan, opcCost } from './opc.js';
-import { isStale, offersFor } from './operators.js';
+import { isStale, offersAt, ownWalkUp, SOURCE } from './offers.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 
@@ -92,17 +94,19 @@ function adhocOption(point, session, t) {
   };
 }
 
-// The operator's own plans: kWh x price. A subscription's fee is listed, not
-// added, since it's shared by every session in the month/year.
-function operatorOptions(offer, session, t) {
-  return offer.plans.map(p => ({
-    kind: 'operator', planId: p.id, label: p.name[t.lang] || p.name.en,
-    total: r2(p.eurPerKwh * session.kwh), eurPerKwh: p.eurPerKwh, walkUp: !!p.walkUp,
-    subscription: p.fee ? { ...p.fee, text: t('option.operatorPlan.fee', p.fee) } : null,
-    note: t('option.operatorPlan.note', { source: offer.source, checked: offer.checkedAt })
-      + (isStale(offer) ? ` ${t('option.operatorPlan.stale')}` : ''),
+// Direct offers at this point: kWh x the offer's price for the point's power
+// band. A subscription's fee is listed, not added, since one fee covers every
+// session in the month/year.
+function directOptions(direct, session, t) {
+  return direct.map(({ offer, eurPerKwh }) => ({
+    kind: 'direct', offerId: offer.id, label: offer.label, provider: offer.provider,
+    total: r2(eurPerKwh * session.kwh), eurPerKwh, walkUp: !!offer.walkUp,
+    subscription: offer.subscription ? { ...(offer.fee || {}), text: offer.fee ? t('option.fee', offer.fee) : t('option.feeUnknown') } : null,
+    note: t('option.direct.note', { source: offer.origin === 'custofinal' ? SOURCE.blog : offer.source, checked: offer.checkedAt })
+      + (offer.walkUp ? ` ${t('option.walkUp')}` : '')
+      + (isStale(offer) ? ` ${t('option.stale')}` : ''),
     stale: isStale(offer),
-  }));
+  })).sort((a, b) => a.total - b.total);
 }
 
 // Quotes one point. `simCache` lets a caller ranking many points share the
@@ -125,7 +129,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     assumptions: [...session.assumptions],
     options: [],
   };
-  const offer = offersFor(site);
+  const direct = offersAt(site, point);
 
   if (point.regime === 'sem_ceme') {
     // Outside MOBI.E: no CEME, the operator bills directly. The NAP has one
@@ -133,8 +137,8 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // We estimate as if it were a final €/kWh and mark it, and the ranking
     // never mixes these with MOBI.E.
     const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
-    if (offer) base.options.push(...operatorOptions(offer, session, t));
-    else if (nap != null) {
+    base.options.push(...directOptions(direct, session, t));
+    if (!direct.length && nap != null) {
       base.options.push({ kind: 'opc_direct', label: t('option.opcDirect', { operator: site.operator ?? 'Operator' }),
         total: r2(nap * session.kwh), asterisk: true, note: t('option.opcDirect.note', { price: t.num(nap) }) });
     }
@@ -145,17 +149,16 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     return base;
   }
 
-  // An operator whose own walk-up price is in the offers file replaces
-  // MOBI.E's ad-hoc price: the operator's announcement is the better source
-  // (IONITY: MOBI.E's file says 0.51 €/kWh, IONITY itself says 0.63).
-  const ownWalkUp = offer?.plans.some(p => p.walkUp);
-  const adhoc = ownWalkUp ? null : adhocOption(point, session, t);
+  // An operator whose own walk-up price is in the offers replaces MOBI.E's
+  // ad hoc price here: the published offer is more current (IONITY: MOBI.E's
+  // file says 0.51 €/kWh, IONITY itself says 0.63).
+  const adhoc = ownWalkUp(site, direct) ? null : adhocOption(point, session, t);
   const key = `${base.region}|${Math.round(session.kwh * 10)}`;
   if (!simCache.has(key)) simCache.set(key, simulate({ kwh: session.kwh, at, region: base.region }));
   const sim = await simCache.get(key);
   const picked = pickTariffs(sim.data, point, tariffIds, shown);
   const ceme = picked.headline;
-  const extras = [...(adhoc ? [adhoc] : []), ...(offer ? operatorOptions(offer, session, t) : [])];
+  const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t)];
   if (!ceme) {
     base.total = null;
     base.note = picked.missing ? t('note.noUserTariff') : t('note.noTariff');

@@ -2,8 +2,7 @@
 
 How ohmigo turns "77 kWh battery, 15 % → 80 %, this charger" into euros. The
 code is in `src/charging.js`, `src/opc.js` and `src/quote.js`. Prices are never
-copied into this doc. They live in the data, in ceme-v2, or in
-`offers/operator-offers.json`.
+copied into this doc. They live in the data, in ceme-v2, or in `offers/`.
 
 ## 1. Energy and time (`charging.js`)
 
@@ -74,13 +73,15 @@ keep the ones that fit this plug:
 We assume it includes VAT, since it's a consumer price, but MOBI.E doesn't
 say so.
 
-**`operator`** — the operator's own plans from `offers/operator-offers.json`:
-kWh × price. Subscription fees are listed next to the price, not added,
-because one monthly fee covers every session that month. If the operator has
-a walk-up plan in the file, it replaces MOBI.E's ad hoc price.
+**`direct`** — walk-up card terminal or QR, the operator's own app or
+subscription, or a roaming app ([04](04-operator-offers.md)): kWh × the
+offer's price for this charger's power band. Prices are final, with VAT.
+Subscription fees are listed next to the price, not added, because one monthly
+fee covers every session that month. If the charger's own operator has a
+walk-up offer priced for this band, it replaces MOBI.E's ad hoc price.
 
-**`opc_direct`** — chargers outside MOBI.E (Continente, Tesla) that aren't in
-the offers file: the NAP's single price × kWh, with an asterisk. The NAP
+**`opc_direct`** — chargers outside MOBI.E (Continente, Tesla) with no direct
+offer: the NAP's single price × kWh, with an asterisk. The NAP
 doesn't say whether that number is the final price, so these are never ranked
 against MOBI.E.
 
@@ -108,5 +109,5 @@ Two summary fields:
 | Operator fee unknown | "≥" before the price, `complete: false` |
 | Two values published for one fee | a price range |
 | Price outside MOBI.E | an asterisk and a note |
-| Operator prices typed by hand | the source and the date they were checked; "may be out of date" after 90 days |
+| Direct offers from a price list | the source and the date it was checked; "may be out of date" after 90 days |
 | Live status stale | `live.fresh: false`, said in the footer |

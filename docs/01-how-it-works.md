@@ -16,7 +16,7 @@ Words in **bold** are in the [glossary](00-glossary.md).
    ├── dataset: sites, plugs, power, OPC fees     ◄── nap-dashboard, weekly
    ├── live status (+ NAP fees as a fallback)     ◄── NAP dynamic feed, on demand
    ├── CEME energy prices                         ◄── ceme-v2 API
-   └── operators' own prices                      ◄── offers/operator-offers.json
+   └── direct offers (TPA, apps, subscriptions)   ◄── offers/, scraped weekly + manual
    │
    ▼
  JSON (+ an inline results page) back to the assistant, which answers the user
@@ -45,7 +45,7 @@ Follow one `find_cheapest_charging` call through the code:
    - **`src/charging.js`**: how many kWh the meter will count, and how long it takes;
    - **`src/ceme.js`**: one call to ceme-v2 for every CEME tariff's energy price;
    - **`src/opc.js`**: the operator's fee for that energy and time;
-   - **`src/operators.js`**: the operator's own plans, if it has any.
+   - **`src/offers.js`**: walk-up, app, eMSP and subscription prices that apply here.
 
    Each way to pay becomes one entry in `options` ([02](02-cost-math.md)).
 6. Still in `quote.js`, `rank` drops busy or broken chargers, keeps the
@@ -68,12 +68,16 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/charging.js` | Session energy and duration |
 | `src/opc.js` | Operator fee math (flat, per kWh, per-minute tiers) |
 | `src/ceme.js` | Client for ceme-v2's API, with a cache |
-| `src/operators.js` | Reads `offers/operator-offers.json`; finds missing operators |
+| `src/offers.js` | Loads the direct offers, picks the ones for a charger; finds missing operators |
+| `src/offers-parse.js` | Parses the custofinal blog's price tables |
 | `src/view.js` | Builds the inline results page with the MCP Apps bridge |
 | `ui/results.html` | The inline results page |
-| `offers/operator-offers.json` | Operators' own prices, maintained by hand |
+| `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
+| `offers/manual.json` | Hand-made corrections and additions to it |
+| `offers/networks.json` | Which chargers each blog network label means |
 | `scripts/call.mjs` | Dev helper: call a tool from the terminal |
-| `scripts/offer-gaps.mjs` | Lists operators that probably sell directly and aren't in the offers file |
+| `scripts/scrape-offers.mjs` | Weekly scrape of the blog (`.github/workflows/offers.yml`) |
+| `scripts/offer-gaps.mjs` | Lists operators that probably sell directly and have no offer |
 | `test/` | `npm test` |
 
 ## Design decisions worth knowing

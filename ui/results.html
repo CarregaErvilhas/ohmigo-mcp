@@ -72,7 +72,7 @@
       outside: 'Outside MOBI.E: pay the operator directly, price not comparable *',
       adhoc: 'Card / QR at charger', direct: 'Operator direct', contract: 'needs another contract', cheapest: 'cheapest overall',
       sub: 'subscription', breakdown: 'Breakdown', energy: 'Energy', operator: 'Operator', notPublished: 'not published',
-      cardQr: 'Card / QR', own: 'Operator', note: 'Note', assumes: 'Assumes', point: 'Point', directions: 'Directions',
+      cardQr: 'Card / QR', own: 'Direct', note: 'Note', assumes: 'Assumes', point: 'Point', directions: 'Directions',
       foot: (at, stale, day) => `Estimates. ${at ? `Status from the NAP at ${at}${stale ? ' (may be stale)' : ''}.` : 'Live status unavailable.'} Chargers as of ${day}.`,
       status: { available: 'Available', charging: 'In use', outOfOrder: 'Out of order', inoperative: 'Out of order', blocked: 'Blocked', unknown: 'Status unknown', planned: 'Planned' },
     },
@@ -82,7 +82,7 @@
       outside: 'Fora da MOBI.E: paga-se ao operador, preço não comparável *',
       adhoc: 'Cartão / QR no posto', direct: 'Operador directo', contract: 'exige outro contrato', cheapest: 'o mais barato',
       sub: 'subscrição', breakdown: 'Detalhe', energy: 'Energia', operator: 'Operador', notPublished: 'não publicada',
-      cardQr: 'Cartão / QR', own: 'Operador', note: 'Nota', assumes: 'Pressupostos', point: 'Ponto', directions: 'Direcções',
+      cardQr: 'Cartão / QR', own: 'Directo', note: 'Nota', assumes: 'Pressupostos', point: 'Ponto', directions: 'Direcções',
       foot: (at, stale, day) => `Estimativas. ${at ? `Estado do PAN às ${at}${stale ? ' (pode estar desactualizado)' : ''}.` : 'Estado em tempo real indisponível.'} Postos de ${day}.`,
       status: { available: 'Livre', charging: 'Ocupado', outOfOrder: 'Avariado', inoperative: 'Avariado', blocked: 'Bloqueado', unknown: 'Estado desconhecido', planned: 'Planeado' },
     },
@@ -99,7 +99,7 @@
   function optName(o) {
     if (o.kind === 'adhoc') return S().adhoc;
     if (o.kind === 'opc_direct') return S().direct;
-    if (o.kind === 'operator') return o.label;
+    if (o.kind === 'direct') return o.label;
     return `${o.ceme} ${o.name}`;
   }
 
@@ -128,7 +128,7 @@
           ${h ? `<dt>${s.energy}</dt><dd>${eur(h.energyEur)} · ${esc(h.ceme)} ${esc(h.name)}</dd>` : ''}
           ${q.opc ? `<dt>${s.operator}</dt><dd>${eur(q.opc.eurWithVat)} · ${esc(q.opc.tariff ?? s.notPublished)}</dd>` : ''}
           ${(q.options || []).filter(o => o.kind === 'adhoc' || o.kind === 'opc_direct').map(o => `<dt>${o.kind === 'adhoc' ? s.cardQr : s.direct}</dt><dd>${o.tariff ? esc(o.tariff) + ' · ' : ''}${esc(o.note || '')}</dd>`).join('')}
-          ${(q.options || []).find(o => o.kind === 'operator') ? `<dt>${s.own}</dt><dd>${esc(q.options.find(o => o.kind === 'operator').note)}</dd>` : ''}
+          ${(q.options || []).find(o => o.kind === 'direct') ? `<dt>${s.own}</dt><dd>${esc(q.options.find(o => o.kind === 'direct').note)}</dd>` : ''}
           ${q.note ? `<dt>${s.note}</dt><dd>${esc(q.note)}</dd>` : ''}
           <dt>${s.assumes}</dt><dd>${(q.assumptions || []).map(esc).join('; ')}</dd>
           <dt>${s.point}</dt><dd>${esc(q.pointId)}</dd>

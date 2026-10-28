@@ -1,0 +1,80 @@
+name: Offers (weekly scrape)
+
+# Every Monday 07:00 UTC, or by hand (Actions -> Offers -> Run workflow):
+# reads the newest price post of custofinal.blogspot.com into
+# offers/custofinal.json and, if anything changed, opens a pull request.
+# A person merges it: every price change gets a look before it reaches users.
+# (The blog changes every few weeks; most Mondays this does nothing.)
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: offers
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm ci
+      # Exit 3 = scraped fine, but some networks aren't in offers/networks.json.
+      # Still open the PR (those rows are left out) and say so in it.
+      - name: Scrape
+        id: scrape
+        run: |
+          set +e
+          npm run -s offers:scrape | tee scrape.log
+          code=${PIPESTATUS[0]}
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" = 0 ] || [ "$code" = 3 ]
+      - name: Test
+        run: npm test
+      - name: Open pull request if the offers changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- offers/custofinal.json; then
+            echo "no changes"; exit 0
+          fi
+          branch="offers/custofinal-$(date -u +%F)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add offers/custofinal.json
+          git commit -m "offers: custofinal $(date -u +%F)"
+          git push -u origin "$branch"
+          {
+            echo "Weekly scrape of custofinal.blogspot.com."
+            echo
+            echo '```'
+            cat scrape.log
+            echo '```'
+            echo
+            if [ "${{ steps.scrape.outputs.code }}" = 3 ]; then
+              echo "**Unmapped networks**: add them to \`offers/networks.json\` (operator ids from \`npm run offers:gaps\`), or those rows stay out."
+              echo
+            fi
+            echo "Check the diff for prices that look wrong. Fixes go in \`offers/manual.json\`, never in this file."
+          } > body.md
+          gh pr create --title "offers: custofinal $(date -u +%F)" --body-file body.md
+      # The blog moved, changed its layout, or the feed is down: tell someone,
+      # so stale prices don't go unnoticed for weeks.
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --title "Offers scrape failed (run $GITHUB_RUN_ID)" \
+            --body "The weekly scrape of custofinal.blogspot.com failed; offers/custofinal.json stays as it was. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

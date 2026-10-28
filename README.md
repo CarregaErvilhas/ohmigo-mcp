@@ -1,4 +1,4 @@
-# ohmigo
+# ohmigo MCP
 
 Your charging amigo: "ohm" + "amigo".
 
@@ -28,7 +28,7 @@ first: CEME, OPC, MOBI.E, NAP and the rest.
 | Energy from the CEME (with TAR, IEC, activation fee, VAT) | [ceme-v2](https://ceme.ocarroeletrico.com/api), queried live |
 | The charger operator's fee (per session, per kWh, per minute) | MOBI.E's tariff file; the NAP live feed when it's missing |
 | Bank card / QR price at the charger | MOBI.E's tariff file |
-| Operators' own app and subscription prices | [`offers/operator-offers.json`](offers/operator-offers.json), maintained by hand |
+| Walk-up (TPA/QR), operator app, roaming app and subscription prices | scraped weekly from [Preços (finais) kWh Portugal](https://custofinal.blogspot.com) into [`offers/`](offers/), with hand corrections |
 | Whether the charger is free right now | the NAP live feed |
 | Energy and duration of your session | estimated from your car's specs ([02](docs/02-cost-math.md)) |
 
@@ -41,7 +41,7 @@ the assistant can tell you.
 2. [How it works](docs/01-how-it-works.md): the big picture and a request step by step
 3. [The cost math](docs/02-cost-math.md): energy, time, fees, ways to pay, ranking
 4. [Live status](docs/03-live-status.md): the 38 MB feed and how we tame it
-5. [Operator offers](docs/04-operator-offers.md): operators' own prices, and how to add one
+5. [Direct offers](docs/04-operator-offers.md): walk-up, apps, subscriptions; the weekly scrape
 6. [The dataset](docs/05-dataset.md): where the charger data comes from
 7. [Run, connect, deploy](docs/06-run-and-deploy.md)
 
@@ -75,5 +75,5 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
   energy only, shown as "≥".
 - **Chargers outside MOBI.E** (Continente, Tesla) not in the offers file get an
   asterisked guess from the NAP's single price.
-- **Operator offers go stale.** Each one shows its source and the date it was
-  checked; run `npm run offers:gaps` to see what's missing or old.
+- **Direct offers come from one public price list.** Each one shows its
+  source and date; `npm run offers:gaps` shows operators with no offer yet.

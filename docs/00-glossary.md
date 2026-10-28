@@ -37,10 +37,13 @@ Portugal calls a CEME.
 account. MOBI.E publishes this price per socket (`AD_HOC_PAYMENT` in its
 tariff file).
 
-**Operator direct** — many OPCs also sell charging themselves: their own app,
-a walk-up price, or a subscription (IONITY's Motion and Power plans, for
-example). No open data publishes these prices, so we keep them by hand in
-`offers/operator-offers.json` ([04](04-operator-offers.md)).
+**Direct offers** — paying outside the CEME system: a walk-up card terminal
+(**TPA**) or QR code, the operator's own app or subscription (IONITY Power,
+Atlante GO), or a roaming app (Electroverse, Elli). No open data publishes
+these prices; we scrape them weekly from a public price list and correct them
+by hand ([04](04-operator-offers.md)).
+
+**TPA** — *Terminal de Pagamento Automático*, the card terminal on the charger.
 
 **Outside MOBI.E** — some chargers aren't on MOBI.E at all (Tesla
 Superchargers, Continente). You pay the operator directly, and no CEME card
