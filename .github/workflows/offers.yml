@@ -5,14 +5,19 @@ name: Offers (weekly scrape)
 # offers/custofinal.json and, if anything changed, opens a pull request.
 # A person merges it: every price change gets a look before it reaches users.
 # (The blog changes every few weeks; most Mondays this does nothing.)
+#
+# The branch is pushed and the PR opened with a short-lived GitHub App token,
+# not GITHUB_TOKEN: a PR opened by GITHUB_TOKEN never triggers workflows, so
+# the required `test` check would never run and the PR could not be merged.
+# Needs repo secrets OFFERS_APP_ID and OFFERS_APP_PRIVATE_KEY.
+
 on:
   schedule:
     - cron: "0 7 * * 1"
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
   issues: write
 
 concurrency:
@@ -24,7 +29,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        with:
+          app-id: ${{ secrets.OFFERS_APP_ID }}
+          private-key: ${{ secrets.OFFERS_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app.outputs.token }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
@@ -43,7 +57,7 @@ jobs:
         run: npm test
       - name: Open pull request if the offers changed
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
           if git diff --quiet -- offers/custofinal.json; then
             echo "no changes"; exit 0
