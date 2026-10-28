@@ -31,9 +31,9 @@ The server speaks MCP over HTTP ("Streamable HTTP") at `/mcp`, with no auth.
 
 - **Claude Code**: `claude mcp add --transport http ohmigo http://127.0.0.1:3002/mcp`
 - **Claude (web/desktop)**: Settings → Connectors → Add custom connector →
-  the public `https://…/mcp` URL.
-- **ChatGPT**: Settings → Apps & Connectors → developer mode → Create → the
-  public `https://…/mcp` URL, no authentication.
+  `https://ohmigo.ocarroeletrico.com/mcp`.
+- **ChatGPT**: Settings → Apps & Connectors → developer mode → Create →
+  `https://ohmigo.ocarroeletrico.com/mcp`, no authentication.
 - **MCP Inspector**, for poking at it: `npx @modelcontextprotocol/inspector`,
   then connect to the URL.
 
@@ -58,17 +58,60 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 Secrets (`CEME_API_KEY`) go in the hosting platform's secret variables, never
 in the repo.
 
-## Deploy (Zerops)
+## Deploy (Zerops + Cloudflare)
 
-`zerops.yml` describes one Node.js service with no database. The service needs:
+```
+assistant ──► Cloudflare (proxy, TLS) ──► Zerops L7 balancer ──► service `mcp` (Node.js)
+```
 
-- `HOST=0.0.0.0`, `PORT=3002`;
+Production is `https://ohmigo.ocarroeletrico.com/mcp`, Zerops project
+`ohmigo-mcp`, one service called `mcp`.
+
+- **`zerops.yml`** is the build and runtime: `deployFiles` lists what ships
+  (`src`, `ui`, `offers`, `node_modules`, `package.json`). Anything the code
+  reads at runtime must be in that list, or the process dies on boot and the
+  deploy fails with "connection refused" on `/healthz`.
+- **`zerops-import.yaml`** creates the service (`zcli project service-import`).
+  It sets `HOST=0.0.0.0` and `PORT=3002`.
 - `CEME_API_KEY`: the same value as ceme-v2's `CEME_API_KEY`. On ceme-v2, also
   set `CEME_API_KEY_RATE_LIMIT` (requests per minute for that key; see
-  ceme-v2's `docs/04-api-auth.md`).
+  ceme-v2's `docs/04-api-auth.md`). A secret: set it on the service in the
+  Zerops console.
 
 The readiness check is `/healthz`. Boot loads the dataset (a few seconds) and
 answers before the live feed finishes downloading.
+
+### Shipping a new version
+
+Push to `main`, then deploy. Until the service is connected to this repo in
+the Zerops console (service → Build, Deploy, Run Pipeline Settings → Connect
+with a GitHub repository → push to `main`, setup `mcp`), deploy by hand from a
+clean copy of `main`:
+
+```bash
+git archive main | tar -x -C /some/empty/dir
+cd /some/empty/dir && zcli push <service-id> -P <project-id> --setup mcp --no-git
+```
+
+### Domain and DNS
+
+The same setup as ceme-v2 (its `infra.md`, section 3, has the API calls):
+
+1. Zerops: a public HTTP routing for `ohmigo.ocarroeletrico.com` → `mcp`
+   port 3002, with SSL, then sync the project's routing.
+2. Cloudflare: **one `AAAA` record** to the project's dedicated IPv6, **proxy
+   on**. No `A` record: the shared IPv4 can't route a proxied domain.
+3. Zerops: trigger the DNS check; the Let's Encrypt certificate follows.
+
+**The origin IP is never written in this repo.** Read it from the Zerops
+API (`GET /project/<id>` → `publicIpV6`) or the Cloudflare record.
+
+The routing's `accessPolicy` only accepts Cloudflare: `defaultPolicy: deny`,
+`cidr` = the lists at `https://www.cloudflare.com/ips-v4` and `ips-v6`.
+Leave **`setRealIpFrom` empty**: with it set, the balancer swaps in the
+user's IP from `X-Forwarded-For`, that IP isn't Cloudflare's, and every
+request gets 403. Direct requests to the origin must answer 403; through
+Cloudflare, 200.
 
 ## Rate limiting
 

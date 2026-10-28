@@ -1,0 +1,22 @@
+# Creates the ohmigo service on Zerops (see docs/06-run-and-deploy.md):
+#   zcli project service-import zerops-import.yaml -P <project-id>
+# The first build runs from this repo's main branch. CEME_API_KEY is a secret:
+# set it on the service afterwards, never here.
+services:
+  - hostname: mcp
+    type: nodejs@24
+    buildFromGit: https://github.com/CarregaErvilhas/ohmigo-mcp
+    zeropsSetup: mcp
+    minContainers: 1
+    maxContainers: 2
+    verticalAutoscaling:
+      cpuMode: SHARED
+      minCpu: 1
+      maxCpu: 1
+      minRam: 0.25
+      maxRam: 1
+      minDisk: 1
+      maxDisk: 2
+    envSecrets:
+      HOST: 0.0.0.0
+      PORT: "3002"
