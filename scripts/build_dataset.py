@@ -1,8 +1,10 @@
 """Build data/chargers.json from the nap-dashboard pipeline outputs.
 
 Reads (all produced by nap-dashboard's fetch_data.sh + nap_etl.py):
-  <nap>/nap_static_sites.csv, nap_static_points.csv, nap_dynamic_status.csv,
-  nap_dynamic_pricing.csv, mobie_tarifas.csv
+  <nap>/nap_static_sites.csv, nap_static_points.csv, nap_dynamic_pricing.csv,
+  mobie_tarifas.csv
+
+Status isn't here: the server reads it live from the NAP feed (src/live.js).
 
 Why not nap_opc_points.csv: it pivots MOBI.E tariffs with aggfunc='first', so a
 socket with tiered per-minute prices ("0 /min" + "0.18 /min após 30 min") keeps
@@ -22,7 +24,6 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else 'data/chargers.json'
 
 S = pd.read_csv(f'{NAP}/nap_static_sites.csv', dtype=str)
 P = pd.read_csv(f'{NAP}/nap_static_points.csv', dtype=str).drop_duplicates('point_id')
-ST = pd.read_csv(f'{NAP}/nap_dynamic_status.csv', dtype=str)
 DP = pd.read_csv(f'{NAP}/nap_dynamic_pricing.csv', dtype=str)
 M = pd.read_csv(f'{NAP}/mobie_tarifas.csv', sep=';', dtype=str).drop_duplicates()
 
@@ -81,8 +82,6 @@ for r in M.itertuples(index=False):
     if isinstance(r.NIVELTENSAO, str) and r.NIVELTENSAO in ('BTN', 'BTE', 'MT'):
         meta[k] = r.NIVELTENSAO
 
-status = ST.drop_duplicates('point_id', keep='last').set_index('point_id')
-status_at = ST.snapshot_time.max()
 nap_price = (DP[DP.pricing_policy == 'pricePerDeliveryUnit']
              .drop_duplicates('point_id').set_index('point_id').min_fee)
 
@@ -139,7 +138,6 @@ for p in P.itertuples(index=False):
         'dc': 'DC' in mode,
         'phases': 1 if mode.endswith('1p') else 3 if mode.endswith('3p') else None,
         'level': meta.get(k),
-        'status': status.status.get(p.point_id),
         # mobie: CEME + MOBI.E OPC tariff; mobie_sem_tarifa: CEME but no OPC
         # tariff in MOBI.E's file; sem_ceme: outside MOBI.E roaming, NAP has a
         # single price whose meaning (final? energy only?) isn't declared.
@@ -147,13 +145,13 @@ for p in P.itertuples(index=False):
     }
     if t:
         pt['opc'] = t
+    # Fallback for when the live feed is down; live NAP fees win otherwise.
     if not has_ceme and p.point_id in nap_price.index:
         pt['napPrice'] = fnum(nap_price[p.point_id])
     site['points'].append(pt)
 
 out = {
     'generatedAt': datetime.now(timezone.utc).isoformat(timespec='seconds'),
-    'statusSnapshot': status_at,
     'sites': [s for s in sites.values() if s['points']],
 }
 with open(OUT, 'w') as f:

@@ -16,9 +16,10 @@ battery capacity and max AC/DC power from the car model).
 | Part of the bill | Source |
 |---|---|
 | CEME energy tariff + TAR + IEC + EGME + VAT | [ceme-v2](../ceme-v2) `POST /v1/simulate`, called over HTTP. Indexed tariffs are priced at the OMIE quarter-hour of the charge. |
-| OPC fee (€/charge, €/kWh, €/min tiers) | MOBI.E tariff file, parsed by `scripts/build_dataset.py` |
+| OPC fee (€/charge, €/kWh, €/min tiers) | MOBI.E tariff file, parsed by `scripts/build_dataset.py`; NAP live feed as fallback (cents, no tiers) |
+| Charger status (available, in use, out of order) | NAP live feed, polled in the background (`src/live.js`) |
 | Charger location, power, plug, voltage level | NAP (DATEX II), via the [nap-dashboard](../nap-dashboard) pipeline |
-| Session energy and duration | `src/charging.js`: an estimate, with its assumptions returned to the agent |
+| Session energy and duration | `src/charging.js`: from the car's charging curve or published 10-80 % time when the agent passes them, a generic curve otherwise |
 
 Total = CEME total (already includes VAT) + OPC fee × the region's VAT. MOBI.E
 says VAT applies to the whole invoice, so the OPC fee is treated as published
@@ -28,8 +29,25 @@ without VAT.
 
 - `list_ceme_tariffs`: resolve "EDP" / "Via Verde" to a `tariff_id`.
 - `find_chargers`: chargers near a point/town or along a route, no costs.
-- `find_cheapest_charging` (with UI): ranks sites by session cost for the car.
+- `find_cheapest_charging` (with UI): ranks sites by session cost for the car,
+  skipping chargers the live feed reports as busy or broken. Chargers outside
+  MOBI.E come back apart in `outsideMobie`.
 - `estimate_charging_cost` (with UI): one charge point, full breakdown.
+
+## Tariffs
+
+With `tariff_ids` (the cards/subscriptions the user has), each charger is
+priced with the cheapest of them. Without, the result shows the top 3 of
+ceme-v2's "popular" tariffs, headlined by the cheapest that needs no other
+contract. A cheaper tariff outside that set comes back as `cheaperTariff`.
+
+## Live status
+
+MOBI.E's status feed is one ~38 MB XML file with no gzip or byte ranges
+(about 13 s to download). User requests never touch it: one background
+poller per process fetches it with `If-None-Match` (304 when unchanged),
+stream-parses it (~0.2 s) and keeps a point -> status/fees map. Every
+response says when MOBI.E published the data and whether it's fresh.
 
 ## Run locally
 
@@ -54,15 +72,20 @@ which is rate-limited per IP (60/min). That's fine for development but not for a
 | `CEME_API_KEY` | none | ceme-v2 third-party key |
 | `DATASET_URL` | none | fetch `chargers.json` at boot and every 6 h |
 | `DATASET_PATH` | `data/chargers.json` | used when `DATASET_URL` is unset |
+| `NAP_POLL_SECONDS` | `180` | live feed poll interval; `NAP_POLL=0` turns polling off |
+| `NAP_STATUS_URL` | MOBI.E's `evActualStatus` | |
 
 ## Known limits
 
-- **Charger status is a weekly snapshot**, not live. The agent is told to say so.
-- **Duration is modelled**, not measured: DC averages 70 % of peak up to 80 %
-  and 30 % above. Per-minute OPC fees depend on it.
-- **~1,100 MOBI.E sockets have no OPC tariff** in the file. Their totals are
-  energy-only, marked `complete: false` and ranked after complete ones.
-- **~1,400 points are outside MOBI.E** (`sem_ceme`). NAP gives one price with
-  no declared unit or VAT treatment, so there's no total for them.
+- **Status is minutes old**, not instant. A charger can be taken on the way.
+- **Duration is modelled**, not measured. Without the car's curve or 10-80 %
+  time, DC averages 70 % of peak up to 80 % and 30 % above. Per-minute OPC
+  fees depend on it.
+- **MOBI.E sockets missing from the tariff file** use the NAP live fees. If
+  neither has a fee, the total is energy-only, marked `complete: false` and
+  ranked after complete ones.
+- **~1,400 points are outside MOBI.E** (`sem_ceme`: Continente, Tesla). NAP
+  gives one price with no declared meaning; the estimate assumes it's a final
+  €/kWh price, is marked with an asterisk and is never ranked with MOBI.E.
 - Some sockets publish two values for the same fee. Those come back as a
   `low`/`high` range.

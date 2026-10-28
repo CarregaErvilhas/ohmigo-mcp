@@ -39,7 +39,6 @@ const fold = s => (s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase(
 export class Dataset {
   constructor(raw) {
     this.generatedAt = raw.generatedAt;
-    this.statusSnapshot = raw.statusSnapshot;
     this.sites = raw.sites;
     this.siteById = new Map();
     this.pointById = new Map();

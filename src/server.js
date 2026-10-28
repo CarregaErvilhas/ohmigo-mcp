@@ -4,6 +4,7 @@
 import { createServer as createHttp } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { Dataset } from './data.js';
+import { LiveStatus } from './live.js';
 import { createServer } from './mcp.js';
 
 const PORT = Number(process.env.PORT || 3002);
@@ -12,6 +13,8 @@ const MAX_BODY = 256 * 1024;
 
 let ds = await Dataset.load();
 console.log(`[carrega-mcp] ${ds.sites.length} sites, data as of ${ds.generatedAt}`);
+const live = new LiveStatus();
+if (process.env.NAP_POLL !== '0') live.start();
 
 // With DATASET_URL, pick up the weekly NAP refresh without a redeploy. A
 // failed reload keeps the data we have.
@@ -52,14 +55,14 @@ createHttp(async (req, res) => {
   for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
   const url = new URL(req.url, 'http://x');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-  if (url.pathname === '/healthz') return send(res, 200, { ok: true, dataAsOf: ds.generatedAt });
+  if (url.pathname === '/healthz') return send(res, 200, { ok: true, dataAsOf: ds.generatedAt, live: live.info() });
   if (url.pathname !== '/mcp') return send(res, 404, { error: 'not found' });
   // Stateless server: no SSE stream to resume and no session to delete.
   if (req.method !== 'POST') return send(res, 405, { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null });
 
   let body;
   try { body = await readJson(req); } catch (e) { return send(res, e.status || 400, { error: e.message }); }
-  const server = createServer(ds);
+  const server = createServer(ds, live);
   const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   res.on('close', () => { transport.close(); server.close(); });
   try {

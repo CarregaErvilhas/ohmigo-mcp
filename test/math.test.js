@@ -98,3 +98,66 @@ test('applicable: voltage variant per socket, AC-only tariffs dropped on DC', ()
   assert.deepEqual(applicable(q, { level: 'MT', dc: false }).map(t => t.id), ['a-mt-x', 'atl-mt-ac']);
   assert.deepEqual(applicable(q, { level: 'BTE', dc: false }).map(t => t.id), ['a-bt-x']);
 });
+
+import { pickTariffs } from '../src/quote.js';
+import { napPlan, parseStatus } from '../src/live.js';
+
+test('estimateSession: dc_10_80_minutes sets the DC average, capped by the charger', () => {
+  // 70 % of 60 kWh in 30 min = 84 kW average.
+  const fast = estimateSession({ kw: 150, dc: true }, { batteryKwh: 60, startPct: 10, targetPct: 80, dc10to80Minutes: 30 });
+  close(fast.minutes, (42 / 0.93) / 84 * 60, 1e-9);
+  const slowCharger = estimateSession({ kw: 50, dc: true }, { batteryKwh: 60, startPct: 10, targetPct: 80, dc10to80Minutes: 30 });
+  close(slowCharger.minutes, (42 / 0.93) / (50 * 0.95) * 60, 1e-9);
+  assert.ok(!fast.assumptions.some(a => a.includes('unknown')));
+});
+
+test('estimateSession: charging curve integrates kW over SoC', () => {
+  const flat = estimateSession({ kw: 300, dc: true }, { batteryKwh: 100, startPct: 20, targetPct: 60, curve: [{ soc: 0, kw: 100 }, { soc: 100, kw: 100 }] });
+  close(flat.minutes, 40 / 100 * 60, 1e-9);
+  const capped = estimateSession({ kw: 50, dc: true }, { batteryKwh: 100, startPct: 20, targetPct: 60, curve: [{ soc: 0, kw: 100 }, { soc: 100, kw: 100 }] });
+  close(capped.minutes, 40 / 50 * 60, 1e-9);
+});
+
+const q = (id, totalEur, extra = {}) => ({ id, voltage: 'BT', totalEur, ceme: id.split('-')[0], name: id, ...extra });
+
+test('pickTariffs: user tariffs, cheapest of them is the headline', () => {
+  const quotes = [q('a-bt-x', 5), q('b-bt-y', 6), q('c-bt-z', 7)];
+  const t = pickTariffs(quotes, { level: 'BTN', dc: false }, ['c-mt-z', 'b-mt-y']);
+  assert.deepEqual(t.options.map(o => o.id), ['b-bt-y', 'c-bt-z']);
+  assert.equal(t.headline.id, 'b-bt-y');
+  assert.equal(t.best.id, 'a-bt-x');
+});
+
+test('pickTariffs: default is top 3 popular, headline skips ones needing another contract', () => {
+  const quotes = [
+    q('a-bt-x', 4, { popular: true, bundle: true }), q('b-bt-y', 5), q('c-bt-z', 6, { popular: true }),
+    q('d-bt-w', 6, { popular: true }), q('d-bt-w-2', 6, { popular: true, name: 'd-bt-w' }), q('e-bt-v', 7, { popular: true }),
+  ];
+  const t = pickTariffs(quotes, { level: 'BTN', dc: false });
+  assert.deepEqual(t.options.map(o => o.id), ['a-bt-x', 'c-bt-z', 'd-bt-w']);
+  assert.equal(t.headline.id, 'c-bt-z');
+});
+
+test('napPlan maps NAP policies to the MOBI.E plan shape', () => {
+  assert.deepEqual(napPlan([
+    { policy: 'pricePerDeliveryUnit', eur: 0.28 }, { policy: 'pricePerChargingTime', eur: 0.05 }, { policy: 'flatRate', eur: 0.11 },
+  ]), { energy: [0.28], time: [{ eur: 0.05, from: 0, to: null }], flat: [0.11] });
+  assert.equal(napPlan([]), null);
+});
+
+test('parseStatus reads point ids, status and fees from a DATEX II stream', async () => {
+  const xml = `<?xml version="1.0"?><ns4:payload xmlns="http://datex2.eu/schema/3/common" xmlns:ns2="f" xmlns:ns3="e" xmlns:ns4="p">
+  <publicationTime>2026-10-28T16:35:04Z</publicationTime>
+  <ns3:energyInfrastructureSiteStatus><ns2:reference id="SITE-1"/><ns3:energyInfrastructureStationStatus><ns2:reference id="SITE-1"/>
+  <ns3:refillPointStatus><ns2:reference id="P-1"/><ns3:status>charging</ns3:status>
+  <ns3:electricEnergyMixOverride><ns3:rates><ns2:energyPricingPolicy><ns3:pricingPolicy>flatRate</ns3:pricingPolicy><ns3:minimumDeliveryFee>0.26</ns3:minimumDeliveryFee></ns2:energyPricingPolicy>
+  <ns2:overallPeriod><overallStartTime>2025-01-01T00:00:00Z</overallStartTime></ns2:overallPeriod></ns3:rates></ns3:electricEnergyMixOverride>
+  </ns3:refillPointStatus></ns3:energyInfrastructureStationStatus></ns3:energyInfrastructureSiteStatus></ns4:payload>`;
+  // Split mid-tag to prove chunk boundaries don't matter.
+  const enc = new TextEncoder();
+  const chunks = [enc.encode(xml.slice(0, 333)), enc.encode(xml.slice(333))];
+  const { publicationTime, points } = await parseStatus(chunks);
+  assert.equal(publicationTime, '2026-10-28T16:35:04Z');
+  assert.deepEqual(points.get('P-1'), { status: 'charging', fees: [{ policy: 'flatRate', eur: 0.26 }] });
+  assert.equal(points.size, 1);
+});
