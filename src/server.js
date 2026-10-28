@@ -12,7 +12,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const MAX_BODY = 256 * 1024;
 
 let ds = await Dataset.load();
-console.log(`[carrega-mcp] ${ds.sites.length} sites, data as of ${ds.generatedAt}`);
+console.log(`[ohmigo] ${ds.sites.length} sites, data as of ${ds.generatedAt}`);
 const live = new LiveStatus();
 if (process.env.NAP_POLL !== '0') live.start();
 
@@ -22,8 +22,8 @@ if (process.env.DATASET_URL) {
   setInterval(async () => {
     try {
       const next = await Dataset.load();
-      if (next.generatedAt !== ds.generatedAt) { ds = next; console.log(`[carrega-mcp] reloaded, data as of ${ds.generatedAt}`); }
-    } catch (e) { console.warn('[carrega-mcp] dataset reload failed:', e.message); }
+      if (next.generatedAt !== ds.generatedAt) { ds = next; console.log(`[ohmigo] reloaded, data as of ${ds.generatedAt}`); }
+    } catch (e) { console.warn('[ohmigo] dataset reload failed:', e.message); }
   }, 6 * 3600_000).unref();
 }
 
@@ -69,7 +69,7 @@ createHttp(async (req, res) => {
     await server.connect(transport);
     await transport.handleRequest(req, res, body);
   } catch (e) {
-    console.error('[carrega-mcp]', e);
+    console.error('[ohmigo]', e);
     if (!res.headersSent) send(res, 500, { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null });
   }
-}).listen(PORT, HOST, () => console.log(`[carrega-mcp] http://${HOST}:${PORT}/mcp`));
+}).listen(PORT, HOST, () => console.log(`[ohmigo] http://${HOST}:${PORT}/mcp`));

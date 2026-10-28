@@ -1,4 +1,6 @@
-# carrega-mcp
+# ohmigo
+
+Your charging amigo: "ohm" + "amigo".
 
 An MCP server that answers "how much will this charge cost?" and "where's the
 cheapest charger near me / on my route?" for Portugal's public EV network

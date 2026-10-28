@@ -55,7 +55,7 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const eur = v => v == null ? 'n/a' : v.toFixed(2).replace('.', ',') + ' €';
   const STATUS = { available: 'Available', charging: 'In use', outOfOrder: 'Out of order', inoperative: 'Out of order', blocked: 'Blocked', unknown: 'Status unknown', planned: 'Planned' };
-  const app = new McpApps.App({ name: 'carrega-results', version: '0.1.0' });
+  const app = new McpApps.App({ name: 'ohmigo-results', version: '0.1.0' });
 
   function render(data) {
     const list = document.getElementById('list');

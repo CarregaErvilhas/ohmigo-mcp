@@ -1,4 +1,4 @@
-# carrega-mcp on Zerops: one Node.js runtime service, no database.
+# ohmigo on Zerops: one Node.js runtime service, no database.
 #
 # Secrets/vars are set on the service, never in the repo:
 #   CEME_API_KEY  ceme-v2 API key (the value of ceme-v2's CEME_API_KEY)
@@ -27,13 +27,13 @@ zerops:
     run:
       base: alpine/nodejs@24
       prepareCommands:
-        - sudo addgroup -S carrega
-        - sudo adduser -S -D -H -s /sbin/nologin -G carrega carrega
+        - sudo addgroup -S ohmigo
+        - sudo adduser -S -D -H -s /sbin/nologin -G ohmigo ohmigo
       startCommands:
         - command: node src/server.js
           name: mcp
           workingDir: /var/www
-          user: carrega
+          user: ohmigo
       ports:
         - port: 3002
           httpSupport: true

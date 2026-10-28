@@ -112,10 +112,10 @@ export class LiveStatus {
         this.etag = res.headers.get('etag');
         this.fetchedAt = Date.now();
         this.lastError = null;
-        console.log(`[carrega-mcp] live: ${points.size} points, published ${publicationTime}, ${Date.now() - t0} ms`);
+        console.log(`[ohmigo] live: ${points.size} points, published ${publicationTime}, ${Date.now() - t0} ms`);
       } catch (e) {
         this.lastError = e.message;
-        console.warn('[carrega-mcp] live poll failed, keeping previous data:', e.message);
+        console.warn('[ohmigo] live poll failed, keeping previous data:', e.message);
       } finally {
         this.running = null;
       }

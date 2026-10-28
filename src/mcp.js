@@ -11,7 +11,7 @@ import { tariffs } from './ceme.js';
 import { quotePoint, rank, tariffKey } from './quote.js';
 import { viewHtml } from './view.js';
 
-const VIEW_URI = 'ui://carrega/results.html';
+const VIEW_URI = 'ui://ohmigo/results.html';
 
 export const INSTRUCTIONS = `Estimates what an EV charging session costs on Portugal's public network (MOBI.E): the CEME energy tariff + the charger operator (OPC) fee + taxes, and finds the cheapest charger near a place or along a route.
 
@@ -84,7 +84,7 @@ const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 const meta = (ds, live) => ({ dataAsOf: ds.generatedAt, live: live.info() });
 
 export function createServer(ds, live) {
-  const server = new McpServer({ name: 'carrega', title: 'Carrega: EV charging costs in Portugal', version: '0.1.0' }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: 'ohmigo', title: 'Ohmigo: EV charging costs in Portugal', version: '0.1.0' }, { instructions: INSTRUCTIONS });
 
   server.registerTool('list_ceme_tariffs', {
     title: 'List CEME tariffs',
