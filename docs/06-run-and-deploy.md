@@ -83,9 +83,10 @@ answers before the live feed finishes downloading.
 
 ### Shipping a new version
 
-Merge to `main`. Zerops is connected to this repo (service `mcp` → Build,
+Open a pull request into `main` and merge it (direct pushes are blocked by
+the `main` ruleset, and the `test` check must pass). Zerops is connected to this repo (service `mcp` → Build,
 Deploy, Run Pipeline Settings: push to `main`, setup `mcp`) and builds and
-deploys on every push, in about two minutes. No Zerops credential lives in
+deploys on every merge, in about two minutes. No Zerops credential lives in
 GitHub. A deploy that fails its readiness check is dropped and the previous
 version keeps serving.
 
