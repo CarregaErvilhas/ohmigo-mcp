@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ohmigo · o teu amigo dos carregamentos</title>
+<meta name="description" content="Pergunta ao ChatGPT ou ao Claude onde é mais barato carregar o teu carro elétrico em Portugal. Grátis, sem registo.">
+<meta property="og:title" content="ohmigo · o teu amigo dos carregamentos">
+<meta property="og:description" content="Pergunta ao ChatGPT ou ao Claude onde é mais barato carregar o teu carro elétrico em Portugal.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#16a34a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='14' width='44' height='40' rx='14' fill='%2322c55e'/%3E%3Crect x='20' y='4' width='6' height='12' rx='3' fill='%23334155'/%3E%3Crect x='38' y='4' width='6' height='12' rx='3' fill='%23334155'/%3E%3Ccircle cx='24' cy='32' r='4' fill='%230f172a'/%3E%3Ccircle cx='40' cy='32' r='4' fill='%230f172a'/%3E%3Cpath d='M24 42q8 6 16 0' stroke='%230f172a' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #fbfaf5;
+    --bg-alt: #f1f7ef;
+    --card: #ffffff;
+    --fg: #0f172a;
+    --muted: #556070;
+    --line: #e4e7e1;
+    --green: #16a34a;
+    --green-soft: #dcfce7;
+    --green-ink: #14532d;
+    --yellow: #facc15;
+    --yellow-soft: #fef9c3;
+    --pink: #fb7185;
+    --blue: #38bdf8;
+    --body: #22c55e;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 8px 24px rgba(15, 23, 42, .06);
+    --radius: 20px;
+    --font: ui-rounded, "SF Pro Rounded", "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1412; --bg-alt: #111c18; --card: #16221e; --fg: #ecf3ef; --muted: #9fb0a8;
+      --line: #24332d; --green: #4ade80; --green-soft: #173726; --green-ink: #bbf7d0;
+      --yellow-soft: #3a3410; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1412; --bg-alt: #111c18; --card: #16221e; --fg: #ecf3ef; --muted: #9fb0a8;
+    --line: #24332d; --green: #4ade80; --green-soft: #173726; --green-ink: #bbf7d0;
+    --yellow-soft: #3a3410; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.6 var(--font); overflow-x: hidden; }
+  a { color: var(--green); }
+  b, strong { font-weight: 800; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  section { padding: 72px 0; }
+  .alt { background: var(--bg-alt); }
+  h1, h2, h3 { line-height: 1.15; margin: 0 0 .5em; letter-spacing: -.01em; }
+  h1 { font-size: clamp(36px, 7vw, 64px); font-weight: 900; }
+  h2 { font-size: clamp(28px, 4.6vw, 42px); font-weight: 900; }
+  h3 { font-size: 21px; font-weight: 800; }
+  p { margin: 0 0 1em; }
+  .lead { font-size: clamp(19px, 2.4vw, 22px); color: var(--muted); max-width: 40em; }
+  .eyebrow { display: inline-block; font-size: 14px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--green-ink); background: var(--green-soft); padding: 4px 12px; border-radius: 999px; margin-bottom: 14px; }
+  .hl { background: linear-gradient(transparent 60%, var(--yellow) 60%); padding: 0 .1em; color: inherit; }
+  :root[data-theme="dark"] .hl { background: linear-gradient(transparent 62%, rgba(250,204,21,.45) 62%); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hl { background: linear-gradient(transparent 62%, rgba(250,204,21,.45) 62%); } }
+
+  /* Header */
+  header { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--line); }
+  .bar { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 12px; }
+  .logo { display: flex; align-items: center; gap: 8px; font-weight: 900; font-size: 22px; color: var(--fg); text-decoration: none; }
+  .logo svg { width: 34px; height: 34px; }
+  .langs { display: flex; gap: 6px; }
+  .langs button { display: flex; align-items: center; gap: 6px; border: 2px solid transparent; background: var(--card); border-radius: 999px;
+    padding: 5px 10px 5px 6px; font: 700 14px var(--font); color: var(--fg); cursor: pointer; box-shadow: var(--shadow); }
+  .langs button[aria-pressed="true"] { border-color: var(--green); }
+  .langs svg { width: 24px; height: 24px; border-radius: 50%; display: block; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 10px; justify-content: center; font: 800 18px var(--font); text-decoration: none;
+    border-radius: 999px; padding: 14px 26px; border: 0; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; min-height: 52px; }
+  .btn:active { transform: scale(.97); }
+  .btn-main { background: var(--green); color: #fff; box-shadow: 0 6px 0 #0f7a36, 0 10px 24px rgba(22,163,74,.35); }
+  :root[data-theme="dark"] .btn-main { color: #052e16; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-main { color: #052e16; } }
+  .btn-main:hover { transform: translateY(-2px); }
+  .btn-ghost { background: var(--card); color: var(--fg); box-shadow: var(--shadow); }
+
+  /* Hero */
+  .hero { padding: 48px 0 72px; position: relative; overflow: hidden; }
+  .hero-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 32px; align-items: center; }
+  .hero .ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 26px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .chip { font-size: 15px; font-weight: 700; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; }
+  .mascot-stage { position: relative; display: grid; place-items: center; min-height: 340px; }
+  .mascot-stage::before { content: ""; position: absolute; width: 88%; aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, var(--yellow-soft), var(--green-soft) 70%); }
+  .mascot { position: relative; width: min(320px, 78vw); animation: bob 3.2s ease-in-out infinite; filter: drop-shadow(0 18px 18px rgba(15,23,42,.15)); }
+  .arm-wave { transform-origin: 196px 150px; animation: wave 1.6s ease-in-out infinite; }
+  .blink { transform-origin: center 118px; animation: blink 4.5s infinite; }
+  .bolt { position: absolute; width: 38px; animation: float 4s ease-in-out infinite; }
+  .bolt.b1 { top: 6%; left: 8%; }
+  .bolt.b2 { top: 18%; right: 4%; width: 28px; animation-delay: -1.3s; }
+  .bolt.b3 { bottom: 10%; left: 2%; width: 24px; animation-delay: -2.4s; }
+  .bubble-hi { position: absolute; top: 4%; right: 10%; background: var(--card); border-radius: 18px 18px 18px 4px; padding: 8px 14px;
+    font-weight: 900; box-shadow: var(--shadow); animation: pop 3.2s ease-in-out infinite; }
+  @keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-12px) } }
+  @keyframes wave { 0%,100% { transform: rotate(0) } 50% { transform: rotate(-22deg) } }
+  @keyframes blink { 0%,92%,100% { transform: scaleY(1) } 95% { transform: scaleY(.1) } }
+  @keyframes float { 0%,100% { transform: translateY(0) rotate(-8deg) } 50% { transform: translateY(-14px) rotate(8deg) } }
+  @keyframes pop { 0%,100% { transform: scale(1) } 50% { transform: scale(1.06) } }
+
+  /* Road divider with a car */
+  .road { position: relative; height: 70px; overflow: hidden; }
+  .road::after { content: ""; position: absolute; left: 0; right: 0; bottom: 14px; height: 4px;
+    background: repeating-linear-gradient(90deg, var(--line) 0 28px, transparent 28px 48px); }
+  .car { position: absolute; bottom: 16px; width: 110px; animation: drive 14s linear infinite; }
+  @keyframes drive { from { left: -130px } to { left: 100% } }
+
+  /* Chat demo */
+  .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  .phone { background: var(--card); border-radius: 34px; padding: 18px 16px 22px; box-shadow: var(--shadow); border: 1px solid var(--line);
+    max-width: 420px; width: 100%; margin: 0 auto; }
+  .phone-top { display: flex; align-items: center; gap: 8px; padding: 0 4px 12px; border-bottom: 1px solid var(--line); margin-bottom: 14px;
+    font-weight: 800; font-size: 15px; color: var(--muted); }
+  .phone-top i { width: 10px; height: 10px; border-radius: 50%; background: var(--green); display: inline-block; }
+  .msg { max-width: 88%; padding: 10px 14px; border-radius: 18px; margin-bottom: 10px; font-size: 16px; line-height: 1.45;
+    opacity: 0; transform: translateY(8px); transition: opacity .4s ease, transform .4s ease; }
+  .msg.on { opacity: 1; transform: none; }
+  .msg.me { margin-left: auto; background: var(--green); color: #fff; border-bottom-right-radius: 4px; }
+  :root[data-theme="dark"] .msg.me { color: #052e16; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .msg.me { color: #052e16; } }
+  .msg.ai { background: var(--bg-alt); border-bottom-left-radius: 4px; }
+  .tool { font-size: 13px; font-weight: 800; color: var(--green-ink); background: var(--green-soft); border-radius: 999px; padding: 4px 10px;
+    display: inline-flex; align-items: center; gap: 6px; }
+  .tool svg { width: 16px; height: 16px; }
+  .res { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px 12px; margin: 8px 0 4px; }
+  .res div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 15px; }
+  .res div:last-child { border-bottom: 0; }
+  .res b { font-variant-numeric: tabular-nums; }
+  .res .win b { color: var(--green); }
+  .free { font-size: 12px; font-weight: 800; color: var(--green); }
+  .fineprint { font-size: 13px; color: var(--muted); text-align: center; margin-top: 10px; }
+  .typing { display: inline-flex; gap: 4px; }
+  .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1s infinite; }
+  .typing span:nth-child(2) { animation-delay: .15s } .typing span:nth-child(3) { animation-delay: .3s }
+  @keyframes dot { 0%,100% { opacity: .3 } 50% { opacity: 1 } }
+
+  /* What is an MCP */
+  .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; gap: 10px; align-items: center; margin: 32px 0 8px; }
+  .node { background: var(--card); border-radius: var(--radius); padding: 18px 12px; text-align: center; box-shadow: var(--shadow); font-weight: 800; font-size: 16px; }
+  .node svg { width: 64px; height: 64px; display: block; margin: 0 auto 8px; }
+  .node small { display: block; font-weight: 600; color: var(--muted); font-size: 14px; margin-top: 4px; line-height: 1.35; }
+  .node.star { outline: 3px solid var(--green); }
+  .arrow { color: var(--green); font-size: 28px; font-weight: 900; text-align: center; }
+  .analogy { display: flex; gap: 16px; align-items: flex-start; background: var(--yellow-soft); border-radius: var(--radius); padding: 20px 22px; margin-top: 28px; }
+  .analogy .big { font-size: 40px; line-height: 1; }
+  .analogy p { margin: 0; }
+
+  /* Cards */
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 30px; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); border: 1px solid var(--line);
+    transition: transform .2s ease; }
+  .card:hover { transform: translateY(-4px) rotate(-.4deg); }
+  .card .ico { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; margin-bottom: 14px; font-size: 30px; }
+  .card p { color: var(--muted); font-size: 16px; margin: 0; }
+
+  /* Install */
+  .time { display: inline-flex; gap: 8px; align-items: center; font-weight: 800; background: var(--card); border-radius: 999px; padding: 6px 14px; box-shadow: var(--shadow); }
+  .urlbox { display: flex; align-items: center; gap: 10px; background: var(--card); border: 3px dashed var(--green); border-radius: 18px; padding: 10px 10px 10px 18px;
+    margin: 26px 0 8px; flex-wrap: wrap; }
+  .urlbox code { font: 700 clamp(15px, 2.6vw, 20px) var(--mono); flex: 1 1 260px; overflow-wrap: anywhere; color: var(--fg); }
+  .urlbox .btn { padding: 10px 20px; min-height: 46px; font-size: 16px; box-shadow: 0 4px 0 #0f7a36; }
+  .urlhint { font-size: 15px; color: var(--muted); }
+  .tabs { display: flex; gap: 8px; margin: 30px 0 0; overflow-x: auto; padding: 4px 2px 10px; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; border: 2px solid var(--line); background: var(--card); color: var(--fg);
+    border-radius: 999px; padding: 10px 18px; font: 800 16px var(--font); cursor: pointer; min-height: 48px; }
+  .tab[aria-selected="true"] { border-color: var(--green); background: var(--green-soft); color: var(--green-ink); }
+  .tab .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .panel { background: var(--card); border-radius: var(--radius); padding: 26px; box-shadow: var(--shadow); border: 1px solid var(--line); }
+  .panel[hidden] { display: none; }
+  .panel .note { font-size: 15px; color: var(--muted); background: var(--bg-alt); border-radius: 14px; padding: 12px 16px; margin: 0 0 18px; }
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 4px 0 18px 58px; min-height: 46px; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 42px; height: 42px; border-radius: 50%;
+    background: var(--yellow); color: #422006; font-weight: 900; display: grid; place-items: center; font-size: 20px; }
+  ol.steps > li:not(:last-child)::after { content: ""; position: absolute; left: 20px; top: 46px; bottom: 4px; width: 2px; background: var(--line); }
+  .k { display: inline-block; font-weight: 800; background: var(--bg-alt); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 8px;
+    padding: 0 8px; font-size: .92em; white-space: nowrap; }
+  .done { display: flex; gap: 12px; align-items: center; background: var(--green-soft); color: var(--green-ink); border-radius: 14px; padding: 12px 16px; font-weight: 700; margin-top: 4px; }
+  .done span { font-size: 28px; }
+  pre { background: var(--bg-alt); border-radius: 12px; padding: 12px 14px; overflow-x: auto; font: 14px/1.5 var(--mono); margin: 8px 0 0; }
+  .encourage { display: flex; gap: 14px; align-items: center; margin-top: 22px; }
+  .encourage svg { width: 70px; flex: 0 0 auto; }
+  .encourage p { margin: 0; background: var(--card); border-radius: 18px 18px 18px 4px; padding: 12px 16px; box-shadow: var(--shadow); font-weight: 700; }
+
+  /* Prompts */
+  .prompts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 26px; }
+  .prompt { display: flex; gap: 12px; align-items: flex-start; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 16px 18px; font: 600 17px/1.45 var(--font); color: var(--fg); cursor: pointer; box-shadow: var(--shadow); transition: transform .15s ease; }
+  .prompt:hover { transform: translateY(-2px); }
+  .prompt .e { font-size: 26px; line-height: 1; }
+  .prompt .c { margin-left: auto; font-size: 13px; font-weight: 800; color: var(--green); white-space: nowrap; padding-left: 8px; }
+  .tip { margin-top: 22px; background: var(--green-soft); color: var(--green-ink); border-radius: var(--radius); padding: 16px 20px; font-weight: 600; }
+
+  /* FAQ */
+  .faq { max-width: 760px; margin-top: 26px; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  summary { list-style: none; cursor: pointer; padding: 16px 52px 16px 20px; font-weight: 800; position: relative; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-size: 26px; color: var(--green); font-weight: 900; transition: transform .2s; }
+  details[open] summary::after { transform: translateY(-50%) rotate(45deg); }
+  details > div { padding: 0 20px 16px; color: var(--muted); font-size: 17px; }
+  details > div p:last-child { margin: 0; }
+
+  /* Final CTA + footer */
+  .final { text-align: center; }
+  .final .mascot { width: 160px; }
+  footer { padding: 36px 0 48px; font-size: 15px; color: var(--muted); border-top: 1px solid var(--line); }
+  footer p { margin: 0 0 .6em; }
+
+  /* Toast + confetti */
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 120px); background: var(--fg); color: var(--bg); font-weight: 800;
+    padding: 12px 20px; border-radius: 999px; transition: transform .3s ease; z-index: 50; box-shadow: var(--shadow); max-width: calc(100vw - 32px); text-align: center; }
+  .toast.on { transform: translate(-50%, 0); }
+  .confetti { position: fixed; top: 0; left: 0; width: 10px; height: 14px; pointer-events: none; z-index: 60; border-radius: 2px; }
+
+  .reveal { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 900px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .flow { grid-template-columns: 1fr 1fr; }
+    .flow .arrow { display: none; }
+  }
+  @media (max-width: 760px) {
+    body { font-size: 17px; }
+    section { padding: 52px 0; }
+    .hero { padding-top: 24px; }
+    .hero-grid, .demo-grid { grid-template-columns: 1fr; }
+    .hero-grid .mascot-stage { order: -1; min-height: 250px; }
+    .mascot { width: min(220px, 60vw); }
+    .prompts { grid-template-columns: 1fr; }
+    .btn { width: 100%; }
+    .urlbox .btn { width: auto; flex: 1 1 auto; }
+    .panel { padding: 20px 16px; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; overflow: visible; }
+    .tab { justify-content: center; }
+    .langs .lbl { display: none; }
+    .langs button { padding: 5px; }
+    .bubble-hi { right: 4%; }
+  }
+  @media (max-width: 420px) {
+    .cards { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .reveal, .msg { opacity: 1; transform: none; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- The mascot, defined once and reused with <use>. A plug with a face. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="ohmi" viewBox="0 0 260 300">
+      <path d="M130 250 C130 285 60 270 40 292" stroke="#334155" stroke-width="10" fill="none" stroke-linecap="round"/>
+      <rect x="88" y="10" width="20" height="58" rx="10" fill="#94a3b8"/>
+      <rect x="152" y="10" width="20" height="58" rx="10" fill="#94a3b8"/>
+      <rect x="88" y="10" width="20" height="18" rx="9" fill="#cbd5e1"/>
+      <rect x="152" y="10" width="20" height="18" rx="9" fill="#cbd5e1"/>
+      <path d="M54 150 Q24 160 30 196" stroke="#16a34a" stroke-width="16" fill="none" stroke-linecap="round"/>
+      <g class="arm-wave"><path d="M206 150 Q236 120 228 86" stroke="#16a34a" stroke-width="16" fill="none" stroke-linecap="round"/>
+        <circle cx="228" cy="80" r="14" fill="#22c55e"/></g>
+      <rect x="50" y="56" width="160" height="196" rx="56" fill="#22c55e"/>
+      <rect x="50" y="56" width="160" height="196" rx="56" fill="url(#shine)"/>
+      <ellipse cx="96" cy="152" rx="13" ry="9" fill="#fb7185" opacity=".55"/>
+      <ellipse cx="164" cy="152" rx="13" ry="9" fill="#fb7185" opacity=".55"/>
+      <g class="blink"><ellipse cx="102" cy="118" rx="13" ry="16" fill="#0f172a"/><ellipse cx="158" cy="118" rx="13" ry="16" fill="#0f172a"/>
+        <circle cx="107" cy="111" r="5" fill="#fff"/><circle cx="163" cy="111" r="5" fill="#fff"/></g>
+      <path d="M106 158 Q130 182 154 158" stroke="#0f172a" stroke-width="8" fill="#7f1d1d" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M140 190 L118 222 H134 L124 246 L152 208 H136 Z" fill="#facc15" stroke="#ca8a04" stroke-width="3" stroke-linejoin="round"/>
+    </symbol>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <symbol id="bolt" viewBox="0 0 40 60"><path d="M26 2 L4 34 H18 L12 58 L36 24 H22 Z" fill="#facc15" stroke="#ca8a04" stroke-width="2.5" stroke-linejoin="round"/></symbol>
+    <symbol id="flag-pt" viewBox="0 0 24 24"><rect width="10" height="24" fill="#046a38"/><rect x="10" width="14" height="24" fill="#da291c"/>
+      <circle cx="10" cy="12" r="5" fill="#ffe900"/><circle cx="10" cy="12" r="3" fill="#da291c"/><circle cx="10" cy="12" r="1.6" fill="#fff"/></symbol>
+    <symbol id="flag-gb" viewBox="0 0 24 24"><rect width="24" height="24" fill="#012169"/>
+      <path d="M0 0 24 24M24 0 0 24" stroke="#fff" stroke-width="5"/><path d="M0 0 24 24M24 0 0 24" stroke="#c8102e" stroke-width="2"/>
+      <path d="M12 0V24M0 12H24" stroke="#fff" stroke-width="7"/><path d="M12 0V24M0 12H24" stroke="#c8102e" stroke-width="4"/></symbol>
+  </defs>
+</svg>
+
+<header>
+  <div class="wrap bar">
+    <a class="logo" href="#top"><svg aria-hidden="true"><use href="#ohmi"/></svg>ohmigo</a>
+    <div class="langs" role="group" aria-label="Language / Idioma">
+      <button type="button" data-lang="pt" aria-pressed="true" title="Português"><svg aria-hidden="true"><use href="#flag-pt"/></svg><span class="lbl">PT</span></button>
+      <button type="button" data-lang="en" aria-pressed="false" title="English"><svg aria-hidden="true"><use href="#flag-gb"/></svg><span class="lbl">EN</span></button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow" data-i="hero.eyebrow"></span>
+        <h1 data-i="hero.title"></h1>
+        <p class="lead" data-i="hero.lead"></p>
+        <div class="ctas">
+          <a class="btn btn-main" href="#instalar" data-i="hero.cta"></a>
+          <a class="btn btn-ghost" href="#como" data-i="hero.cta2"></a>
+        </div>
+        <div class="chips">
+          <span class="chip" data-i="hero.chip1"></span>
+          <span class="chip" data-i="hero.chip2"></span>
+          <span class="chip" data-i="hero.chip3"></span>
+        </div>
+      </div>
+      <div class="mascot-stage" aria-hidden="true">
+        <svg class="bolt b1"><use href="#bolt"/></svg>
+        <svg class="bolt b2"><use href="#bolt"/></svg>
+        <svg class="bolt b3"><use href="#bolt"/></svg>
+        <svg class="mascot" viewBox="0 0 260 300"><use href="#ohmi"/></svg>
+        <div class="bubble-hi" data-i="hero.hi"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="road" aria-hidden="true">
+    <svg class="car" viewBox="0 0 120 50">
+      <path d="M8 34 Q8 22 22 20 L36 10 Q42 6 52 6 H74 Q84 6 92 14 L100 20 Q114 22 114 34 V38 H8 Z" fill="#38bdf8"/>
+      <path d="M40 12 H58 V20 H32 Z M62 12 H76 Q82 12 88 20 H62 Z" fill="#e0f2fe"/>
+      <circle cx="30" cy="38" r="9" fill="#0f172a"/><circle cx="30" cy="38" r="4" fill="#cbd5e1"/>
+      <circle cx="92" cy="38" r="9" fill="#0f172a"/><circle cx="92" cy="38" r="4" fill="#cbd5e1"/>
+      <path d="M58 22 L52 31 H57 L54 37 L62 28 H57 Z" fill="#facc15"/>
+    </svg>
+  </div>
+
+  <section id="como" class="alt">
+    <div class="wrap demo-grid">
+      <div class="reveal">
+        <span class="eyebrow" data-i="demo.eyebrow"></span>
+        <h2 data-i="demo.title"></h2>
+        <p class="lead" data-i="demo.lead"></p>
+        <p data-i="demo.body"></p>
+      </div>
+      <div>
+        <div class="phone" id="chat" aria-live="polite">
+          <div class="phone-top"><i></i><span data-i="demo.app"></span></div>
+          <div class="msg me" data-i="demo.q"></div>
+          <div class="msg ai"><span class="tool"><svg viewBox="0 0 40 60" aria-hidden="true"><use href="#bolt"/></svg><span data-i="demo.tool"></span></span></div>
+          <div class="msg ai">
+            <span data-i="demo.a1"></span>
+            <div class="res">
+              <div class="win"><span data-i="demo.r1"></span><b>6,90 €</b></div>
+              <div><span data-i="demo.r2"></span><b>8,15 €</b></div>
+              <div><span data-i="demo.r3"></span><b>11,40 €</b></div>
+            </div>
+            <span data-i="demo.a2"></span>
+          </div>
+        </div>
+        <p class="fineprint" data-i="demo.fine"></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="reveal">
+        <span class="eyebrow" data-i="mcp.eyebrow"></span>
+        <h2 data-i="mcp.title"></h2>
+        <p class="lead" data-i="mcp.lead"></p>
+      </div>
+      <div class="flow reveal" aria-hidden="false">
+        <div class="node"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="22" r="12" fill="#fbbf24"/><path d="M10 58 Q10 38 32 38 Q54 38 54 58 Z" fill="#38bdf8"/><circle cx="27" cy="21" r="2" fill="#0f172a"/><circle cx="37" cy="21" r="2" fill="#0f172a"/><path d="M27 27 Q32 31 37 27" stroke="#0f172a" stroke-width="2" fill="none" stroke-linecap="round"/></svg><span data-i="mcp.n1"></span><small data-i="mcp.n1s"></small></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="node"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="14" width="44" height="36" rx="12" fill="#a78bfa"/><rect x="29" y="4" width="6" height="12" rx="3" fill="#7c3aed"/><circle cx="32" cy="4" r="4" fill="#facc15"/><circle cx="24" cy="30" r="5" fill="#fff"/><circle cx="40" cy="30" r="5" fill="#fff"/><circle cx="24" cy="30" r="2.5" fill="#0f172a"/><circle cx="40" cy="30" r="2.5" fill="#0f172a"/><rect x="24" y="40" width="16" height="4" rx="2" fill="#fff"/></svg><span data-i="mcp.n2"></span><small data-i="mcp.n2s"></small></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="node star"><svg viewBox="0 0 260 300" aria-hidden="true"><use href="#ohmi"/></svg><span>ohmigo</span><small data-i="mcp.n3s"></small></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="node"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="16" y="8" width="26" height="48" rx="6" fill="#64748b"/><rect x="21" y="14" width="16" height="12" rx="3" fill="#bbf7d0"/><path d="M42 26 H48 Q52 26 52 30 V46 Q52 50 48 50" stroke="#334155" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M31 32 L25 41 H30 L27 49 L35 38 H30 Z" fill="#facc15"/></svg><span data-i="mcp.n4"></span><small data-i="mcp.n4s"></small></div>
+      </div>
+      <div class="analogy reveal">
+        <div class="big" aria-hidden="true">🧩</div>
+        <p data-i="mcp.analogy"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt">
+    <div class="wrap">
+      <div class="reveal">
+        <span class="eyebrow" data-i="why.eyebrow"></span>
+        <h2 data-i="why.title"></h2>
+      </div>
+      <div class="cards">
+        <div class="card reveal"><div class="ico" style="background:#fef9c3" aria-hidden="true">💳</div><h3 data-i="why.c1t"></h3><p data-i="why.c1"></p></div>
+        <div class="card reveal"><div class="ico" style="background:#dcfce7" aria-hidden="true">🟢</div><h3 data-i="why.c2t"></h3><p data-i="why.c2"></p></div>
+        <div class="card reveal"><div class="ico" style="background:#e0f2fe" aria-hidden="true">🛣️</div><h3 data-i="why.c3t"></h3><p data-i="why.c3"></p></div>
+        <div class="card reveal"><div class="ico" style="background:#ffe4e6" aria-hidden="true">🙈</div><h3 data-i="why.c4t"></h3><p data-i="why.c4"></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="instalar">
+    <div class="wrap">
+      <div class="reveal">
+        <span class="eyebrow" data-i="inst.eyebrow"></span>
+        <h2 data-i="inst.title"></h2>
+        <p class="lead" data-i="inst.lead"></p>
+        <span class="time" data-i="inst.time"></span>
+      </div>
+
+      <div class="urlbox">
+        <code id="url">https://ohmigo.ocarroeletrico.com/mcp</code>
+        <button class="btn btn-main" type="button" data-copy="#url" data-i="inst.copy"></button>
+      </div>
+      <p class="urlhint" data-i="inst.urlhint"></p>
+
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="t-claude" aria-controls="p-claude" aria-selected="true"><span class="dot" style="background:#d97757"></span>Claude</button>
+        <button class="tab" role="tab" id="t-chatgpt" aria-controls="p-chatgpt" aria-selected="false" tabindex="-1"><span class="dot" style="background:#10a37f"></span>ChatGPT</button>
+        <button class="tab" role="tab" id="t-phone" aria-controls="p-phone" aria-selected="false" tabindex="-1"><span class="dot" style="background:#38bdf8"></span><span data-i="tab.phone"></span></button>
+        <button class="tab" role="tab" id="t-other" aria-controls="p-other" aria-selected="false" tabindex="-1"><span class="dot" style="background:#a78bfa"></span><span data-i="tab.other"></span></button>
+      </div>
+
+      <div class="panel" role="tabpanel" id="p-claude" aria-labelledby="t-claude">
+        <p class="note" data-i="claude.note"></p>
+        <ol class="steps">
+          <li data-i="claude.s1"></li>
+          <li data-i="claude.s2"></li>
+          <li data-i="claude.s3"></li>
+          <li data-i="claude.s4"></li>
+          <li data-i="claude.s5"></li>
+        </ol>
+        <div class="done"><span aria-hidden="true">🎉</span><div data-i="claude.done"></div></div>
+      </div>
+
+      <div class="panel" role="tabpanel" id="p-chatgpt" aria-labelledby="t-chatgpt" hidden>
+        <p class="note" data-i="gpt.note"></p>
+        <ol class="steps">
+          <li data-i="gpt.s1"></li>
+          <li data-i="gpt.s2"></li>
+          <li data-i="gpt.s3"></li>
+          <li data-i="gpt.s4"></li>
+          <li data-i="gpt.s5"></li>
+        </ol>
+        <div class="done"><span aria-hidden="true">🎉</span><div data-i="gpt.done"></div></div>
+      </div>
+
+      <div class="panel" role="tabpanel" id="p-phone" aria-labelledby="t-phone" hidden>
+        <p class="note" data-i="phone.note"></p>
+        <ol class="steps">
+          <li data-i="phone.s1"></li>
+          <li data-i="phone.s2"></li>
+          <li data-i="phone.s3"></li>
+        </ol>
+        <div class="done"><span aria-hidden="true">📱</span><div data-i="phone.done"></div></div>
+      </div>
+
+      <div class="panel" role="tabpanel" id="p-other" aria-labelledby="t-other" hidden>
+        <p class="note" data-i="other.note"></p>
+        <ol class="steps">
+          <li><span data-i="other.s1"></span>
+<pre>claude mcp add --transport http ohmigo https://ohmigo.ocarroeletrico.com/mcp</pre></li>
+          <li><span data-i="other.s2"></span>
+<pre>{
+  "mcpServers": {
+    "ohmigo": { "url": "https://ohmigo.ocarroeletrico.com/mcp" }
+  }
+}</pre></li>
+          <li data-i="other.s3"></li>
+        </ol>
+      </div>
+
+      <div class="encourage reveal">
+        <svg viewBox="0 0 260 300" aria-hidden="true"><use href="#ohmi"/></svg>
+        <p data-i="inst.encourage"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt">
+    <div class="wrap">
+      <div class="reveal">
+        <span class="eyebrow" data-i="ask.eyebrow"></span>
+        <h2 data-i="ask.title"></h2>
+        <p class="lead" data-i="ask.lead"></p>
+      </div>
+      <div class="prompts">
+        <button class="prompt" type="button"><span class="e" aria-hidden="true">📍</span><span data-i="ask.p1"></span><span class="c" data-i="ask.copy"></span></button>
+        <button class="prompt" type="button"><span class="e" aria-hidden="true">🛣️</span><span data-i="ask.p2"></span><span class="c" data-i="ask.copy"></span></button>
+        <button class="prompt" type="button"><span class="e" aria-hidden="true">💶</span><span data-i="ask.p3"></span><span class="c" data-i="ask.copy"></span></button>
+        <button class="prompt" type="button"><span class="e" aria-hidden="true">🌙</span><span data-i="ask.p4"></span><span class="c" data-i="ask.copy"></span></button>
+      </div>
+      <p class="tip" data-i="ask.tip"></p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="reveal">
+        <span class="eyebrow" data-i="faq.eyebrow"></span>
+        <h2 data-i="faq.title"></h2>
+      </div>
+      <div class="faq">
+        <details><summary data-i="faq.q1"></summary><div data-i="faq.a1"></div></details>
+        <details><summary data-i="faq.q2"></summary><div data-i="faq.a2"></div></details>
+        <details><summary data-i="faq.q3"></summary><div data-i="faq.a3"></div></details>
+        <details><summary data-i="faq.q4"></summary><div data-i="faq.a4"></div></details>
+        <details><summary data-i="faq.q5"></summary><div data-i="faq.a5"></div></details>
+        <details><summary data-i="faq.q6"></summary><div data-i="faq.a6"></div></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt final">
+    <div class="wrap">
+      <svg class="mascot" viewBox="0 0 260 300" aria-hidden="true"><use href="#ohmi"/></svg>
+      <h2 data-i="final.title"></h2>
+      <p class="lead" style="margin:0 auto 24px" data-i="final.lead"></p>
+      <a class="btn btn-main" href="#instalar" data-i="final.cta"></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p data-i="foot.data"></p>
+    <p data-i="foot.code"></p>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Every sentence on the page, in both languages. test/site.test.js checks
+     that pt and en have the same keys. Values are trusted HTML (written here,
+     never user input), so they go in with innerHTML. -->
+<script type="application/json" id="strings">
+{
+  "pt": {
+    "meta.title": "ohmigo · o teu amigo dos carregamentos",
+    "meta.desc": "Pergunta ao ChatGPT ou ao Claude onde é mais barato carregar o teu carro elétrico em Portugal. Grátis, sem registo.",
+    "hero.eyebrow": "⚡ Para quem conduz elétrico em Portugal",
+    "hero.title": "Pergunta ao teu assistente <span class=\"hl\">onde é mais barato carregar.</span>",
+    "hero.lead": "O ohmigo ensina o ChatGPT e o Claude a saber os preços de todos os postos da rede MOBI.E. Perguntas em português normal, ele faz as contas por ti.",
+    "hero.cta": "Quero instalar ⚡",
+    "hero.cta2": "Como funciona?",
+    "hero.chip1": "✅ Grátis",
+    "hero.chip2": "🔒 Sem registo",
+    "hero.chip3": "⏱️ 2 minutos a instalar",
+    "hero.hi": "Olá! 👋",
+    "demo.eyebrow": "Como funciona",
+    "demo.title": "Falas normalmente. Ele faz as contas.",
+    "demo.lead": "Sem apps novas, sem mapas, sem tabelas de tarifários. Usas o assistente que já tens.",
+    "demo.body": "Dizes onde estás, que carro tens e quanta bateria tens. O assistente pergunta ao ohmigo e responde com o <b>custo total</b> e o <b>tempo</b> em cada posto, para <b>cada forma de pagar</b>: o teu cartão CEME, o cartão bancário no posto ou a app do operador. E diz-te se o posto está livre agora.",
+    "demo.app": "O teu assistente",
+    "demo.q": "Tenho 20% de bateria e estou em Leiria. Onde é mais barato carregar até 80%?",
+    "demo.tool": "A perguntar ao ohmigo…",
+    "demo.a1": "Encontrei 3 postos rápidos perto de ti:",
+    "demo.r1": "🥇 Posto A <span class=\"free\">● livre</span>",
+    "demo.r2": "🥈 Posto B <span class=\"free\">● livre</span>",
+    "demo.r3": "🥉 Posto C",
+    "demo.a2": "O Posto A sai mais barato com o teu cartão CEME, cerca de 35 minutos. 🚗⚡",
+    "demo.fine": "Exemplo ilustrativo. Os nomes e preços acima são inventados.",
+    "mcp.eyebrow": "Afinal, o que é um “MCP”?",
+    "mcp.title": "É um superpoder para o teu assistente.",
+    "mcp.lead": "O ChatGPT e o Claude são muito espertos, mas não sabem quanto custa carregar <i>agora</i> naquele posto. Um MCP é uma ligação que lhes dá acesso a informação que não têm. O ohmigo é o MCP dos carregamentos.",
+    "mcp.n1": "Tu",
+    "mcp.n1s": "fazes a pergunta",
+    "mcp.n2": "O teu assistente",
+    "mcp.n2s": "ChatGPT, Claude…",
+    "mcp.n3s": "faz as contas",
+    "mcp.n4": "Os postos",
+    "mcp.n4s": "preços e estado em tempo real",
+    "mcp.analogy": "Pensa nisto como <b>instalar uma app no telemóvel</b>, só que a app é para o teu assistente. Adicionas uma vez, com um endereço, e a partir daí ele sabe usá-la sozinho sempre que falares de carregar o carro.",
+    "why.eyebrow": "Porque vale a pena",
+    "why.title": "Nunca mais pagues a mais sem saber.",
+    "why.c1t": "Todas as formas de pagar",
+    "why.c1": "Compara o teu cartão CEME, o cartão bancário no posto e as apps dos operadores. O mesmo posto pode custar muito diferente.",
+    "why.c2t": "Livre ou ocupado",
+    "why.c2": "Vê se o posto está livre agora, com dados oficiais da rede, atualizados a cada poucos minutos.",
+    "why.c3t": "Perto ou pelo caminho",
+    "why.c3": "Pergunta pelo mais barato perto de ti ou ao longo de uma viagem, de Lisboa ao Porto, por exemplo.",
+    "why.c4t": "Não guarda nada",
+    "why.c4": "Sem contas, sem registo, sem rastreio. O ohmigo não sabe quem és. Grátis.",
+    "inst.eyebrow": "Instalar",
+    "inst.title": "Vamos a isso! São só uns cliques.",
+    "inst.lead": "Só precisas de copiar <b>um endereço</b> e colá-lo no sítio certo. Escolhe o teu assistente e segue os passos.",
+    "inst.time": "⏱️ Cerca de 2 minutos",
+    "inst.copy": "📋 Copiar endereço",
+    "inst.urlhint": "Este é o endereço do ohmigo. Vais precisar dele no passo de “colar”. Abrir este endereço no browser não faz nada, é normal: é para o assistente, não para ti.",
+    "tab.phone": "Telemóvel",
+    "tab.other": "Outras apps",
+    "claude.note": "No site <a href=\"https://claude.ai\" target=\"_blank\" rel=\"noopener\">claude.ai</a> ou na app Claude para computador. Em contas de empresa, pode ter de ser o administrador a adicionar.",
+    "claude.s1": "Clica no teu <b>nome</b> (canto inferior esquerdo) e depois em <span class=\"k\">Definições</span> <small>(Settings)</small>.",
+    "claude.s2": "Abre <span class=\"k\">Conectores</span> <small>(Connectors)</small> e clica em <span class=\"k\">Adicionar conector personalizado</span> <small>(Add custom connector)</small>.",
+    "claude.s3": "No nome escreve <b>ohmigo</b>. No URL <b>cola o endereço</b> que copiaste acima.",
+    "claude.s4": "Clica em <span class=\"k\">Adicionar</span> <small>(Add)</small>. Não precisas de mais nada: não há conta nem palavra-passe.",
+    "claude.s5": "Numa conversa nova, clica no <span class=\"k\">+</span> ou no ícone de ferramentas e confirma que o <b>ohmigo</b> está ligado.",
+    "claude.done": "Pronto! Pergunta “onde é mais barato carregar perto de mim?” e vê a magia.",
+    "gpt.note": "Faz isto no site <a href=\"https://chatgpt.com\" target=\"_blank\" rel=\"noopener\">chatgpt.com</a>, no computador. Esta opção pode não aparecer na conta gratuita. Os nomes dos menus mudam de vez em quando; se algo estiver diferente, procura “Apps” ou “Conectores”.",
+    "gpt.s1": "Clica no teu <b>nome</b> e em <span class=\"k\">Definições</span> <small>(Settings)</small>, depois em <span class=\"k\">Apps e Conectores</span> <small>(Apps &amp; Connectors)</small>.",
+    "gpt.s2": "Em <span class=\"k\">Definições avançadas</span> <small>(Advanced settings)</small>, liga o <span class=\"k\">Modo de programador</span> <small>(Developer mode)</small>. Parece assustador, mas é só um interruptor. 😉",
+    "gpt.s3": "Volta atrás e clica em <span class=\"k\">Criar</span> <small>(Create)</small>. Nome: <b>ohmigo</b>. URL: <b>cola o endereço</b>. Autenticação: <span class=\"k\">Sem autenticação</span> <small>(No authentication)</small>.",
+    "gpt.s4": "Marca a caixa a dizer que confias na aplicação e clica em <span class=\"k\">Criar</span>.",
+    "gpt.s5": "Numa conversa nova, clica no <span class=\"k\">+</span>, escolhe <span class=\"k\">Mais</span> e ativa o <b>ohmigo</b>.",
+    "gpt.done": "Feito! Agora é só perguntar pelos carregamentos como perguntarias a um amigo.",
+    "phone.note": "As apps de telemóvel ainda não deixam adicionar conectores novos. Mas há um truque fácil:",
+    "phone.s1": "Adiciona o ohmigo <b>uma vez</b> no computador, seguindo os passos do Claude ou do ChatGPT.",
+    "phone.s2": "Abre a app no telemóvel com <b>a mesma conta</b>. O ohmigo aparece lá sozinho.",
+    "phone.s3": "Não tens computador à mão? Abre o site (claude.ai ou chatgpt.com) no browser do telemóvel e segue os mesmos passos.",
+    "phone.done": "Ideal para perguntar na estrada (com o carro parado, claro!).",
+    "other.note": "Para quem usa outras ferramentas de IA. Qualquer app que aceite um servidor MCP por HTTP funciona, sem autenticação.",
+    "other.s1": "<b>Claude Code</b>, no terminal:",
+    "other.s2": "<b>Cursor, Windsurf e afins</b>, no ficheiro de configuração MCP:",
+    "other.s3": "Noutras apps, procura “MCP”, “Conectores” ou “Ferramentas” nas definições e cola o endereço.",
+    "inst.encourage": "Correu mal? Não faz mal, ninguém se magoou! Volta ao passo 1 e tenta outra vez. Não há nada que possas estragar. 💚",
+    "ask.eyebrow": "Experimenta",
+    "ask.title": "O que posso perguntar?",
+    "ask.lead": "Toca numa pergunta para a copiar e cola-a no teu assistente.",
+    "ask.p1": "Estou em Coimbra com 15% de bateria. Onde é mais barato carregar até 80%?",
+    "ask.p2": "Vou de Lisboa ao Porto amanhã de manhã. Onde devo parar para carregar mais barato?",
+    "ask.p3": "Quanto me custa carregar no posto mais perto de mim com o meu cartão CEME?",
+    "ask.p4": "Se carregar à noite em vez de agora, poupo alguma coisa?",
+    "ask.copy": "Copiar",
+    "ask.tip": "💡 Dica: diz ao assistente uma vez qual é o teu carro e qual é o teu cartão de carregamento (CEME). Ele lembra-se, e as contas ficam certas para ti.",
+    "faq.eyebrow": "Dúvidas",
+    "faq.title": "Perguntas frequentes",
+    "faq.q1": "Quanto custa?",
+    "faq.a1": "<p>O ohmigo é <b>grátis</b>. Só precisas de uma conta no ChatGPT ou no Claude, e nalguns casos de um plano que permita adicionar conectores.</p>",
+    "faq.q2": "O ohmigo fica a saber os meus dados?",
+    "faq.a2": "<p><b>Não.</b> Não há contas, não guarda nada e não sabe quem és. O teu assistente lembra-se do teu carro e dos teus cartões e envia-os em cada pergunta. O ohmigo faz as contas e esquece.</p>",
+    "faq.q3": "Os preços são exatos?",
+    "faq.a3": "<p>São <b>estimativas muito boas</b>, não uma fatura. O ohmigo junta o preço da energia do teu CEME, as taxas do operador do posto e os impostos, e calcula quanto tempo e energia vai levar o carregamento. Cada resposta diz o que assumiu, para saberes de onde vem o número.</p>",
+    "faq.q4": "O que é um CEME?",
+    "faq.a4": "<p>É a empresa que te vende a energia quando carregas na rede pública, normalmente através de um cartão ou app (EDP, Galp, Via Verde, Miio e muitas outras). Se não sabes qual é o teu, não faz mal: o assistente pergunta-te ou mostra as várias opções.</p>",
+    "faq.q5": "Funciona em todos os postos?",
+    "faq.a5": "<p>Em todos os postos públicos da rede <b>MOBI.E</b>, que são a grande maioria em Portugal. Alguns postos fora da rede (como Tesla ou Continente) aparecem com uma estimativa marcada com asterisco.</p>",
+    "faq.q6": "Abri o endereço no browser e não aparece nada…",
+    "faq.a6": "<p>É normal! O endereço é para o assistente, não para pessoas. Tens de o colar nas definições do ChatGPT ou do Claude, como explicado <a href=\"#instalar\">acima</a>.</p>",
+    "final.title": "Bora poupar nos carregamentos?",
+    "final.lead": "Dois minutos agora, muitos euros poupados depois.",
+    "final.cta": "Instalar o ohmigo ⚡",
+    "foot.data": "Dados: rede MOBI.E e Ponto de Acesso Nacional (PAN), preços CEME de <a href=\"https://ceme.ocarroeletrico.com\">ceme.ocarroeletrico.com</a>, preços diretos dos operadores de <a href=\"https://custofinal.blogspot.com\" target=\"_blank\" rel=\"noopener\">Preços (finais) kWh Portugal</a> de Alexandre Moleiro, usados com autorização.",
+    "foot.code": "ohmigo é de código aberto: <a href=\"https://github.com/CarregaErvilhas/ohmigo-mcp\" target=\"_blank\" rel=\"noopener\">GitHub</a>. Todos os preços são estimativas.",
+    "toast.url": "Endereço copiado! Agora cola-o no assistente 🎉",
+    "toast.prompt": "Pergunta copiada! Cola-a no teu assistente 💬",
+    "toast.fail": "Não deu para copiar. Seleciona o texto e copia à mão."
+  },
+  "en": {
+    "meta.title": "ohmigo · your EV charging amigo",
+    "meta.desc": "Ask ChatGPT or Claude where it's cheapest to charge your EV in Portugal. Free, no sign-up.",
+    "hero.eyebrow": "⚡ For EV drivers in Portugal",
+    "hero.title": "Ask your AI assistant <span class=\"hl\">where charging is cheapest.</span>",
+    "hero.lead": "ohmigo teaches ChatGPT and Claude the prices at every charger on Portugal's MOBI.E network. You ask in plain words, it does the math for you.",
+    "hero.cta": "Install it ⚡",
+    "hero.cta2": "How does it work?",
+    "hero.chip1": "✅ Free",
+    "hero.chip2": "🔒 No sign-up",
+    "hero.chip3": "⏱️ 2 minutes to set up",
+    "hero.hi": "Hi! 👋",
+    "demo.eyebrow": "How it works",
+    "demo.title": "You just talk. It does the math.",
+    "demo.lead": "No new apps, no maps, no tariff spreadsheets. You use the assistant you already have.",
+    "demo.body": "Say where you are, what you drive and how much battery you have. Your assistant asks ohmigo and answers with the <b>total cost</b> and <b>time</b> at each charger, for <b>every way to pay</b>: your CEME card, a bank card at the charger, or the operator's app. It also tells you if the charger is free right now.",
+    "demo.app": "Your assistant",
+    "demo.q": "I'm in Leiria with 20% battery. Where's the cheapest place to charge to 80%?",
+    "demo.tool": "Asking ohmigo…",
+    "demo.a1": "I found 3 fast chargers near you:",
+    "demo.r1": "🥇 Charger A <span class=\"free\">● free</span>",
+    "demo.r2": "🥈 Charger B <span class=\"free\">● free</span>",
+    "demo.r3": "🥉 Charger C",
+    "demo.a2": "Charger A is cheapest with your CEME card, about 35 minutes. 🚗⚡",
+    "demo.fine": "Illustrative example. The names and prices above are made up.",
+    "mcp.eyebrow": "So what's an “MCP”?",
+    "mcp.title": "It's a superpower for your assistant.",
+    "mcp.lead": "ChatGPT and Claude are smart, but they don't know what charging costs <i>right now</i> at that charger. An MCP is a connection that gives them information they don't have. ohmigo is the MCP for EV charging.",
+    "mcp.n1": "You",
+    "mcp.n1s": "ask the question",
+    "mcp.n2": "Your assistant",
+    "mcp.n2s": "ChatGPT, Claude…",
+    "mcp.n3s": "does the math",
+    "mcp.n4": "The chargers",
+    "mcp.n4s": "live prices and status",
+    "mcp.analogy": "Think of it as <b>installing an app on your phone</b>, except the app is for your assistant. You add it once, with one web address, and from then on it uses it by itself whenever you talk about charging.",
+    "why.eyebrow": "Why bother",
+    "why.title": "Stop overpaying without knowing it.",
+    "why.c1t": "Every way to pay",
+    "why.c1": "Compares your CEME card, a bank card at the charger, and the operators' own apps. The same charger can cost very different amounts.",
+    "why.c2t": "Free or busy",
+    "why.c2": "See if a charger is free right now, from the network's official data, updated every few minutes.",
+    "why.c3t": "Nearby or on the way",
+    "why.c3": "Ask for the cheapest option near you, or along a trip, say from Lisbon to Porto.",
+    "why.c4t": "Keeps nothing",
+    "why.c4": "No accounts, no sign-up, no tracking. ohmigo doesn't know who you are. Free.",
+    "inst.eyebrow": "Install",
+    "inst.title": "Let's do it! It's just a few clicks.",
+    "inst.lead": "All you need is to copy <b>one web address</b> and paste it in the right place. Pick your assistant and follow the steps.",
+    "inst.time": "⏱️ About 2 minutes",
+    "inst.copy": "📋 Copy address",
+    "inst.urlhint": "This is ohmigo's address. You'll need it at the “paste” step. Opening it in your browser does nothing, and that's fine: it's for your assistant, not for you.",
+    "tab.phone": "Phone",
+    "tab.other": "Other apps",
+    "claude.note": "On <a href=\"https://claude.ai\" target=\"_blank\" rel=\"noopener\">claude.ai</a> or the Claude desktop app. On work accounts, your admin may need to add it.",
+    "claude.s1": "Click your <b>name</b> (bottom left), then <span class=\"k\">Settings</span>.",
+    "claude.s2": "Open <span class=\"k\">Connectors</span> and click <span class=\"k\">Add custom connector</span>.",
+    "claude.s3": "For the name, type <b>ohmigo</b>. For the URL, <b>paste the address</b> you copied above.",
+    "claude.s4": "Click <span class=\"k\">Add</span>. That's it: no account, no password.",
+    "claude.s5": "In a new chat, click the <span class=\"k\">+</span> or the tools icon and check that <b>ohmigo</b> is turned on.",
+    "claude.done": "Done! Ask “where's the cheapest place to charge near me?” and watch the magic.",
+    "gpt.note": "Do this on <a href=\"https://chatgpt.com\" target=\"_blank\" rel=\"noopener\">chatgpt.com</a>, on a computer. This option may not show up on free accounts. Menu names change now and then; if something looks different, look for “Apps” or “Connectors”.",
+    "gpt.s1": "Click your <b>name</b>, then <span class=\"k\">Settings</span>, then <span class=\"k\">Apps &amp; Connectors</span>.",
+    "gpt.s2": "Under <span class=\"k\">Advanced settings</span>, turn on <span class=\"k\">Developer mode</span>. Sounds scary, it's just a switch. 😉",
+    "gpt.s3": "Go back and click <span class=\"k\">Create</span>. Name: <b>ohmigo</b>. URL: <b>paste the address</b>. Authentication: <span class=\"k\">No authentication</span>.",
+    "gpt.s4": "Tick the box saying you trust the application, then click <span class=\"k\">Create</span>.",
+    "gpt.s5": "In a new chat, click <span class=\"k\">+</span>, choose <span class=\"k\">More</span> and turn on <b>ohmigo</b>.",
+    "gpt.done": "Done! Now just ask about charging like you'd ask a friend.",
+    "phone.note": "The phone apps don't let you add new connectors yet. But there's an easy trick:",
+    "phone.s1": "Add ohmigo <b>once</b> on a computer, following the Claude or ChatGPT steps.",
+    "phone.s2": "Open the app on your phone with <b>the same account</b>. ohmigo shows up there by itself.",
+    "phone.s3": "No computer around? Open the website (claude.ai or chatgpt.com) in your phone's browser and follow the same steps.",
+    "phone.done": "Perfect for asking on the road (with the car parked, of course!).",
+    "other.note": "For people using other AI tools. Any app that accepts an MCP server over HTTP works, no authentication.",
+    "other.s1": "<b>Claude Code</b>, in the terminal:",
+    "other.s2": "<b>Cursor, Windsurf and friends</b>, in the MCP config file:",
+    "other.s3": "In other apps, look for “MCP”, “Connectors” or “Tools” in the settings and paste the address.",
+    "inst.encourage": "Didn't work? No harm done! Go back to step 1 and try again. There's nothing you can break. 💚",
+    "ask.eyebrow": "Try it",
+    "ask.title": "What can I ask?",
+    "ask.lead": "Tap a question to copy it, then paste it into your assistant.",
+    "ask.p1": "I'm in Coimbra with 15% battery. Where's the cheapest place to charge to 80%?",
+    "ask.p2": "I'm driving from Lisbon to Porto tomorrow morning. Where should I stop to charge for less?",
+    "ask.p3": "How much will it cost to charge at the nearest charger with my CEME card?",
+    "ask.p4": "If I charge tonight instead of now, do I save anything?",
+    "ask.copy": "Copy",
+    "ask.tip": "💡 Tip: tell your assistant once what car you drive and which charging card (CEME) you use. It remembers, and the math fits you.",
+    "faq.eyebrow": "Questions",
+    "faq.title": "FAQ",
+    "faq.q1": "How much does it cost?",
+    "faq.a1": "<p>ohmigo is <b>free</b>. You just need a ChatGPT or Claude account, and in some cases a plan that lets you add connectors.</p>",
+    "faq.q2": "Does ohmigo learn anything about me?",
+    "faq.a2": "<p><b>No.</b> There are no accounts, it stores nothing and doesn't know who you are. Your assistant remembers your car and cards and sends them with each question. ohmigo does the math and forgets.</p>",
+    "faq.q3": "Are the prices exact?",
+    "faq.a3": "<p>They're <b>good estimates</b>, not a bill. ohmigo combines your CEME's energy price, the charger operator's fees and taxes, and works out how long and how much energy the session takes. Every answer says what it assumed, so you know where the number comes from.</p>",
+    "faq.q4": "What's a CEME?",
+    "faq.a4": "<p>It's the company that sells you the energy when you charge on the public network, usually through a card or app (EDP, Galp, Via Verde, Miio and many more). Don't know yours? No problem: your assistant will ask, or show you the options.</p>",
+    "faq.q5": "Does it work at every charger?",
+    "faq.a5": "<p>At every public charger on the <b>MOBI.E</b> network, which is the vast majority in Portugal. Some chargers outside it (like Tesla or Continente) show up with an estimate marked with an asterisk.</p>",
+    "faq.q6": "I opened the address in my browser and nothing shows up…",
+    "faq.a6": "<p>That's normal! The address is for your assistant, not for people. Paste it into ChatGPT's or Claude's settings, as explained <a href=\"#instalar\">above</a>.</p>",
+    "final.title": "Ready to save on charging?",
+    "final.lead": "Two minutes now, plenty of euros saved later.",
+    "final.cta": "Install ohmigo ⚡",
+    "foot.data": "Data: the MOBI.E network and Portugal's National Access Point (NAP), CEME prices from <a href=\"https://ceme.ocarroeletrico.com\">ceme.ocarroeletrico.com</a>, operators' direct prices from Alexandre Moleiro's <a href=\"https://custofinal.blogspot.com\" target=\"_blank\" rel=\"noopener\">Preços (finais) kWh Portugal</a>, used with permission.",
+    "foot.code": "ohmigo is open source: <a href=\"https://github.com/CarregaErvilhas/ohmigo-mcp\" target=\"_blank\" rel=\"noopener\">GitHub</a>. All prices are estimates.",
+    "toast.url": "Address copied! Now paste it into your assistant 🎉",
+    "toast.prompt": "Question copied! Paste it into your assistant 💬",
+    "toast.fail": "Couldn't copy. Select the text and copy it by hand."
+  }
+}
+</script>
+<script>
+(() => {
+  const S = JSON.parse(document.getElementById('strings').textContent);
+  const store = {
+    get() { try { return localStorage.getItem('ohmigo.lang'); } catch { return null; } },
+    set(v) { try { localStorage.setItem('ohmigo.lang', v); } catch {} },
+  };
+  // Order: ?lang= in the link, then the visitor's earlier pick, then the
+  // browser's languages (any pt-* counts as pt), then English.
+  function detect() {
+    const q = new URLSearchParams(location.search).get('lang');
+    if (q === 'pt' || q === 'en') return q;
+    const saved = store.get();
+    if (saved === 'pt' || saved === 'en') return saved;
+    for (const l of navigator.languages || [navigator.language || '']) {
+      if (/^pt\b/i.test(l)) return 'pt';
+      if (/^en\b/i.test(l)) return 'en';
+    }
+    return 'en';
+  }
+  let lang;
+  function apply(next) {
+    lang = next;
+    const t = S[lang];
+    document.documentElement.lang = lang === 'pt' ? 'pt-PT' : 'en';
+    document.title = t['meta.title'];
+    document.querySelector('meta[name="description"]').content = t['meta.desc'];
+    for (const el of document.querySelectorAll('[data-i]')) el.innerHTML = t[el.dataset.i] ?? '';
+    for (const b of document.querySelectorAll('[data-lang]')) b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
+  }
+  apply(detect());
+  for (const b of document.querySelectorAll('[data-lang]')) {
+    b.addEventListener('click', () => { store.set(b.dataset.lang); apply(b.dataset.lang); });
+  }
+
+  // Copy buttons: the URL box and the example questions.
+  const toast = document.getElementById('toast');
+  let toastTimer;
+  function say(key) {
+    toast.textContent = S[lang][key];
+    toast.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('on'), 2600);
+  }
+  async function copy(text) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch {
+      // Older browsers and non-HTTPS previews have no clipboard API.
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch {}
+      ta.remove(); return ok;
+    }
+  }
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function confetti(x, y) {
+    if (reduced) return;
+    const colors = ['#22c55e', '#facc15', '#fb7185', '#38bdf8', '#a78bfa'];
+    for (let i = 0; i < 40; i++) {
+      const c = document.createElement('div');
+      c.className = 'confetti';
+      c.style.background = colors[i % colors.length];
+      document.body.appendChild(c);
+      const a = Math.random() * Math.PI * 2, v = 120 + Math.random() * 220;
+      c.animate([
+        { transform: `translate(${x}px, ${y}px) rotate(0)`, opacity: 1 },
+        { transform: `translate(${x + Math.cos(a) * v}px, ${y + Math.sin(a) * v + 260}px) rotate(${Math.random() * 720}deg)`, opacity: 0 },
+      ], { duration: 1100 + Math.random() * 600, easing: 'cubic-bezier(.2,.7,.4,1)' }).onfinish = () => c.remove();
+    }
+  }
+  for (const b of document.querySelectorAll('[data-copy]')) {
+    b.addEventListener('click', async e => {
+      const ok = await copy(document.querySelector(b.dataset.copy).textContent.trim());
+      say(ok ? 'toast.url' : 'toast.fail');
+      if (ok) confetti(e.clientX || innerWidth / 2, e.clientY || innerHeight / 2);
+    });
+  }
+  for (const b of document.querySelectorAll('.prompt')) {
+    b.addEventListener('click', async () => {
+      const ok = await copy(b.querySelector('[data-i^="ask.p"]').textContent.trim());
+      say(ok ? 'toast.prompt' : 'toast.fail');
+    });
+  }
+
+  // Install tabs, with arrow-key support.
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function select(tab) {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    }
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => select(t));
+    t.addEventListener('keydown', e => {
+      const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (d) { const n = tabs[(i + d + tabs.length) % tabs.length]; select(n); n.focus(); }
+    });
+  });
+  // Phones get the phone tab first: that's the question they'll have.
+  if (/Android|iPhone|iPad/i.test(navigator.userAgent)) select(document.getElementById('t-phone'));
+
+  // Fade sections in, and play the chat when it scrolls into view.
+  const msgs = [...document.querySelectorAll('#chat .msg')];
+  const show = () => msgs.forEach((m, i) => setTimeout(() => m.classList.add('on'), reduced ? 0 : 400 + i * 900));
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        if (e.target.id === 'chat') show(); else e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    }, { threshold: .2 });
+    document.querySelectorAll('.reveal, #chat').forEach(el => io.observe(el));
+  } else {
+    document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+    show();
+  }
+})();
+</script>
+</body>
+</html>

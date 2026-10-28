@@ -22,6 +22,15 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
 
 Progress messages go to stderr, the JSON result to stdout.
 
+`GET /` is the landing page for people (`site/index.html`): what ohmigo is
+and how to add it to each assistant. It's one static file, read once at boot,
+so restart the server to see edits. It picks Portuguese or English from the
+browser (a `?lang=pt|en` link or the flag buttons override it), and its
+sentences live in the `#strings` block at the bottom, both languages with the
+same keys (`test/site.test.js` checks). A browser that opens `/mcp` is sent to
+`/#instalar`, since people paste the address there by mistake; MCP clients
+never ask for HTML, so they're unaffected.
+
 `GET /healthz` shows how fresh the data is:
 `{ ok, dataAsOf, live: { publishedAt, checkedAt, fresh, refreshing, error } }`.
 
@@ -68,7 +77,7 @@ Production is `https://ohmigo.ocarroeletrico.com/mcp`, Zerops project
 `ohmigo-mcp`, one service called `mcp`.
 
 - **`zerops.yml`** is the build and runtime: `deployFiles` lists what ships
-  (`src`, `ui`, `offers`, `node_modules`, `package.json`). Anything the code
+  (`src`, `ui`, `site`, `offers`, `node_modules`, `package.json`). Anything the code
   reads at runtime must be in that list, or the process dies on boot and the
   deploy fails with "connection refused" on `/healthz`.
 - **`zerops-import.yaml`** creates the service (`zcli project service-import`).

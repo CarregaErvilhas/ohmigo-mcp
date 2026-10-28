@@ -61,7 +61,7 @@ Follow one `find_cheapest_charging` call through the code:
 
 | File | What it does |
 |---|---|
-| `src/server.js` | HTTP server, boot, health check, weekly dataset swap |
+| `src/server.js` | HTTP server, boot, health check, landing page, weekly dataset swap |
 | `src/mcp.js` | Tools, argument schemas, the instructions the assistant reads |
 | `src/i18n.js` | Every user-facing sentence, in English and Portuguese |
 | `src/data.js` | Loads the dataset; searches by distance and along a route |
@@ -75,6 +75,7 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/offers-parse.js` | Parses the custofinal blog's price tables |
 | `src/view.js` | Builds the inline results page with the MCP Apps bridge |
 | `ui/results.html` | The inline results page |
+| `site/index.html` | The landing page at `/`: what ohmigo is and how to install it, in both languages |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
 | `offers/manual.json` | Hand-made corrections and additions to it |
 | `offers/networks.json` | Which chargers each blog network label means |
