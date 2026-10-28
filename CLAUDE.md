@@ -1,0 +1,41 @@
+# CLAUDE.md
+
+Guidance for AI coding agents working in this repo.
+
+ohmigo is an MCP server (Node 24, plain `node:http`, ESM, no build step) that
+prices EV charging sessions on Portugal's MOBI.E network for AI assistants.
+Start with `docs/00-glossary.md` if the domain is new; `docs/01-how-it-works.md`
+maps every file.
+
+## Commands
+
+```sh
+npm ci
+npm test                                  # node --test test/*.test.js
+npm start                                 # http://127.0.0.1:3002/mcp
+node scripts/call.mjs <tool> '<json>'     # call a tool against the local server
+npm run offers:gaps                       # operators missing from offers/operator-offers.json
+```
+
+## Rules
+
+- **Never recompute CEME energy prices here.** ceme-v2 owns that math (TAR,
+  OMIE, time zones, VAT); call its API (`src/ceme.js`).
+- **Stateless.** No database, no user data, no sessions. Anything about the
+  user arrives in the tool arguments.
+- **Point ids are `SITE/POINT`.** Bare point ids repeat across sites.
+- **Every user-facing sentence goes through `src/i18n.js`**, in both `en` and
+  `pt` (`test/i18n.test.js` checks parity). Portuguese is European Portuguese.
+- **Every estimate states its assumptions** (the `assumptions` list). Don't
+  add a guess without adding the sentence that names it.
+- **Operator prices live in `offers/operator-offers.json`, never in code.**
+  Each entry needs `source` and `checkedAt`; the tests validate the file. No
+  operator is special-cased in code.
+- **The dataset is built in nap-dashboard** (`scripts/ohmigo_dataset.py`
+  there), not here. Format changes go there first, with a `SCHEMA` bump if
+  incompatible (`src/data.js` refuses unknown schemas).
+- **Docs must not rot.** Don't copy prices, counts or thresholds into docs;
+  point to the file that owns them. Docs describe what the code does now, for
+  a newcomer, in the second person.
+- Comments explain the why and the domain (a 20-year-old who knows how to
+  code but not what a CEME is should follow them). Skip the obvious.

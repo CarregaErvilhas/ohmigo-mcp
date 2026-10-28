@@ -1,5 +1,15 @@
-// HTTP entry point. Stateless Streamable HTTP: a fresh McpServer + transport
-// per request, no session ids, so any instance can answer any request.
+// The process entry point: an HTTP server with one useful route, POST /mcp.
+//
+// What happens on boot:
+//   1. load the charger dataset (data.js), from a local file in development or
+//      from nap-dashboard's Pages copy in production;
+//   2. start one download of the live status feed (live.js), so the first user
+//      after a deploy doesn't have to wait for it;
+//   3. listen for requests.
+//
+// Every request gets a brand new MCP server object (cheap: it's a few closures)
+// with no session id. "Stateless" means any request can land on any instance,
+// and a restart loses nothing, because there's nothing to lose.
 
 import { createServer as createHttp } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
@@ -10,23 +20,29 @@ import { createServer } from './mcp.js';
 const PORT = Number(process.env.PORT || 3002);
 const HOST = process.env.HOST || '127.0.0.1';
 const MAX_BODY = 256 * 1024;
+// How often to ask whether a new weekly dataset is out. See below.
+const DATASET_CHECK_MS = Number(process.env.DATASET_CHECK_HOURS || 6) * 3600_000;
 
 let ds = await Dataset.load();
 console.log(`[ohmigo] ${ds.sites.length} sites, data as of ${ds.generatedAt}`);
-// Live status is fetched on demand (see live.js). One warm-up fetch at boot
-// so the first user after a deploy doesn't wait for it.
+
 const live = new LiveStatus();
 if (process.env.LIVE_WARMUP !== '0') live.refresh();
 
-// With DATASET_URL, pick up the weekly NAP refresh without a redeploy. A
-// failed reload keeps the data we have.
-if (process.env.DATASET_URL) {
+// The dataset changes once a week (Monday morning), but the server may run for
+// weeks without a restart. So every few hours it asks "has it changed?" with
+// the ETag of the copy it has. Unchanged: the answer is a 304 of a few hundred
+// bytes and nothing else happens. Changed: it downloads the new file (~600 KB
+// compressed) and swaps it in; requests already running finish on the old one.
+// If the check fails, the old copy stays. A local file (development) is never
+// re-checked.
+if (!process.env.DATASET_PATH && ds.etag !== undefined) {
   setInterval(async () => {
     try {
-      const next = await Dataset.load();
-      if (next.generatedAt !== ds.generatedAt) { ds = next; console.log(`[ohmigo] reloaded, data as of ${ds.generatedAt}`); }
-    } catch (e) { console.warn('[ohmigo] dataset reload failed:', e.message); }
-  }, 6 * 3600_000).unref();
+      const next = await Dataset.load({ etag: ds.etag });
+      if (next) { ds = next; console.log(`[ohmigo] new dataset, data as of ${ds.generatedAt}`); }
+    } catch (e) { console.warn('[ohmigo] dataset check failed, keeping the current one:', e.message); }
+  }, DATASET_CHECK_MS).unref();
 }
 
 function readJson(req) {
@@ -57,16 +73,18 @@ createHttp(async (req, res) => {
   for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
   const url = new URL(req.url, 'http://x');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+  // Health check for the hosting platform (and for you: it shows how fresh
+  // the data is).
   if (url.pathname === '/healthz') return send(res, 200, { ok: true, dataAsOf: ds.generatedAt, live: live.info() });
   if (url.pathname !== '/mcp') return send(res, 404, { error: 'not found' });
-  // Stateless server: no SSE stream to resume and no session to delete.
+  // Stateless server: no stream to resume (GET) and no session to end (DELETE).
   if (req.method !== 'POST') return send(res, 405, { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null });
 
   let body;
   try { body = await readJson(req); } catch (e) { return send(res, e.status || 400, { error: e.message }); }
-  const server = createServer(ds, live);
-  // SSE responses (not plain JSON) so progress notifications reach the
-  // client while a tool waits for the live feed.
+  const server = createServer(() => ds, live);
+  // Responses go out as a stream (SSE), not one JSON blob, so a progress
+  // message can reach the user while a tool waits for the live feed.
   const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => { transport.close(); server.close(); });
   try {

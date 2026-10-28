@@ -1,19 +1,36 @@
-// The MCP server: tools, the instructions the agent gets on connect, and the
-// MCP Apps view that renders results inline in Claude/ChatGPT.
+// The MCP server itself: the tools an AI assistant can call, the instructions
+// it reads when it connects, and the inline results view.
+//
+// MCP (Model Context Protocol) in one paragraph: an assistant like ChatGPT or
+// Claude connects to this server, reads `INSTRUCTIONS` and the list of tools
+// (name + description + JSON schema of the arguments), and then decides on
+// its own when to call them. A tool call is a JSON-RPC request; we answer with
+// `structuredContent` (JSON for the assistant to read) plus a short text
+// version. The schemas below are written as much for the assistant as for the
+// code: the `.describe()` text is what tells it what to send.
+//
+// MCP Apps: two tools also point at a `ui://` HTML resource (ui/results.html).
+// Chat apps that support it render that page inline, next to the answer.
 //
 // Stateless by design: we store nothing about the user. Car, battery and
-// favourite tariff live in the agent's memory and come in on every call.
+// tariffs live in the assistant's memory and come in on every call.
 
 import { McpServer } from '@modelcontextprotocol/server';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { tariffs } from './ceme.js';
+import { pickLang, translator } from './i18n.js';
 import { quotePoint, rank, tariffKey } from './quote.js';
 import { viewHtml } from './view.js';
 
 const VIEW_URI = 'ui://ohmigo/results.html';
 
+// Read once by the assistant when it connects. It's a prompt, not docs: it
+// tells the assistant what to ask the user, what to look up itself, and how to
+// present the results honestly.
 export const INSTRUCTIONS = `Estimates what an EV charging session costs on Portugal's public network (MOBI.E): the CEME energy tariff + the charger operator (OPC) fee + taxes, and finds the cheapest charger near a place or along a route.
+
+Language: always answer the user in the language they write in. Pass lang with their language (e.g. "pt" or "en") on every call; the server's labels, assumptions and progress messages come back in Portuguese or English, and you translate them for any other language.
 
 Before calling a cost tool, make sure you know (ask only for what you don't have or don't remember):
 1. Where: the user's location (lat/lon), a town name, or a route (list of waypoints from origin to destination).
@@ -26,9 +43,20 @@ Before calling a cost tool, make sure you know (ask only for what you don't have
 
 This server stores nothing about the user. Remember the car, its charging specs and the user's tariffs yourself (if your app has memory) so you don't ask again next time.
 
-When presenting results: give the total in euros and the duration, name the tariff used, and mention the main assumptions (charging losses, estimated duration, per-minute fees). Each charger lists every way to pay in options: CEME tariffs (kind "ceme"), paying by bank card / QR code at the charger without a CEME (kind "adhoc"; always mention it when present, it's what a user without a CEME card pays), and paying the operator directly (kind "opc_direct"). Chargers outside MOBI.E (Continente, Tesla...) are listed apart in outsideMobie: their price is an asterisked guess, say so.
+When presenting results: give the total in euros and the duration, name the tariff used, and mention the main assumptions (charging losses, estimated duration, per-minute fees). Each charger lists every way to pay in options:
+- "ceme": a CEME card/app on MOBI.E;
+- "adhoc": bank card / QR code at the charger, no CEME. Always mention it when present: it's what someone without a CEME card pays;
+- "operator": the operator's own app, walk-up price or subscription (e.g. IONITY). Subscriptions show a monthly/yearly fee that is NOT included in the session total; say so. These are "from" prices typed from the operator's announcement (see note and checked date);
+- "opc_direct": chargers outside MOBI.E (Continente, Tesla...), listed apart in outsideMobie. Their price is an asterisked guess, say so.
+Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract). Lead with it, and point out when a subscription or another CEME would be cheaper.
 
-Charger status comes from MOBI.E's live feed (live.publishedAt says when MOBI.E published it). The feed is a large file fetched on demand, so the first call after a few quiet minutes can take ~20 s; if live.fresh is false or live.publishedAt is null, say status may be stale or unknown. A charger can still be taken by the time they arrive. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
+Charger status comes from the NAP (National Access Point, "PAN" in Portuguese), MOBI.E's live feed; live.publishedAt says when it was published. The feed is a large file fetched on demand, so the first call after a few quiet minutes can take ~20-30 s. If live.fresh is false or live.publishedAt is null, say status may be stale or unknown. A charger can still be taken by the time they arrive. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
+
+// Argument schemas, shared by the tools. zod turns them into the JSON Schema
+// the assistant sees, and validates what it sends back.
+const Lang = {
+  lang: z.string().max(20).optional().describe('The user\'s language, e.g. "pt", "pt-PT", "en". Portuguese gets Portuguese text; anything else English.'),
+};
 
 const Car = {
   battery_kwh: z.number().positive().max(250).describe('Usable battery capacity in kWh (look it up from the car model)'),
@@ -71,35 +99,42 @@ const car = a => ({
 const err = msg => ({ isError: true, content: [{ type: 'text', text: msg }] });
 const ok = (data, text) => ({ structuredContent: data, content: [{ type: 'text', text: text ?? JSON.stringify(data) }] });
 
-function resolveWhere(ds, a) {
+// The language for this call: the `lang` argument, else the locale some
+// clients put in the request metadata (ChatGPT sends "openai/locale").
+const langOf = (a, ctx) => pickLang(a.lang, ctx?.mcpReq?._meta?.['openai/locale']);
+
+function resolveWhere(ds, a, t) {
   if (a.route) return { route: a.route, corridorKm: a.corridor_km };
   if (a.lat != null && a.lon != null) return { near: { lat: a.lat, lon: a.lon }, radiusKm: a.radius_km };
   if (a.place) {
     const p = ds.resolvePlace(a.place);
-    if (!p) return { error: `No chargers found in a place called "${a.place}". Pass lat/lon instead.` };
+    if (!p) return { error: t('err.place', { place: a.place }) };
     return { near: p, radiusKm: a.radius_km, resolvedPlace: { name: a.place, lat: p.lat, lon: p.lon } };
   }
-  return { error: 'Give lat+lon, place, or route.' };
+  return { error: t('err.where') };
 }
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
-const meta = (ds, live) => ({ dataAsOf: ds.generatedAt, live: live.info() });
+const meta = (ds, live, lang) => ({ lang, dataAsOf: ds.generatedAt, live: live.info() });
 
 // Brings live status up to date before answering. If that means downloading
-// the feed, tell the client: a progress notification shows the user why the
-// answer is taking a few seconds (when the client asked for progress).
-async function withLive(live, ctx) {
+// the feed, tell the client why the answer is taking a while: a progress
+// notification, which chat apps show as a status line (only when the client
+// asked for progress by sending a progressToken).
+async function withLive(live, ctx, t) {
   const token = ctx?.mcpReq?._meta?.progressToken;
   await live.ensure({
     onWait: () => token != null && ctx.mcpReq.notify({
       method: 'notifications/progress',
-      params: { progressToken: token, progress: 0, message: 'Getting live charger status from MOBI.E…' },
+      params: { progressToken: token, progress: 0, message: t('progress.live') },
     }).catch(() => {}),
   });
 }
 
-export function createServer(ds, live) {
+// `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
+// every few hours, and each request should see the current one.
+export function createServer(getDataset, live) {
   const server = new McpServer({ name: 'ohmigo', title: 'Ohmigo: EV charging costs in Portugal', version: '0.1.0' }, { instructions: INSTRUCTIONS });
 
   server.registerTool('list_ceme_tariffs', {
@@ -124,16 +159,18 @@ export function createServer(ds, live) {
 
   server.registerTool('find_chargers', {
     title: 'Find chargers',
-    description: 'Finds public EV charge points near a location or along a route, with power, plug type and the operator fee. No cost estimate; use find_cheapest_charging for that.',
-    inputSchema: z.object({ ...Where, ...Filter, limit: z.number().int().positive().max(50).default(15) }),
+    description: 'Finds public EV charge points near a location or along a route, with power, plug type and live status. No cost estimate; use find_cheapest_charging for that.',
+    inputSchema: z.object({ ...Where, ...Filter, ...Lang, limit: z.number().int().positive().max(50).default(15) }),
     annotations: { readOnlyHint: true, openWorldHint: false },
   }, async (a, ctx) => {
-    const w = resolveWhere(ds, a);
+    const ds = getDataset();
+    const lang = langOf(a, ctx), t = translator(lang);
+    const w = resolveWhere(ds, a, t);
     if (w.error) return err(w.error);
     const { total, results } = ds.search({ ...w, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only, limit: a.limit });
-    await withLive(live, ctx);
+    await withLive(live, ctx, t);
     return ok({
-      ...meta(ds, live), resolvedPlace: w.resolvedPlace, total,
+      ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, total,
       sites: results.map(r => ({
         siteId: r.site.id, code: r.site.code, operator: r.site.operator, address: r.site.address, city: r.site.city,
         lat: r.site.lat, lon: r.site.lon, km: rnd(r.km), offRouteKm: rnd(r.offRouteKm), alongKm: rnd(r.alongKm),
@@ -147,47 +184,52 @@ export function createServer(ds, live) {
 
   registerAppTool(server, 'find_cheapest_charging', {
     title: 'Find cheapest charging',
-    description: 'Ranks chargers near a location or along a route by the estimated total cost of the session (energy + operator fee + taxes), for the user\'s car and battery levels.',
+    description: 'Ranks chargers near a location or along a route by the estimated total cost of the session (energy + operator fee + taxes), for the user\'s car and battery levels. Every charger lists all the ways to pay.',
     inputSchema: z.object({
-      ...Where, ...Filter, ...Car, max_minutes: maxMinutes,
+      ...Where, ...Filter, ...Car, ...Lang, max_minutes: maxMinutes,
       available_only: z.boolean().default(true).describe('Skip chargers the live feed reports as charging, out of order or blocked'),
       limit: z.number().int().positive().max(30).default(10),
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: VIEW_URI } },
   }, async (a, ctx) => {
-    const w = resolveWhere(ds, a);
+    const ds = getDataset();
+    const lang = langOf(a, ctx), t = translator(lang);
+    const w = resolveWhere(ds, a, t);
     if (w.error) return err(w.error);
-    if (a.target_pct <= a.start_pct) return err('target_pct must be above start_pct.');
-    await withLive(live, ctx);
+    if (a.target_pct <= a.start_pct) return err(t('err.target'));
+    await withLive(live, ctx, t);
     const { total, results } = ds.search({ ...w, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only, limit: Infinity });
-    if (!results.length) return err('No chargers match. Widen radius_km/corridor_km or relax the filters.');
+    if (!results.length) return err(t('err.noMatch'));
     const { mobie, outsideMobie } = await rank(results, car(a), {
-      at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live,
+      at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang,
       maxMinutes: a.max_minutes, availableOnly: a.available_only,
     });
-    if (!mobie.length && !outsideMobie.length) return err('No charger matches (time limit, availability or filters). Raise max_minutes, set available_only=false or widen the search.');
+    if (!mobie.length && !outsideMobie.length) return err(t('err.noneLeft'));
     const top = mobie.slice(0, a.limit);
     const outside = outsideMobie.slice(0, 3);
     for (const q of [...top, ...outside]) { q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm); }
-    const data = { kind: 'ranking', ...meta(ds, live), resolvedPlace: w.resolvedPlace, searched: total, results: top, outsideMobie: outside };
-    const lines = top.map((q, i) => `${i + 1}. ${q.total ? (q.total.complete ? '' : '>= ') + q.total.eur.toFixed(2) + ' €' : 'n/a'}${q.headline ? ' with ' + q.headline.label : ''} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
+    const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, results: top, outsideMobie: outside };
+    // The text version, for clients that ignore structuredContent.
+    const lines = top.map((q, i) => `${i + 1}. ${q.best ? q.best.total.toFixed(2) + ' € · ' + q.best.label : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
     return ok(data, `${lines.join('\n')}\n\n${JSON.stringify(data)}`);
   });
 
   registerAppTool(server, 'estimate_charging_cost', {
     title: 'Estimate charging cost',
-    description: 'Estimated cost and duration of a session at one charge point (point_id from find_chargers / find_cheapest_charging), with the full breakdown.',
-    inputSchema: z.object({ point_id: z.string().describe('Charge point id as returned by the other tools, "SITE/POINT", e.g. "GLP-LRA-00156/LRA-00156-02"'), ...Car }),
+    description: 'Estimated cost and duration of a session at one charge point (point_id from find_chargers / find_cheapest_charging), with the full breakdown and every way to pay.',
+    inputSchema: z.object({ point_id: z.string().describe('Charge point id as returned by the other tools, "SITE/POINT", e.g. "GLP-LRA-00156/LRA-00156-02"'), ...Car, ...Lang }),
     annotations: { readOnlyHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: VIEW_URI } },
   }, async (a, ctx) => {
+    const ds = getDataset();
+    const lang = langOf(a, ctx), t = translator(lang);
     const hit = ds.findPoint(a.point_id);
-    if (!hit) return err(`Unknown or ambiguous point_id ${a.point_id}. Use the "SITE/POINT" id from find_chargers.`);
-    if (a.target_pct <= a.start_pct) return err('target_pct must be above start_pct.');
-    await withLive(live, ctx);
-    const q = await quotePoint(hit, car(a), { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live });
-    return ok({ kind: 'single', ...meta(ds, live), results: [q] });
+    if (!hit) return err(t('err.point', { id: a.point_id }));
+    if (a.target_pct <= a.start_pct) return err(t('err.target'));
+    await withLive(live, ctx, t);
+    const q = await quotePoint(hit, car(a), { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang });
+    return ok({ kind: 'single', ...meta(ds, live, lang), results: [q] });
   });
 
   registerAppResource(server, 'Charging results', VIEW_URI, {

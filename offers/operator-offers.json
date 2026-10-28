@@ -1,0 +1,20 @@
+{
+  "about": "Prices charger operators sell directly (own app, walk-up, subscription), which no open data source publishes. One entry per operator. How to add or update one: docs/04-operator-offers.md. Run `npm run offers:gaps` to see which operators probably belong here and are missing.",
+  "operators": [
+    {
+      "id": "ionity",
+      "operator": "IONITY",
+      "operatorIds": ["IONY"],
+      "source": "https://fleetmagazine.pt/ionity-portugal/",
+      "checkedAt": "2026-10-28",
+      "plans": [
+        { "id": "ionity-direct", "name": { "en": "IONITY walk-up (card/QR, no account)", "pt": "IONITY sem registo (cartão/QR)" }, "eurPerKwh": 0.63, "walkUp": true },
+        { "id": "ionity-app", "name": { "en": "IONITY app, no subscription", "pt": "App IONITY, sem subscrição" }, "eurPerKwh": 0.59 },
+        { "id": "ionity-motion", "name": { "en": "IONITY Motion", "pt": "IONITY Motion" }, "eurPerKwh": 0.44, "fee": { "eur": 5.99, "per": "month" } },
+        { "id": "ionity-power", "name": { "en": "IONITY Power", "pt": "IONITY Power" }, "eurPerKwh": 0.37, "fee": { "eur": 11.99, "per": "month" } },
+        { "id": "ionity-motion-365", "name": { "en": "IONITY Motion 365", "pt": "IONITY Motion 365" }, "eurPerKwh": 0.46, "fee": { "eur": 59.99, "per": "year" } },
+        { "id": "ionity-power-365", "name": { "en": "IONITY Power 365", "pt": "IONITY Power 365" }, "eurPerKwh": 0.38, "fee": { "eur": 119.99, "per": "year" } }
+      ]
+    }
+  ]
+}

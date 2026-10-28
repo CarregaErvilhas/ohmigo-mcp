@@ -1,20 +1,38 @@
-// How much energy a session bills and how long it takes.
+// How much energy a charging session bills, and how long it takes.
 //
-// This is an estimate, and every assumption is returned with the result so the
-// agent can say it out loud. Real sessions depend on the car's charging curve,
-// battery temperature and how many cars share the charger.
+// Two numbers drive the whole bill:
+//   - kWh billed: what the charger's meter counts. It's more than what ends
+//     up in the battery, because some energy turns into heat on the way.
+//   - minutes: some operators charge per minute, so a slow session costs more.
+//
+// Both are ESTIMATES. A real session depends on the car's charging curve,
+// battery temperature, and whether another car shares the charger. That's
+// why every guess we make goes into `assumptions`, which the AI assistant
+// shows the user next to the price.
+//
+// Quick vocabulary (more in docs/00-glossary.md):
+//   - kW is power (how fast), kWh is energy (how much). 50 kW for 1 hour = 50 kWh.
+//   - SoC, "state of charge": the battery %, what the car's dashboard shows.
+//   - AC chargers (slow, 3.7-22 kW) feed the car's own on-board charger,
+//     so the car limits the speed. DC chargers (fast, 50-400 kW) feed the
+//     battery directly, and slow down as the battery fills up.
+
+import { translator } from './i18n.js';
 
 export const DEFAULTS = {
+  // Charging past 80 % on DC is slow, and per-minute fees add up, so 80 % is
+  // what most drivers do on a trip.
   targetPct: 80,
-  // Losses between the meter and the battery. AC goes through the car's
-  // on-board charger, which loses more than a DC charger's rectifier.
+  // Share of the metered energy that reaches the battery. AC loses more, in
+  // the car's on-board charger; on DC the conversion happens in the charger,
+  // mostly before the meter.
   acEfficiency: 0.88,
   dcEfficiency: 0.93,
-  // Used only when the agent couldn't find the car's limits.
+  // Used only when the assistant couldn't find the car's limits.
   carAcKw: 11,
   carDcKw: 100,
-  // DC power falls as the battery fills. Average power as a share of the peak
-  // the car and charger can agree on, below and above 80 % state of charge.
+  // Generic DC curve: average power as a share of the peak, below and above
+  // 80 % SoC. Real cars vary a lot, which is why we ask for the 10-80 % time.
   dcShareBelow80: 0.7,
   dcShareAbove80: 0.3,
   // AC power stays almost flat until the very end.
@@ -23,70 +41,78 @@ export const DEFAULTS = {
   chargerShare: 0.95,
 };
 
+// kWh that have to go INTO the battery to go from start % to target %.
 export function batteryKwhNeeded({ batteryKwh, startPct, targetPct = DEFAULTS.targetPct }) {
   return Math.max(0, batteryKwh * (targetPct - startPct) / 100);
 }
 
-// point: { kw, dc, phases }
-// car: { batteryKwh, startPct, targetPct, acKw, dcKw, dc10to80Minutes, curve: [{ soc, kw }] }
-export function estimateSession(point, car) {
+// Linear interpolation on the car's curve: kW at a given SoC.
+function curveKwAt(points, soc) {
+  if (soc <= points[0].soc) return points[0].kw;
+  for (let i = 1; i < points.length; i++) {
+    if (soc <= points[i].soc) {
+      const a = points[i - 1], b = points[i];
+      return a.kw + (b.kw - a.kw) * (soc - a.soc) / (b.soc - a.soc);
+    }
+  }
+  return points.at(-1).kw;
+}
+
+// point: { kw, dc } (from the dataset)
+// car:   { batteryKwh, startPct, targetPct, acKw, dcKw, dc10to80Minutes, curve: [{ soc, kw }] }
+// t:     translator from i18n.js, for the assumption sentences
+//
+// The more the assistant knows about the car, the better the duration:
+//   1. curve (kW at each SoC)      -> integrate it, 1 % at a time
+//   2. dc10to80Minutes             -> the car's real average speed below 80 %
+//   3. nothing                     -> generic shares of the peak power
+export function estimateSession(point, car, t = translator('en')) {
   const assumptions = [];
   const target = car.targetPct ?? DEFAULTS.targetPct;
   const toBattery = batteryKwhNeeded({ ...car, targetPct: target });
   const eff = point.dc ? DEFAULTS.dcEfficiency : DEFAULTS.acEfficiency;
   const kwh = toBattery / eff;
-  assumptions.push(`${Math.round((1 - eff) * 100)}% charging losses (${point.dc ? 'DC' : 'AC'}), billed at the meter`);
+  assumptions.push(t('assume.losses', { pct: Math.round((1 - eff) * 100), kind: point.dc ? 'DC' : 'AC' }));
 
+  // The session runs at the slower of car and charger.
   let carKw = point.dc ? car.dcKw : car.acKw;
   const dcKnown = point.dc && (car.curve?.length >= 2 || car.dc10to80Minutes);
-  if (carKw == null && dcKnown) carKw = Infinity; // the curve/10-80 time carries the car's limit
+  if (carKw == null && dcKnown) carKw = Infinity; // the curve / 10-80 % time already carry the car's limit
   else if (carKw == null) {
     carKw = point.dc ? DEFAULTS.carDcKw : DEFAULTS.carAcKw;
-    assumptions.push(`car's max ${point.dc ? 'DC' : 'AC'} power unknown, assumed ${carKw} kW`);
+    assumptions.push(t('assume.carLimitUnknown', { kind: point.dc ? 'DC' : 'AC', kw: carKw }));
   }
   const chargerKw = point.kw ?? (Number.isFinite(carKw) ? carKw : DEFAULTS.carDcKw);
-  if (point.kw == null) assumptions.push('charger power not published, assumed the car limit');
+  if (point.kw == null) assumptions.push(t('assume.chargerKwUnknown'));
   const peak = Math.min(chargerKw, carKw);
 
   let minutes;
   if (point.dc && car.curve?.length >= 2) {
-    // The car's own curve (kW at each SoC), capped by the charger. Integrated
-    // in 1 % steps; the curve is battery-side power, so time uses battery kWh.
+    // The curve is battery-side power, so time uses battery kWh, not billed.
     const pts = [...car.curve].sort((a, b) => a.soc - b.soc);
-    const kwAt = soc => {
-      if (soc <= pts[0].soc) return pts[0].kw;
-      for (let i = 1; i < pts.length; i++) {
-        if (soc <= pts[i].soc) {
-          const a = pts[i - 1], b = pts[i];
-          return a.kw + (b.kw - a.kw) * (soc - a.soc) / (b.soc - a.soc);
-        }
-      }
-      return pts.at(-1).kw;
-    };
     minutes = 0;
     for (let s = car.startPct; s < target; s += 1) {
       const step = Math.min(1, target - s);
-      const kw = Math.max(1, Math.min(kwAt(s + step / 2), chargerKw));
+      const kw = Math.max(1, Math.min(curveKwAt(pts, s + step / 2), chargerKw));
       minutes += car.batteryKwh * step / 100 / kw * 60;
     }
-    assumptions.push(`duration from the car's charging curve, capped at the charger's ${chargerKw} kW`);
+    assumptions.push(t('assume.curve', { kw: chargerKw }));
   } else if (point.dc) {
-    // Average power below and above 80 %. With the car's published 10-80 %
-    // time we know its real average; otherwise a share of the peak.
     let below, above;
     if (car.dc10to80Minutes) {
+      // 10 -> 80 % is 70 % of the battery: that energy over the published
+      // time is the car's real average power on a fast enough charger.
       const carAvg = car.batteryKwh * 0.7 / (car.dc10to80Minutes / 60);
       below = Math.min(carAvg, chargerKw * DEFAULTS.chargerShare);
       above = Math.min(carAvg * DEFAULTS.dcShareAbove80 / DEFAULTS.dcShareBelow80, chargerKw * DEFAULTS.chargerShare);
-      assumptions.push(`DC average ${Math.round(below)} kW up to 80% (from the car's ${car.dc10to80Minutes} min 10-80% time${below < carAvg ? ', capped by the charger' : ''}), ${Math.round(above)} kW above`);
+      assumptions.push(t('assume.dc1080', { below: Math.round(below), mins: car.dc10to80Minutes, capped: below < carAvg, above: Math.round(above) }));
     } else {
       below = peak * DEFAULTS.dcShareBelow80;
       above = peak * DEFAULTS.dcShareAbove80;
-      assumptions.push(`DC average ${Math.round(DEFAULTS.dcShareBelow80 * 100)}% of ${peak} kW up to 80%, ${Math.round(DEFAULTS.dcShareAbove80 * 100)}% above (generic curve)`);
+      assumptions.push(t('assume.dcGeneric', { shareBelow: Math.round(DEFAULTS.dcShareBelow80 * 100), peak, shareAbove: Math.round(DEFAULTS.dcShareAbove80 * 100) }));
     }
     // Split the session at 80 % and charge each part at its average power.
-    const start = car.startPct;
-    const share = Math.max(0, Math.min(target, 80) - start) / (target - start || 1);
+    const share = Math.max(0, Math.min(target, 80) - car.startPct) / (target - car.startPct || 1);
     minutes = (kwh * share / below + kwh * (1 - share) / above) * 60;
   } else {
     minutes = kwh / (peak * DEFAULTS.acShare) * 60;

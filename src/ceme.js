@@ -1,7 +1,12 @@
-// Client for the ceme-v2 API (https://ceme.ocarroeletrico.com/api). ceme-v2
-// owns the energy part of the bill: CEME tariff with TAR, IEC, EGME and VAT,
-// including OMIE-indexed tariffs priced at the quarter-hour of the charge.
-// We never re-implement that math here.
+// Client for the ceme-v2 API (https://ceme.ocarroeletrico.com/api).
+//
+// ceme-v2 is a sibling project that prices the ENERGY part of a MOBI.E
+// session for every CEME tariff: the tariff's price per kWh (with the grid fee,
+// TAR), the electricity tax (IEC), the per-session activation fee (EGME) and
+// VAT. For "indexed" tariffs that follow the wholesale market (OMIE), it uses
+// the market price of the exact quarter-hour of the charge. That's a lot of
+// fiddly rules (time zones, daylight saving, island VAT), so we never redo
+// them here: one POST /v1/simulate returns every tariff, cheapest first.
 //
 // Auth: X-API-Key (CEME_API_KEY) in production. Without a key we fall back to
 // an anonymous web session, which is rate-limited per IP: fine for local dev,

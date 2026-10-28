@@ -1,8 +1,31 @@
-// The charger dataset (built by scripts/build_dataset.py from the NAP and
-// MOBI.E files) and the geographic queries on it. ~9k sites fit in memory and
-// a linear scan per query is a few milliseconds, so there's no spatial index.
+// The charger dataset and the geographic searches on it.
+//
+// "The dataset" is the part of the network that changes slowly: where each
+// charger is, its plugs and power, and the operator fees MOBI.E publishes.
+// nap-dashboard builds it once a week (scripts/ohmigo_dataset.py over there)
+// and publishes it at DEFAULT_URL. Things that change by the minute (is the
+// charger free?) are NOT here: live.js reads them from the NAP when asked.
+//
+// Shape (one JSON file, ~6 MB):
+//   { schema, generatedAt, sites: [{ id, code, lat, lon, region, city, address,
+//     operator, points: [{ id, kw, connector, dc, phases, level, regime, opc }] }] }
+//
+// ~9k sites fit in memory easily, and a linear scan per query takes a few
+// milliseconds, so there's no spatial index.
 
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+
+export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
+// The dataset format this code understands. nap-dashboard bumps SCHEMA in
+// ohmigo_dataset.py when the format changes incompatibly.
+const SCHEMA = 1;
+
+const localFile = () => {
+  const p = fileURLToPath(new URL('../data/chargers.json', import.meta.url));
+  return existsSync(p) ? p : null;
+};
 
 const R_KM = 6371;
 const rad = d => d * Math.PI / 180;
@@ -61,11 +84,29 @@ export class Dataset {
     return this.pointById.get(id) || null;
   }
 
-  static async load() {
-    const url = process.env.DATASET_URL;
-    const raw = url
-      ? await (await fetch(url, { signal: AbortSignal.timeout(60_000) })).json()
-      : JSON.parse(await readFile(process.env.DATASET_PATH || new URL('../data/chargers.json', import.meta.url), 'utf8'));
+  // Where the dataset comes from, in order:
+  //   DATASET_PATH  a local file (development)
+  //   DATASET_URL   a URL (production; defaults to the Pages copy)
+  //   data/chargers.json, if present (development)
+  // `etag` makes the request conditional: when the file didn't change, the
+  // server answers 304 with no body and this returns null (keep what you have).
+  static async load({ etag } = {}) {
+    const path = process.env.DATASET_PATH || (process.env.DATASET_URL ? null : localFile());
+    if (path) return Dataset.check(JSON.parse(await readFile(path, 'utf8')));
+    const url = process.env.DATASET_URL || DEFAULT_URL;
+    const res = await fetch(url, { headers: etag ? { 'if-none-match': etag } : {}, signal: AbortSignal.timeout(60_000) });
+    if (res.status === 304) return null;
+    if (!res.ok) throw new Error(`dataset ${url}: HTTP ${res.status}`);
+    const ds = Dataset.check(await res.json());
+    ds.etag = res.headers.get('etag');
+    return ds;
+  }
+
+  // Refuses a file from a format we don't know, instead of misreading it.
+  static check(raw) {
+    const schema = raw.schema ?? 1;
+    if (schema !== SCHEMA) throw new Error(`dataset schema ${schema}, this server reads ${SCHEMA}`);
+    if (!Array.isArray(raw.sites) || !raw.sites.length) throw new Error('dataset has no sites');
     return new Dataset(raw);
   }
 

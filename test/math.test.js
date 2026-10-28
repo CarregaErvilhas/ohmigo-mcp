@@ -42,7 +42,7 @@ test('opcCost: flat + energy + time, duplicate values become a range', () => {
 });
 
 test('describePlan skips zero components', () => {
-  assert.equal(describePlan({ flat: [0], time: [{ eur: 0, from: 0, to: null }] }), 'free (no OPC fee)');
+  assert.equal(describePlan({ flat: [0], time: [{ eur: 0, from: 0, to: null }] }), 'free (no operator fee)');
   assert.equal(describePlan({ energy: [0.31] }), '0.31 €/kWh (excl. VAT)');
 });
 
