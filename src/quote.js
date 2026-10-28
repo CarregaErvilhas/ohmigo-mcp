@@ -128,7 +128,7 @@ function directOptions(direct, session, t, region) {
     kind: 'direct', offerId: offer.id, label: offer.label, provider: offer.provider,
     total: r2(eurPerKwh * session.kwh), eurPerKwh, walkUp: !!offer.walkUp,
     subscription: offer.subscription ? { ...(offer.fee || {}), text: offer.fee ? t('option.fee', offer.fee) : t('option.feeUnknown') } : null,
-    note: t('option.direct.note', { source: offer.origin === 'custofinal' ? SOURCE.blog : offer.source, checked: offer.checkedAt })
+    note: t('option.direct.note', { source: offer.origin === 'custofinal' ? `${SOURCE.name} (${SOURCE.author}), ${SOURCE.blog}` : offer.source, checked: offer.checkedAt })
       + (offer.walkUp ? ` ${t('option.walkUp')}` : '')
       + (isStale(offer) ? ` ${t('option.stale')}` : '')
       + (island ? ` ${t('option.islandVat')}` : ''),

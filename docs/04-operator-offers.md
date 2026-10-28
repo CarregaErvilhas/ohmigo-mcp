@@ -37,7 +37,8 @@ socket, and nothing else.
 ```
 
 **The blog** is the best public list we know: kept up to date by its author,
-prices final with VAT, one column per power band (AC ≤7.4, AC 11-22, DC ≤50,
+Alexandre Moleiro, who lets us use it as long as we credit him. Prices are
+final with VAT, one column per power band (AC ≤7.4, AC 11-22, DC ≤50,
 100, 120, 150, 180, >180). We credit it in every price we show (the `note`
 names the source). The author publishes a **new post** for each update, so
 the scraper reads Blogger's feed and takes the newest post that has the price

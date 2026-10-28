@@ -28,7 +28,7 @@ first: CEME, OPC, MOBI.E, NAP and the rest.
 | Energy from the CEME (with TAR, IEC, activation fee, VAT) | [ceme-v2](https://ceme.ocarroeletrico.com/api), queried live |
 | The charger operator's fee (per session, per kWh, per minute) | MOBI.E's tariff file; the NAP live feed when it's missing |
 | Bank card / QR price at the charger | MOBI.E's tariff file |
-| Walk-up (TPA/QR), operator app, roaming app and subscription prices | scraped weekly from [Preços (finais) kWh Portugal](https://custofinal.blogspot.com) into [`offers/`](offers/), with hand corrections |
+| Walk-up (TPA/QR), operator app, roaming app and subscription prices | scraped weekly, with permission, from Alexandre Moleiro's [Preços (finais) kWh Portugal](https://custofinal.blogspot.com) into [`offers/`](offers/), with hand corrections |
 | Whether the charger is free right now | the NAP live feed |
 | Energy and duration of your session | estimated from your car's specs ([02](docs/02-cost-math.md)) |
 
