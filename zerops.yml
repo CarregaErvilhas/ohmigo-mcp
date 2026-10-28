@@ -13,6 +13,7 @@ zerops:
       deployFiles:
         - src
         - ui
+        - site
         - offers
         - node_modules
         - package.json

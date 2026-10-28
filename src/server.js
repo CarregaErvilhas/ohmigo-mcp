@@ -1,4 +1,5 @@
-// The process entry point: an HTTP server with one useful route, POST /mcp.
+// The process entry point: an HTTP server. POST /mcp is the MCP server;
+// GET / is a landing page for people (site/index.html).
 //
 // What happens on boot:
 //   1. load the charger dataset (data.js), from a local file in development or
@@ -12,6 +13,7 @@
 // and a restart loses nothing, because there's nothing to lose.
 
 import { createServer as createHttp } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
@@ -54,6 +56,16 @@ function readJson(req) {
   });
 }
 
+// The landing page: one static file, read once at boot.
+const SITE = readFileSync(new URL('../site/index.html', import.meta.url));
+const SITE_HEADERS = {
+  'content-type': 'text/html; charset=utf-8',
+  'cache-control': 'public, max-age=300',
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+};
+
 const send = (res, status, body, type = 'application/json') => {
   res.writeHead(status, { 'content-type': type });
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
@@ -76,7 +88,17 @@ createHttp(async (req, res) => {
   // Health check for the hosting platform (and for you: it shows how fresh
   // the data is).
   if (url.pathname === '/healthz') return send(res, 200, { ok: true, dataAsOf: ds.generatedAt, live: live.info() });
+  if (url.pathname === '/' && (req.method === 'GET' || req.method === 'HEAD')) {
+    res.writeHead(200, SITE_HEADERS);
+    return res.end(req.method === 'HEAD' ? undefined : SITE);
+  }
   if (url.pathname !== '/mcp') return send(res, 404, { error: 'not found' });
+  // Someone pasted the MCP address into a browser. MCP clients never ask for
+  // text/html, so send the person to the page that explains what to do.
+  if (req.method === 'GET' && /text\/html/.test(req.headers.accept || '')) {
+    res.writeHead(302, { location: '/?from=mcp#instalar' });
+    return res.end();
+  }
   // Stateless server: no stream to resume (GET) and no session to end (DELETE).
   if (req.method !== 'POST') return send(res, 405, { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null });
 
