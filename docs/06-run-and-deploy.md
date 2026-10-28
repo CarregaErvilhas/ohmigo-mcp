@@ -31,8 +31,9 @@ same keys (`test/site.test.js` checks). A browser that opens `/mcp` is sent to
 `/#instalar`, since people paste the address there by mistake; MCP clients
 never ask for HTML, so they're unaffected.
 
-`GET /privacidade` and `GET /suporte` (English aliases `/privacy`, `/support`)
-are the privacy and support pages that the assistants' directories ask for.
+`GET /privacidade`, `/suporte` and `/termos` (English aliases `/privacy`,
+`/support`, `/terms`) are the privacy, support and terms pages that the
+assistants' directories ask for.
 They're one static file, `site/legal.html`, whose script picks the page from
 the path and has the same two-language strings block and parity test. If the
 server starts keeping or sending anything new about the user, update the

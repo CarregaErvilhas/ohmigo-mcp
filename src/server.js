@@ -58,10 +58,10 @@ function readJson(req) {
 
 // The landing page: one static file, read once at boot.
 const SITE = readFileSync(new URL('../site/index.html', import.meta.url));
-// Privacy and support share one file; its script picks the page from the path.
+// Privacy, support and terms share one file; its script picks the page from the path.
 // Directories and assistants' review forms want a stable URL for each.
 const LEGAL = readFileSync(new URL('../site/legal.html', import.meta.url));
-const LEGAL_PATHS = new Set(['/privacidade', '/privacy', '/suporte', '/support']);
+const LEGAL_PATHS = new Set(['/privacidade', '/privacy', '/suporte', '/support', '/termos', '/terms']);
 const SITE_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
   'cache-control': 'public, max-age=300',

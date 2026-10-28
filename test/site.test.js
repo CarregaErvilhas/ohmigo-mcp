@@ -17,7 +17,7 @@ test('site: every data-i key has a string', () => {
   for (const k of used) assert.ok(k in S.pt, `missing ${k}`);
 });
 
-// Privacy and support live in one file (site/legal.html): the script picks the
+// Privacy, support and terms live in one file (site/legal.html): the script picks the
 // page from the path, and the strings block has both pages in both languages.
 const legal = readFileSync(new URL('../site/legal.html', import.meta.url), 'utf8');
 const L = JSON.parse(legal.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
@@ -30,8 +30,8 @@ test('legal: every key the markup and the page lists use has a string', () => {
   const used = new Set([...legal.matchAll(/data-i="([^"]+)"/g)].map(m => m[1]));
   // The PAGES table in the script: every quoted key like 'p2.h' or 's3.li1'.
   const table = legal.match(/const PAGES = \{([\s\S]*?)\n  \};/)[1];
-  for (const m of table.matchAll(/'([ps]\d\.[a-z0-9]+)'/g)) used.add(m[1]);
-  for (const page of ['privacy', 'support']) for (const f of ['title', 'desc', 'h1', 'lede']) used.add(`${page}.${f}`);
+  for (const m of table.matchAll(/'([pst]\d\.[a-z0-9]+)'/g)) used.add(m[1]);
+  for (const page of ['privacy', 'support', 'terms']) for (const f of ['title', 'desc', 'h1', 'lede']) used.add(`${page}.${f}`);
   for (const k of used) assert.ok(k in L.pt, `missing ${k}`);
 });
 
@@ -39,6 +39,6 @@ test('legal: every string is used', () => {
   const body = legal.replace(/<script type="application\/json"[\s\S]*?<\/script>/, '');
   for (const k of Object.keys(L.pt)) {
     // CTA texts are built as t['s1.cta1']; everything else appears as a quoted key.
-    assert.ok(body.includes(`'${k}'`) || body.includes(`"${k}"`) || /^(privacy|support)\./.test(k), `unused ${k}`);
+    assert.ok(body.includes(`'${k}'`) || body.includes(`"${k}"`) || /^(privacy|support|terms)\./.test(k), `unused ${k}`);
   }
 });
