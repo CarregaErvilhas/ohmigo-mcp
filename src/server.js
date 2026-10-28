@@ -58,6 +58,10 @@ function readJson(req) {
 
 // The landing page: one static file, read once at boot.
 const SITE = readFileSync(new URL('../site/index.html', import.meta.url));
+// Privacy and support share one file; its script picks the page from the path.
+// Directories and assistants' review forms want a stable URL for each.
+const LEGAL = readFileSync(new URL('../site/legal.html', import.meta.url));
+const LEGAL_PATHS = new Set(['/privacidade', '/privacy', '/suporte', '/support']);
 const SITE_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
   'cache-control': 'public, max-age=300',
@@ -91,6 +95,10 @@ createHttp(async (req, res) => {
   if (url.pathname === '/' && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, SITE_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : SITE);
+  }
+  if (LEGAL_PATHS.has(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
+    res.writeHead(200, SITE_HEADERS);
+    return res.end(req.method === 'HEAD' ? undefined : LEGAL);
   }
   if (url.pathname !== '/mcp') return send(res, 404, { error: 'not found' });
   // Someone pasted the MCP address into a browser. MCP clients never ask for
