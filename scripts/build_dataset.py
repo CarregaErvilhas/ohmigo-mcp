@@ -23,7 +23,10 @@ NAP = sys.argv[1] if len(sys.argv) > 1 else '../nap-dashboard/data'
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'data/chargers.json'
 
 S = pd.read_csv(f'{NAP}/nap_static_sites.csv', dtype=str)
-P = pd.read_csv(f'{NAP}/nap_static_points.csv', dtype=str).drop_duplicates('point_id')
+# A point id is only unique within its site: some operators publish bare
+# numbers ("19", "160") that repeat across sites.
+P = pd.read_csv(f'{NAP}/nap_static_points.csv', dtype=str).drop_duplicates(['site_id', 'point_id'])
+SHARED_IDS = set(P.point_id[P.point_id.duplicated(keep=False)])
 DP = pd.read_csv(f'{NAP}/nap_dynamic_pricing.csv', dtype=str)
 M = pd.read_csv(f'{NAP}/mobie_tarifas.csv', sep=';', dtype=str).drop_duplicates()
 
@@ -146,7 +149,8 @@ for p in P.itertuples(index=False):
     if t:
         pt['opc'] = t
     # Fallback for when the live feed is down; live NAP fees win otherwise.
-    if not has_ceme and p.point_id in nap_price.index:
+    # (the pricing CSV is keyed by point id alone, so skip ids shared by sites)
+    if not has_ceme and p.point_id in nap_price.index and p.point_id not in SHARED_IDS:
         pt['napPrice'] = fnum(nap_price[p.point_id])
     site['points'].append(pt)
 

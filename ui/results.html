@@ -39,6 +39,11 @@
   dt { color: var(--muted); }
   dd { margin: 0; }
   button { font: inherit; font-size: 12.5px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); cursor: pointer; margin-top: 4px; }
+  .opts { grid-column: 2 / 4; list-style: none; margin: 4px 0 0; padding: 0; font-size: 12.5px; }
+  .opts li { padding: 1px 0; color: var(--muted); }
+  .opts li span { display: inline-block; min-width: 64px; font-variant-numeric: tabular-nums; color: var(--fg); }
+  .opts li.hl span { font-weight: 700; }
+  .opts em { font-style: normal; font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
   .foot { color: var(--muted); font-size: 11.5px; margin-top: 8px; }
   .empty { color: var(--muted); padding: 12px 0; }
   .sec { color: var(--muted); font-size: 12px; font-weight: 600; padding: 14px 0 2px; }
@@ -65,19 +70,20 @@
     list.innerHTML = rows.map((q, i) => {
       const range = q.total && q.total.low !== q.total.high ? `${eur(q.total.low)}–${eur(q.total.high)}` : '';
       const dist = q.km != null ? `${q.km.toFixed(1)} km away` : q.alongKm != null ? `km ${Math.round(q.alongKm)} of route, ${q.offRouteKm.toFixed(1)} km off` : '';
-      const t = q.energy?.tariff;
+      const h = q.headline;
+      const optName = o => o.kind === 'adhoc' ? 'Card / QR at charger' : o.kind === 'opc_direct' ? 'Operator direct' : `${o.ceme} ${o.name}`;
+      const opts = (q.options || []).map(o => `<li class="${o === q.options[0] && !q.outside ? 'hl' : ''}"><span>${eur(o.total)}${o.asterisk ? '*' : ''}</span> ${esc(optName(o))}${o.requiresOtherContract ? ' <em>needs another contract</em>' : ''}${o.cheaperElsewhere ? ' <em>cheapest overall</em>' : ''}</li>`).join('');
       const head = q.outside && !rows[i - 1]?.outside ? '<div class="sec">Outside MOBI.E: pay the operator directly, price not comparable *</div>' : '';
       return `${head}<div class="row${i === 0 && q.total ? ' best' : ''}">
         <div class="n">${i + 1}</div>
         <div class="where">${esc(q.operator)}<br><span style="font-weight:400">${esc(q.address)}${q.city ? ', ' + esc(q.city) : ''}</span></div>
         <div class="eur">${q.total?.asterisk ? '' : q.total && !q.total.complete ? '≥ ' : ''}${eur(q.total?.eur)}${q.total?.asterisk ? '*' : ''}<small>${q.session.minutes} min</small></div>
         <div class="sub">${q.status ? `<span class="st st-${esc(q.status)}">${esc(STATUS[q.status] || q.status)}</span> · ` : ''}${esc(q.kw)} kW ${esc(q.connector)}${q.dc ? ' DC' : ' AC'} · ${q.session.kwhBilled} kWh · ${esc(dist)}${range ? ' · range ' + range : ''}</div>
+        ${opts ? `<ul class="opts">${opts}</ul>` : ''}
         <details><summary>Breakdown</summary><dl>
-          ${t ? `<dt>Energy</dt><dd>${eur(q.energy.eur)} · ${esc(t.ceme)} ${esc(t.name)}${t.requiresOtherContract ? ' (needs another contract)' : ''}</dd>` : ''}
-          ${(q.tariffOptions || []).length > 1 ? `<dt>Tariffs</dt><dd>${q.tariffOptions.map(o => `${eur(o.total)} ${esc(o.ceme)} ${esc(o.name)}${o.requiresOtherContract ? ' (needs another contract)' : ''}`).join('<br>')}</dd>` : ''}
+          ${h ? `<dt>Energy</dt><dd>${eur(h.energyEur)} · ${esc(h.ceme)} ${esc(h.name)}</dd>` : ''}
           ${q.opc ? `<dt>Operator</dt><dd>${eur(q.opc.eurWithVat)} · ${esc(q.opc.tariff ?? 'not published')}</dd>` : ''}
-          ${q.cheaperTariff ? `<dt>Cheaper</dt><dd>${eur(q.cheaperTariff.total)} with ${esc(q.cheaperTariff.ceme)} ${esc(q.cheaperTariff.name)}${q.cheaperTariff.requiresOtherContract ? ' (needs another contract)' : ''}</dd>` : ''}
-          ${q.adHoc ? `<dt>Card at charger</dt><dd>${eur(q.adHoc.eur)} · ${esc(q.adHoc.tariff)}</dd>` : ''}
+          ${(q.options || []).filter(o => o.kind !== 'ceme').map(o => `<dt>${o.kind === 'adhoc' ? 'Card / QR' : 'Direct'}</dt><dd>${o.tariff ? esc(o.tariff) + ' · ' : ''}${esc(o.note || '')}</dd>`).join('')}
           ${q.note ? `<dt>Note</dt><dd>${esc(q.note)}</dd>` : ''}
           <dt>Assumes</dt><dd>${(q.assumptions || []).map(esc).join('; ')}</dd>
           <dt>Point</dt><dd>${esc(q.pointId)}</dd>

@@ -44,8 +44,21 @@ export class Dataset {
     this.pointById = new Map();
     for (const s of this.sites) {
       this.siteById.set(s.id, s);
-      for (const p of s.points) this.pointById.set(p.id, { site: s, point: p });
+      for (const p of s.points) {
+        // A point id is only unique within its site ("19" exists on several
+        // sites), so the key is "SITE/POINT". The bare id also resolves when
+        // it happens to be unique.
+        this.pointById.set(`${s.id}/${p.id}`, { site: s, point: p });
+        const bare = this.pointById.get(p.id);
+        this.pointById.set(p.id, bare === undefined ? { site: s, point: p } : null);
+      }
     }
+  }
+
+  // "SITE/POINT", or a bare point id when it's unique. null when unknown or
+  // ambiguous.
+  findPoint(id) {
+    return this.pointById.get(id) || null;
   }
 
   static async load() {

@@ -136,6 +136,7 @@ test('pickTariffs: default is top 3 popular, headline skips ones needing another
   const t = pickTariffs(quotes, { level: 'BTN', dc: false });
   assert.deepEqual(t.options.map(o => o.id), ['a-bt-x', 'c-bt-z', 'd-bt-w']);
   assert.equal(t.headline.id, 'c-bt-z');
+  assert.deepEqual(pickTariffs(quotes, { level: 'BTN', dc: false }, null, 4).options.map(o => o.id), ['a-bt-x', 'c-bt-z', 'd-bt-w', 'e-bt-v']);
 });
 
 test('napPlan maps NAP policies to the MOBI.E plan shape', () => {
@@ -158,6 +159,78 @@ test('parseStatus reads point ids, status and fees from a DATEX II stream', asyn
   const chunks = [enc.encode(xml.slice(0, 333)), enc.encode(xml.slice(333))];
   const { publicationTime, points } = await parseStatus(chunks);
   assert.equal(publicationTime, '2026-10-28T16:35:04Z');
-  assert.deepEqual(points.get('P-1'), { status: 'charging', fees: [{ policy: 'flatRate', eur: 0.26 }] });
+  assert.deepEqual(points.get('SITE-1/P-1'), { status: 'charging', fees: [{ policy: 'flatRate', eur: 0.26 }] });
   assert.equal(points.size, 1);
+});
+
+import { LiveStatus } from '../src/live.js';
+
+const FEED = `<?xml version="1.0"?><ns4:payload xmlns="http://datex2.eu/schema/3/common" xmlns:ns2="f" xmlns:ns3="e" xmlns:ns4="p"><publicationTime>T</publicationTime>`
+  + Array.from({ length: 1000 }, (_, i) => `<ns3:energyInfrastructureSiteStatus><ns2:reference id="S${i}"/><ns3:refillPointStatus><ns2:reference id="1"/><ns3:status>available</ns3:status></ns3:refillPointStatus></ns3:energyInfrastructureSiteStatus>`).join('')
+  + '</ns4:payload>';
+
+function fakeFetch({ delayMs = 0 } = {}) {
+  const calls = [];
+  const impl = async (url, init) => {
+    calls.push(init.headers);
+    await new Promise(r => setTimeout(r, delayMs));
+    if (init.headers['if-none-match'] === 'v1') return { status: 304, ok: false, headers: new Headers() };
+    return { status: 200, ok: true, headers: new Headers({ etag: 'v1' }), body: [new TextEncoder().encode(FEED)] };
+  };
+  return { impl, calls };
+}
+
+test('live: same point id on two sites stays two points', async () => {
+  const { points } = await parseStatus([new TextEncoder().encode(FEED)]);
+  assert.equal(points.size, 1000);
+  assert.ok(points.get('S0/1') && points.get('S999/1'));
+});
+
+test('live: fetched on demand, shared by concurrent callers, cached within the TTL', async () => {
+  const f = fakeFetch({ delayMs: 20 });
+  const live = new LiveStatus({ ttlMs: 60_000, waitMs: 1000, fetchImpl: f.impl });
+  let waits = 0;
+  await Promise.all([live.ensure({ onWait: () => waits++ }), live.ensure(), live.ensure()]);
+  assert.equal(f.calls.length, 1, 'one download for three callers');
+  assert.equal(waits, 1);
+  assert.equal(live.get('S5', '1').status, 'available');
+  await live.ensure({ onWait: () => waits++ });
+  assert.equal(f.calls.length, 1, 'within the TTL: no request at all');
+  assert.equal(waits, 1);
+});
+
+test('live: past the TTL, revalidates with the ETag', async () => {
+  const f = fakeFetch();
+  const live = new LiveStatus({ ttlMs: 0, waitMs: 1000, fetchImpl: f.impl });
+  await live.ensure();
+  await live.ensure();
+  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls[1]['if-none-match'], 'v1');
+  assert.equal(live.points.size, 1000, '304 keeps the data');
+});
+
+test('live: a slow feed does not hold the caller past the wait budget', async () => {
+  const f = fakeFetch({ delayMs: 300 });
+  const live = new LiveStatus({ ttlMs: 60_000, waitMs: 30, fetchImpl: f.impl });
+  const t0 = Date.now();
+  await live.ensure();
+  assert.ok(Date.now() - t0 < 200, 'returned on the budget');
+  assert.equal(live.points.size, 0);
+  assert.equal(live.info().refreshing, true);
+  await live.refresh();
+  assert.equal(live.points.size, 1000, 'the refresh finished for the next caller');
+});
+
+test('live: a truncated download is retried once', async () => {
+  let n = 0;
+  const impl = async () => {
+    n++;
+    const text = n === 1 ? FEED.slice(0, FEED.length / 2) : FEED;
+    return { status: 200, ok: true, headers: new Headers({ etag: 'v1' }), body: [new TextEncoder().encode(text)] };
+  };
+  const live = new LiveStatus({ ttlMs: 60_000, waitMs: 1000, fetchImpl: impl });
+  await live.ensure();
+  assert.equal(n, 2);
+  assert.equal(live.points.size, 1000);
+  assert.equal(live.info().error, null);
 });

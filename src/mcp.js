@@ -21,12 +21,14 @@ Before calling a cost tool, make sure you know (ask only for what you don't have
 3. Current battery % (start_pct).
 4. Target battery % (target_pct). Default 80 if the user doesn't say; above 80% DC charging gets slow and per-minute fees add up.
 5. Whether they're in a hurry. The cheapest option is often a slow AC socket that takes hours; on a trip, pass max_minutes (e.g. 45) or dc_only.
-6. Optional: the CEME tariffs they have (the cards/apps/subscriptions they pay with; some users have several). Call list_ceme_tariffs to resolve names like "EDP" or "Via Verde" to tariff_ids and pass them all; each charger is priced with the cheapest of them. Without tariff_ids, results show the top 3 popular tariffs, headlined by the cheapest that needs no other contract.
+6. Optional: the CEME tariffs they have (the cards/apps/subscriptions they pay with; some users have several). Call list_ceme_tariffs to resolve names like "EDP" or "Via Verde" to tariff_ids and pass them all; each charger is priced with the cheapest of them. Without tariff_ids, results show the top 3 popular tariffs (tariffs_shown for more), headlined by the cheapest that needs no other contract.
 7. Optional: when they will charge (at, ISO 8601). Prices change between off-peak (vazio) and peak hours. Default is now.
 
 This server stores nothing about the user. Remember the car, its charging specs and the user's tariffs yourself (if your app has memory) so you don't ask again next time.
 
-When presenting results: give the total in euros and the duration, name the tariff used, and mention the main assumptions (charging losses, estimated duration, per-minute fees). Charger status comes from MOBI.E's live feed, refreshed every few minutes (see live.publishedAt); a charger can still be taken by the time they arrive. If live.fresh is false, say status may be stale. Chargers outside MOBI.E (Continente, Tesla...) are listed apart in outsideMobie: their price is an asterisked guess, say so. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
+When presenting results: give the total in euros and the duration, name the tariff used, and mention the main assumptions (charging losses, estimated duration, per-minute fees). Each charger lists every way to pay in options: CEME tariffs (kind "ceme"), paying by bank card / QR code at the charger without a CEME (kind "adhoc"; always mention it when present, it's what a user without a CEME card pays), and paying the operator directly (kind "opc_direct"). Chargers outside MOBI.E (Continente, Tesla...) are listed apart in outsideMobie: their price is an asterisked guess, say so.
+
+Charger status comes from MOBI.E's live feed (live.publishedAt says when MOBI.E published it). The feed is a large file fetched on demand, so the first call after a few quiet minutes can take ~20 s; if live.fresh is false or live.publishedAt is null, say status may be stale or unknown. A charger can still be taken by the time they arrive. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
 
 const Car = {
   battery_kwh: z.number().positive().max(250).describe('Usable battery capacity in kWh (look it up from the car model)'),
@@ -37,7 +39,8 @@ const Car = {
   dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% charging time, minutes"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
     .describe("Car's DC charging curve: power (kW) at state of charge (%), e.g. [{soc:10,kw:150},{soc:50,kw:110},{soc:80,kw:60}]"),
-  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariff ids from list_ceme_tariffs; omit to show the top 3 popular"),
+  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariff ids from list_ceme_tariffs; omit to show the top popular ones"),
+  tariffs_shown: z.number().int().min(1).max(20).default(3).describe('Without tariff_ids: how many popular tariffs to show per charger'),
   at: z.string().datetime({ offset: true }).optional().describe('When the charge starts, ISO 8601 (default now)'),
 };
 
@@ -83,6 +86,19 @@ const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
 const meta = (ds, live) => ({ dataAsOf: ds.generatedAt, live: live.info() });
 
+// Brings live status up to date before answering. If that means downloading
+// the feed, tell the client: a progress notification shows the user why the
+// answer is taking a few seconds (when the client asked for progress).
+async function withLive(live, ctx) {
+  const token = ctx?.mcpReq?._meta?.progressToken;
+  await live.ensure({
+    onWait: () => token != null && ctx.mcpReq.notify({
+      method: 'notifications/progress',
+      params: { progressToken: token, progress: 0, message: 'Getting live charger status from MOBI.E…' },
+    }).catch(() => {}),
+  });
+}
+
 export function createServer(ds, live) {
   const server = new McpServer({ name: 'ohmigo', title: 'Ohmigo: EV charging costs in Portugal', version: '0.1.0' }, { instructions: INSTRUCTIONS });
 
@@ -111,16 +127,20 @@ export function createServer(ds, live) {
     description: 'Finds public EV charge points near a location or along a route, with power, plug type and the operator fee. No cost estimate; use find_cheapest_charging for that.',
     inputSchema: z.object({ ...Where, ...Filter, limit: z.number().int().positive().max(50).default(15) }),
     annotations: { readOnlyHint: true, openWorldHint: false },
-  }, async a => {
+  }, async (a, ctx) => {
     const w = resolveWhere(ds, a);
     if (w.error) return err(w.error);
     const { total, results } = ds.search({ ...w, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only, limit: a.limit });
+    await withLive(live, ctx);
     return ok({
       ...meta(ds, live), resolvedPlace: w.resolvedPlace, total,
       sites: results.map(r => ({
         siteId: r.site.id, code: r.site.code, operator: r.site.operator, address: r.site.address, city: r.site.city,
         lat: r.site.lat, lon: r.site.lon, km: rnd(r.km), offRouteKm: rnd(r.offRouteKm), alongKm: rnd(r.alongKm),
-        points: r.points.map(p => ({ pointId: p.id, kw: p.kw, connector: p.connector, dc: p.dc, regime: p.regime, status: live.get(p.id)?.status ?? null })),
+        points: r.points.map(p => ({
+          pointId: `${r.site.id}/${p.id}`, kw: p.kw, connector: p.connector, dc: p.dc, regime: p.regime,
+          status: live.get(r.site.id, p.id)?.status ?? null, adHocPayment: !!p.opc?.AD_HOC_PAYMENT,
+        })),
       })),
     });
   });
@@ -135,14 +155,15 @@ export function createServer(ds, live) {
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: VIEW_URI } },
-  }, async a => {
+  }, async (a, ctx) => {
     const w = resolveWhere(ds, a);
     if (w.error) return err(w.error);
     if (a.target_pct <= a.start_pct) return err('target_pct must be above start_pct.');
+    await withLive(live, ctx);
     const { total, results } = ds.search({ ...w, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only, limit: Infinity });
     if (!results.length) return err('No chargers match. Widen radius_km/corridor_km or relax the filters.');
     const { mobie, outsideMobie } = await rank(results, car(a), {
-      at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, live,
+      at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live,
       maxMinutes: a.max_minutes, availableOnly: a.available_only,
     });
     if (!mobie.length && !outsideMobie.length) return err('No charger matches (time limit, availability or filters). Raise max_minutes, set available_only=false or widen the search.');
@@ -150,21 +171,22 @@ export function createServer(ds, live) {
     const outside = outsideMobie.slice(0, 3);
     for (const q of [...top, ...outside]) { q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm); }
     const data = { kind: 'ranking', ...meta(ds, live), resolvedPlace: w.resolvedPlace, searched: total, results: top, outsideMobie: outside };
-    const lines = top.map((q, i) => `${i + 1}. ${q.total ? (q.total.complete ? '' : '>= ') + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
+    const lines = top.map((q, i) => `${i + 1}. ${q.total ? (q.total.complete ? '' : '>= ') + q.total.eur.toFixed(2) + ' €' : 'n/a'}${q.headline ? ' with ' + q.headline.label : ''} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
     return ok(data, `${lines.join('\n')}\n\n${JSON.stringify(data)}`);
   });
 
   registerAppTool(server, 'estimate_charging_cost', {
     title: 'Estimate charging cost',
     description: 'Estimated cost and duration of a session at one charge point (point_id from find_chargers / find_cheapest_charging), with the full breakdown.',
-    inputSchema: z.object({ point_id: z.string().describe('Charge point id, e.g. "LSB-01482-1"'), ...Car }),
+    inputSchema: z.object({ point_id: z.string().describe('Charge point id as returned by the other tools, "SITE/POINT", e.g. "GLP-LRA-00156/LRA-00156-02"'), ...Car }),
     annotations: { readOnlyHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: VIEW_URI } },
-  }, async a => {
-    const hit = ds.pointById.get(a.point_id);
-    if (!hit) return err(`Unknown point_id ${a.point_id}. Use find_chargers to get ids.`);
+  }, async (a, ctx) => {
+    const hit = ds.findPoint(a.point_id);
+    if (!hit) return err(`Unknown or ambiguous point_id ${a.point_id}. Use the "SITE/POINT" id from find_chargers.`);
     if (a.target_pct <= a.start_pct) return err('target_pct must be above start_pct.');
-    const q = await quotePoint(hit, car(a), { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, live });
+    await withLive(live, ctx);
+    const q = await quotePoint(hit, car(a), { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live });
     return ok({ kind: 'single', ...meta(ds, live), results: [q] });
   });
 

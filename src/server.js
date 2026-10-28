@@ -13,8 +13,10 @@ const MAX_BODY = 256 * 1024;
 
 let ds = await Dataset.load();
 console.log(`[ohmigo] ${ds.sites.length} sites, data as of ${ds.generatedAt}`);
+// Live status is fetched on demand (see live.js). One warm-up fetch at boot
+// so the first user after a deploy doesn't wait for it.
 const live = new LiveStatus();
-if (process.env.NAP_POLL !== '0') live.start();
+if (process.env.LIVE_WARMUP !== '0') live.refresh();
 
 // With DATASET_URL, pick up the weekly NAP refresh without a redeploy. A
 // failed reload keeps the data we have.
@@ -63,7 +65,9 @@ createHttp(async (req, res) => {
   let body;
   try { body = await readJson(req); } catch (e) { return send(res, e.status || 400, { error: e.message }); }
   const server = createServer(ds, live);
-  const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+  // SSE responses (not plain JSON) so progress notifications reach the
+  // client while a tool waits for the live feed.
+  const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => { transport.close(); server.close(); });
   try {
     await server.connect(transport);
