@@ -1,0 +1,43 @@
+# carrega-mcp on Zerops: one Node.js runtime service, no database.
+#
+# Secrets/vars are set on the service, never in the repo:
+#   CEME_API_KEY  ceme-v2 API key (the value of ceme-v2's CEME_API_KEY)
+#   DATASET_URL   where chargers.json is published (see README)
+#   HOST=0.0.0.0, PORT=3002
+zerops:
+  - setup: mcp
+    build:
+      base: nodejs@24
+      buildCommands:
+        - npm ci --omit=dev
+      deployFiles:
+        - src
+        - ui
+        - node_modules
+        - package.json
+    deploy:
+      temporaryShutdown: false
+      readinessCheck:
+        httpGet:
+          port: 3002
+          path: /healthz
+        # Boot downloads and indexes the dataset (~6 MB).
+        failureTimeout: "120s"
+        retryPeriod: "10s"
+    run:
+      base: alpine/nodejs@24
+      prepareCommands:
+        - sudo addgroup -S carrega
+        - sudo adduser -S -D -H -s /sbin/nologin -G carrega carrega
+      startCommands:
+        - command: node src/server.js
+          name: mcp
+          workingDir: /var/www
+          user: carrega
+      ports:
+        - port: 3002
+          httpSupport: true
+      healthCheck:
+        httpGet:
+          port: 3002
+          path: /healthz

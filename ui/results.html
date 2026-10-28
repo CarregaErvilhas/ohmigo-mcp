@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Charging costs</title>
+<style>
+  :root {
+    --bg: var(--color-background-primary, #fff);
+    --fg: var(--color-text-primary, #1a1a1a);
+    --muted: var(--color-text-secondary, #666);
+    --line: var(--color-border-primary, #e3e3e3);
+    --accent: #1f7a4d;
+    --font: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: var(--color-background-primary, #1c1c1c); --fg: var(--color-text-primary, #eee);
+      --muted: var(--color-text-secondary, #aaa); --line: var(--color-border-primary, #333); --accent: #5fcf95;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: var(--color-background-primary, #1c1c1c); --fg: var(--color-text-primary, #eee);
+    --muted: var(--color-text-secondary, #aaa); --line: var(--color-border-primary, #333); --accent: #5fcf95;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px; background: var(--bg); color: var(--fg); font: 14px/1.4 var(--font); }
+  .row { display: grid; grid-template-columns: 28px 1fr auto; gap: 4px 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .where { font-weight: 600; overflow-wrap: anywhere; }
+  .sub { color: var(--muted); font-size: 12.5px; grid-column: 2 / 4; }
+  .eur { font-weight: 700; font-size: 17px; text-align: right; font-variant-numeric: tabular-nums; }
+  .eur small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+  .best .eur { color: var(--accent); }
+  details { grid-column: 2 / 4; font-size: 12.5px; }
+  summary { cursor: pointer; color: var(--muted); }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; }
+  button { font: inherit; font-size: 12.5px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); cursor: pointer; margin-top: 4px; }
+  .foot { color: var(--muted); font-size: 11.5px; margin-top: 8px; }
+  .empty { color: var(--muted); padding: 12px 0; }
+</style>
+</head>
+<body>
+<div id="list" class="empty">Waiting for results…</div>
+<div id="foot" class="foot"></div>
+<script>/*__BRIDGE__*/</script>
+<script>
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const eur = v => v == null ? 'n/a' : v.toFixed(2).replace('.', ',') + ' €';
+  const app = new McpApps.App({ name: 'carrega-results', version: '0.1.0' });
+
+  function render(data) {
+    const list = document.getElementById('list');
+    const rows = data?.results || [];
+    if (!rows.length) { list.className = 'empty'; list.textContent = 'No results.'; return; }
+    list.className = '';
+    list.innerHTML = rows.map((q, i) => {
+      const range = q.total && q.total.low !== q.total.high ? `${eur(q.total.low)}–${eur(q.total.high)}` : '';
+      const dist = q.km != null ? `${q.km.toFixed(1)} km away` : q.alongKm != null ? `km ${Math.round(q.alongKm)} of route, ${q.offRouteKm.toFixed(1)} km off` : '';
+      const t = q.energy?.tariff;
+      return `<div class="row${i === 0 && q.total ? ' best' : ''}">
+        <div class="n">${i + 1}</div>
+        <div class="where">${esc(q.operator)}<br><span style="font-weight:400">${esc(q.address)}${q.city ? ', ' + esc(q.city) : ''}</span></div>
+        <div class="eur">${q.total && !q.total.complete ? '≥ ' : ''}${eur(q.total?.eur)}<small>${q.session.minutes} min</small></div>
+        <div class="sub">${esc(q.kw)} kW ${esc(q.connector)}${q.dc ? ' DC' : ' AC'} · ${q.session.kwhBilled} kWh · ${esc(dist)}${range ? ' · range ' + range : ''}</div>
+        <details><summary>Breakdown</summary><dl>
+          ${t ? `<dt>Energy</dt><dd>${eur(q.energy.eur)} · ${esc(t.ceme)} ${esc(t.name)}${t.requiresOtherContract ? ' (needs another contract)' : ''}</dd>` : ''}
+          ${q.opc ? `<dt>Operator</dt><dd>${eur(q.opc.eurWithVat)} · ${esc(q.opc.tariff ?? 'not published')}</dd>` : ''}
+          ${q.cheaperTariff ? `<dt>Cheaper</dt><dd>${eur(q.cheaperTariff.total)} with ${esc(q.cheaperTariff.ceme)} ${esc(q.cheaperTariff.name)}${q.cheaperTariff.requiresOtherContract ? ' (needs another contract)' : ''}</dd>` : ''}
+          ${q.adHoc ? `<dt>Card at charger</dt><dd>${eur(q.adHoc.eur)} · ${esc(q.adHoc.tariff)}</dd>` : ''}
+          ${q.note ? `<dt>Note</dt><dd>${esc(q.note)}</dd>` : ''}
+          <dt>Assumes</dt><dd>${(q.assumptions || []).map(esc).join('; ')}</dd>
+          <dt>Point</dt><dd>${esc(q.pointId)}${q.statusAtSnapshot ? ' · ' + esc(q.statusAtSnapshot) + ' at last snapshot' : ''}</dd>
+        </dl>
+        <button data-lat="${q.lat}" data-lon="${q.lon}">Directions</button></details>
+      </div>`;
+    }).join('');
+    document.getElementById('foot').textContent =
+      `Estimates. Charger data as of ${(data.dataAsOf || '').slice(0, 10)}; status is not live, confirm in your CEME app.`;
+  }
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('button[data-lat]');
+    if (b) app.openLink({ url: `https://www.google.com/maps/dir/?api=1&destination=${b.dataset.lat},${b.dataset.lon}` });
+  });
+  app.ontoolresult = r => render(r.structuredContent);
+  app.onhostcontextchanged = ctx => { if (ctx.theme) document.documentElement.dataset.theme = ctx.theme; };
+  app.connect().then(() => {
+    const ctx = app.getHostContext();
+    if (ctx?.theme) document.documentElement.dataset.theme = ctx.theme;
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "carrega-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "build:data": "python3 scripts/build_dataset.py ../nap-dashboard/data data/chargers.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
+    "@modelcontextprotocol/node": "^2.1.2",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "zod": "^4.6.7"
+  }
+}
