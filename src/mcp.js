@@ -60,7 +60,8 @@ When presenting results: give the total in euros and the duration, name the tari
 - "ceme": a CEME card/app on MOBI.E;
 - "adhoc": bank card / QR code at the charger, no CEME. Always mention it when present: it's what someone without a CEME card pays;
 - "direct": paying outside the CEME system: a card terminal (TPA) or QR at the charger, the operator's own app or subscription (IONITY Power, Atlante GO...), or a roaming app (Electroverse, Elli, Electromaps...). Final prices with VAT, from a public price list (see note and checked date). Subscriptions show a monthly/yearly fee that is NOT included in the session total; say so. When you quote one of these prices, credit its source (named in the note): for the blog, name its author, Alexandre Moleiro. On Madeira and the Azores they carry vatUnverified: the list uses mainland VAT, so tell the user to confirm the price;
-- "opc_direct": chargers outside MOBI.E (Continente, Tesla...), listed apart in outsideMobie. It's this site's price as the NAP publishes it, an asterisked guess (nobody says what it covers), say so. When the same charger also has "direct" offers (network-wide prices), show both: they can differ.
+- "opc_direct": chargers outside MOBI.E (Continente, Tesla...): this charger's own price as the NAP publishes it, paid to the operator. It's ranked like any other price; the NAP doesn't say whether VAT is in it, so mention that assumption. When the same charger also has "direct" offers (network-wide prices), show both: they can differ.
+MOBI.E chargers and those outside it come in one ranking; no network is preferred, the price decides (regime "sem_ceme" marks the ones outside MOBI.E, with no CEME).
 CEME promotions: some CEMEs give a discount only at one network (e.g. a CEME's energy cheaper at Powerdot chargers, or a subscription that cuts the operator fee there). A result's "promos" lists the ones at that charger, each with label, total (this session with it), saving, until and note:
 - applied: true means it's for every customer of that tariff and is already in that option's total (the option carries "promos" and, for operator-fee discounts, opcDiscountPct). Say the price includes it and until when.
 - newCustomers: true means it only holds for people who sign up during the promotion (maxHours: how long it lasts after signing up). It is never in any total. Mention it as a tip ("if you're new to X, signing up by <until> would make this session cost <total>"), never as the price.
@@ -437,16 +438,15 @@ export function createServer(getDataset, live) {
     await withLive(live, ctx, t);
     const { total, results } = ds.search({ ...w, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only, limit: Infinity });
     if (!results.length) return err(t('err.noMatch'));
-    const { mobie, outsideMobie } = await rank(results, car(a), {
+    const ranked = await rank(results, car(a), {
       at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang,
       monthKwh: await expandMonthKwh(a.month_kwh, tariffKey),
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
-    if (!mobie.length && !outsideMobie.length) return err(t('err.noneLeft'));
-    const top = mobie.slice(0, a.limit);
-    const outside = outsideMobie.slice(0, 3);
-    for (const q of [...top, ...outside]) { q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm); }
-    const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, results: top, outsideMobie: outside };
+    if (!ranked.length) return err(t('err.noneLeft'));
+    const top = ranked.slice(0, a.limit);
+    for (const q of top) { q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm); }
+    const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, results: top };
     // The text version, for clients that ignore structuredContent.
     const lines = top.map((q, i) => `${i + 1}. ${q.best ? q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
     return ok(data, `${lines.join('\n')}\n\n${JSON.stringify(data)}`);

@@ -46,7 +46,6 @@
   .opts em { font-style: normal; font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
   .foot { color: var(--muted); font-size: 11.5px; margin-top: 8px; }
   .empty { color: var(--muted); padding: 12px 0; }
-  .sec { color: var(--muted); font-size: 12px; font-weight: 600; padding: 14px 0 2px; }
   .st { font-weight: 600; }
   .st-available { color: var(--accent); }
   .st-charging, .st-outOfOrder, .st-inoperative, .st-blocked { color: #c0392b; }
@@ -69,7 +68,7 @@
     en: {
       waiting: 'Waiting for results…', none: 'No results.', away: 'km away',
       route: (km, off) => `km ${km} of route, ${off} km off`, range: 'range',
-      outside: 'Outside MOBI.E: pay the operator directly, price not comparable *',
+      outside: 'outside MOBI.E, pay the operator',
       adhoc: 'Card / QR at charger', direct: 'Operator direct', contract: 'needs another contract', cheapest: 'cheapest overall',
       sub: 'subscription', promo: 'promotion', promos: 'Promotions', allIn: 'all in, operator fee included', breakdown: 'Breakdown', energy: 'Energy', operator: 'Operator', notPublished: 'not published',
       cardQr: 'Card / QR', own: 'Direct', note: 'Note', assumes: 'Assumes', point: 'Point', directions: 'Directions',
@@ -81,7 +80,7 @@
     pt: {
       waiting: 'À espera dos resultados…', none: 'Sem resultados.', away: 'km daqui',
       route: (km, off) => `km ${km} do percurso, a ${off} km`, range: 'intervalo',
-      outside: 'Fora da MOBI.E: paga-se ao operador, preço não comparável *',
+      outside: 'fora da MOBI.E, paga-se ao operador',
       adhoc: 'Cartão / QR no posto', direct: 'Operador directo', contract: 'exige outro contrato', cheapest: 'o mais barato',
       sub: 'subscrição', promo: 'promoção', promos: 'Promoções', allIn: 'tudo incluído, com a tarifa do operador', breakdown: 'Detalhe', energy: 'Energia', operator: 'Operador', notPublished: 'não publicada',
       cardQr: 'Cartão / QR', own: 'Directo', note: 'Nota', assumes: 'Pressupostos', point: 'Ponto', directions: 'Direcções',
@@ -111,7 +110,7 @@
     if (data?.lang) setLang(data.lang);
     const s = S();
     const list = document.getElementById('list');
-    const rows = [...(data?.results || []), ...(data?.outsideMobie || []).map(q => ({ ...q, outside: true }))];
+    const rows = data?.results || [];
     if (!rows.length) { list.className = 'empty'; list.textContent = s.none; return; }
     list.className = '';
     // Only when the tool was called with detail (or in QA): each quarter's
@@ -130,15 +129,14 @@
       const range = q.total && q.total.low !== q.total.high ? `${eur(q.total.low)}–${eur(q.total.high)}` : '';
       const dist = q.km != null ? `${km(q.km)} ${s.away}` : q.alongKm != null ? s.route(Math.round(q.alongKm), km(q.offRouteKm)) : '';
       const h = q.headline;
-      const opts = (q.options || []).map(o => `<li class="${q.best && o.kind === q.best.kind && o.label === q.best.label ? 'hl' : ''}"><span>${eur(o.total)}${o.asterisk ? '*' : ''}</span> ${esc(optName(o))}`
+      const opts = (q.options || []).map(o => `<li class="${q.best && o.kind === q.best.kind && o.label === q.best.label ? 'hl' : ''}"><span>${eur(o.total)}</span> ${esc(optName(o))}`
         + `${o.requiresOtherContract ? ` <em>${s.contract}</em>` : ''}${o.cheaperElsewhere ? ` <em>${s.cheapest}</em>` : ''}`
         + `${o.subscription ? ` <em>${esc(o.subscription.text)}</em>` : ''}${o.promos ? ` <em>${s.promo}</em>` : ''}</li>`).join('');
-      const head = q.outside && !rows[i - 1]?.outside ? `<div class="sec">${s.outside}</div>` : '';
-      return `${head}<div class="row${i === 0 && q.total ? ' best' : ''}">
+      return `<div class="row${i === 0 && q.total ? ' best' : ''}">
         <div class="n">${i + 1}</div>
         <div class="where">${esc(q.operator)}<br><span style="font-weight:400">${esc(q.address)}${q.city ? ', ' + esc(q.city) : ''}</span></div>
-        <div class="eur">${q.best ? eur(q.best.total) : (q.total?.asterisk ? '' : q.total ? '≥ ' : '') + eur(q.total?.eur) + (q.total?.asterisk ? '*' : '')}<small>${q.session.minutes} min${q.session.startLocal ? ` · ${esc(q.session.startLocal)}–${esc(q.session.endLocal)}` : ''}</small></div>
-        <div class="sub">${q.status ? `<span class="st st-${esc(q.status)}">${esc(s.status[q.status] || q.status)}</span> · ` : ''}${esc(q.kw)} kW ${esc(q.connector)}${q.dc ? ' DC' : ' AC'} · ${km(q.session.kwhBilled)} kWh · ${esc(dist)}${range ? ` · ${s.range} ${range}` : ''}</div>
+        <div class="eur">${q.best ? eur(q.best.total) : (q.total ? '≥ ' : '') + eur(q.total?.eur)}<small>${q.session.minutes} min${q.session.startLocal ? ` · ${esc(q.session.startLocal)}–${esc(q.session.endLocal)}` : ''}</small></div>
+        <div class="sub">${q.status ? `<span class="st st-${esc(q.status)}">${esc(s.status[q.status] || q.status)}</span> · ` : ''}${esc(q.kw)} kW ${esc(q.connector)}${q.dc ? ' DC' : ' AC'} · ${q.regime === 'sem_ceme' ? esc(s.outside) + ' · ' : ''}${km(q.session.kwhBilled)} kWh · ${esc(dist)}${range ? ` · ${s.range} ${range}` : ''}</div>
         ${opts ? `<ul class="opts">${opts}</ul>` : ''}
         <details><summary>${s.breakdown}</summary><dl>
           ${h ? `<dt>${s.energy}</dt><dd>${h.opcIncluded ? `${eur(h.total)} ${s.allIn}` : eur(h.energyEur)} · ${esc(h.ceme)} ${esc(h.name)}${h.kwhByPeriod ? ' · ' + Object.entries(h.kwhByPeriod).map(([p, k]) => `${km(k)} kWh ${esc(s.period[p] || p)}`).join(', ') : ''}</dd>` : ''}

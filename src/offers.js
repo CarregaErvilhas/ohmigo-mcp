@@ -55,6 +55,15 @@ for (const o of OFFERS) for (const id of o.scope.operatorIds || []) {
   byOperator.get(id).push(o);
 }
 
+// Notes that the NAP's own price for some chargers is wrong (offers/nap-notes.json,
+// hand-made like manual.json). Outside MOBI.E the NAP's price is shown as the
+// operator's price unless a note here says otherwise; scope by operator id or
+// by site id.
+const NAP_NOTES = read('nap-notes.json').notes;
+export const noteFor = (notes, site) => notes.find(n =>
+  n.scope.siteIds?.includes(site.id) || n.scope.operatorIds?.includes(site.operatorId)) ?? null;
+export const napNote = site => noteFor(NAP_NOTES, site);
+
 export function isStale(offer, now = new Date()) {
   return (now - new Date(offer.checkedAt)) / 86_400_000 > STALE_DAYS;
 }

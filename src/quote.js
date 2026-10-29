@@ -17,16 +17,16 @@
 //   direct       anything outside the CEME system: a walk-up card terminal or
 //                QR, the operator's own app or subscription, a roaming app
 //                (Electroverse, Elli...). From offers/ (see src/offers.js).
-//   opc_direct   chargers outside MOBI.E (Continente, Tesla): the NAP's single
-//                price for this site, with an asterisk because nobody says what
-//                it covers. Listed after any direct offers, never instead.
+//   opc_direct   chargers outside MOBI.E (Continente, Tesla...): the NAP's
+//                price for this site, taken as final; next to any direct
+//                offers, never instead. offers/nap-notes.json can drop it.
 // New ways to pay (CEME subscriptions, eMSP flat prices) slot in as new kinds.
 //
 // Two summary fields:
 //   headline  the CEME option shown first (the user's cheapest tariff, or the
 //             cheapest popular one that needs no other contract).
 //   best      the cheapest option ANYONE can pay right now: no subscription
-//             fee, no other contract, no asterisk. Chargers are ranked by it,
+//             fee, no other contract. Chargers are ranked by it,
 //             so an IONITY whose own app beats every CEME ranks where it should.
 
 import { applicable, simulate } from './ceme.js';
@@ -35,7 +35,7 @@ import { localOffset, localTime, REGION_TZ, sessionProfile } from './profile.js'
 import { translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { describePlan, opcCost } from './opc.js';
-import { isStale, offersAt, ownWalkUp, SOURCE } from './offers.js';
+import { isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, withPromos } from './promos.js';
 
 const r2 = x => Math.round(x * 100) / 100;
@@ -188,19 +188,23 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
 
   if (point.regime === 'sem_ceme') {
     // Outside MOBI.E: no CEME, the operator bills directly. The NAP has one
-    // pricePerDeliveryUnit with nothing saying whether it's the final price.
-    // We estimate as if it were a final €/kWh and mark it, and the ranking
-    // never mixes these with MOBI.E. It's shown next to the direct offers,
-    // not instead of them: the offers are one price for the whole network,
-    // the NAP's is this site's (Tesla's vary by site).
+    // pricePerDeliveryUnit per point; we take it as the operator's final
+    // €/kWh (an assumption, stated) and rank it like any other price, unless
+    // offers/nap-notes.json says it's wrong for this charger. It sits next to
+    // the direct offers, not instead of them: an offer is one price for the
+    // whole network, the NAP's is this site's (Tesla's vary by site).
     const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
+    const wrong = napNote(site);
     base.options.push(...directOptions(direct, session, t, base.region));
-    if (nap != null) {
-      base.options.push({ kind: 'opc_direct', label: t('option.opcDirect', { operator: site.operator ?? 'Operator' }),
-        total: r2(nap * session.kwh), asterisk: true, note: t('option.opcDirect.note', { price: t.num(nap) }) });
+    if (nap != null && wrong) base.assumptions.push(t('assume.napWrong', { why: wrong.why }));
+    else if (nap != null) {
+      base.options.push({ kind: 'opc_direct', label: site.operator ? t('option.opcDirect', { operator: site.operator }) : t('option.opcDirect.noName'),
+        total: r2(nap * session.kwh), eurPerKwh: nap, note: t('option.opcDirect.note', { price: t.num(nap) }) });
+      base.assumptions.push(t('assume.napPrice'));
     }
+    base.options.sort((a, b) => a.total - b.total);
     const first = base.options[0];
-    base.total = first ? { eur: first.total, complete: false, asterisk: first.kind === 'opc_direct' } : null;
+    base.total = first ? { eur: first.total, complete: true } : null;
     base.best = bestOption(base.options, null);
     base.note = t('note.outside');
     return base;
@@ -289,7 +293,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
 // The cheapest option open to anyone. A CEME option only counts when its
 // total is complete (operator fee known).
 function bestOption(options, total) {
-  const open = options.filter(o => !o.requiresOtherContract && !o.subscription && !o.asterisk
+  const open = options.filter(o => !o.requiresOtherContract && !o.subscription
     && (o.kind !== 'ceme' || total?.complete));
   return open.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
 }
@@ -298,15 +302,15 @@ function bestOption(options, total) {
 // network reports it), the rest are out.
 const USABLE = new Set(['available', 'unknown', null]);
 
-// Ranked by `best`. Without one (operator fee unknown, or only a guessed
-// price), the energy-only total goes after all the complete ones, and points
-// with no price at all go last.
+// Ranked by `best`. Without one (operator fee unknown, or only prices that
+// need a subscription or another contract), the energy-only total goes after
+// all the complete ones, and points with no price at all go last.
 const sortKey = q => q.best ? q.best.total : q.total ? 1e6 + q.total.eur : Infinity;
 export const byBest = (a, b) => sortKey(a) - sortKey(b);
 
-// Ranks MOBI.E sites by `best` (see sortKey), one row
-// per site (its cheapest point). Sites outside MOBI.E come back in
-// `outsideMobie`, ranked apart: their price is a guess or the operator's own.
+// Ranks sites by `best` (see sortKey), one row per site (its cheapest
+// point). MOBI.E and the networks outside it share one list: no network is
+// preferred, the price decides.
 export async function rank(candidates, car, opts = {}) {
   const simCache = new Map();
   const all = await Promise.all(candidates.flatMap(({ site, points, ...dist }) =>
@@ -321,8 +325,5 @@ export async function rank(candidates, car, opts = {}) {
     }
     return [...bySite.values()].sort((a, b) => sortKey(a) - sortKey(b));
   };
-  return {
-    mobie: best(quotes.filter(q => q.regime !== 'sem_ceme')),
-    outsideMobie: best(quotes.filter(q => q.regime === 'sem_ceme')),
-  };
+  return best(quotes);
 }
