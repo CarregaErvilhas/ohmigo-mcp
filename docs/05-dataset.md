@@ -14,7 +14,7 @@ offers (`offers/`, see [04](04-operator-offers.md)).
 ```
  Monday 06:00 UTC, nap-dashboard's refresh.yml
    │  downloads the NAP static XML (~170 MB) and MOBI.E's tariff CSV
-   │  runs its pipeline, then scripts/ohmigo_dataset.py
+   │  runs its pipeline (including the OpenStreetMap dump), then scripts/ohmigo_dataset.py
    │  uploads the result as the "ohmigo-dataset" Actions artifact
    ▼
  nap-dashboard's pages.yml
@@ -59,6 +59,8 @@ Monday.
     "city": "Albergaria-a-Velha", "address": "...",
     "operator": "IONITY GmbH", "operatorId": "IONY", "website": "https://ionity.eu",
     "payment": ["apps", "rfid"],
+    "osm": { "name": "IONITY Albergaria", "brand": "IONITY", "operator": "IONITY",
+             "openingHours": "24/7", "access": "yes", "parkingFee": "no" },
     "points": [{
       "id": "ALB-00019-01", "kw": 350, "connector": "CCS", "dc": true, "phases": null,
       "level": "MT", "regime": "mobie",
@@ -77,6 +79,14 @@ Monday.
   (outside MOBI.E).
 - `opc`: the plans described in [02](02-cost-math.md), in MOBI.E's raw form,
   per-minute tiers included.
+- `osm`: what OpenStreetMap has for the site, joined by the MOBI.E code in
+  its `ref` tag (only when the OSM element is within 1 km of the NAP's
+  coordinates). Optional, and so is every field in it: `name`, `brand`,
+  `operator`, `openingHours`, `location` (`underground`...), `access`,
+  `parkingFee`, `maxstay`. Its `brand`/`operator` are often the chargers' owner
+  or the shop they're at (Lidl owns its chargers, Galp operates them), not
+  the OPC that bills the fee (that's the site's `operator`).
+  `lookup_charger` searches it and shows it ([01](01-how-it-works.md)).
 - `schema`: bumped by nap-dashboard when the format changes incompatibly.
   ohmigo refuses a schema it doesn't know, rather than misreading it.
 

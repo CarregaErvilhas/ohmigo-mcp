@@ -8,7 +8,9 @@
 //
 // Shape (one JSON file, ~6 MB):
 //   { schema, generatedAt, sites: [{ id, code, lat, lon, region, city, address,
-//     operator, points: [{ id, kw, connector, dc, phases, level, regime, opc }] }] }
+//     operator, osm?, points: [{ id, kw, connector, dc, phases, level, regime, opc }] }] }
+// `osm` is what OpenStreetMap adds about the site (its name, brand, opening
+// hours...), when the community mapped it with the MOBI.E code.
 //
 // ~9k sites fit in memory easily, and a linear scan per query takes a few
 // milliseconds, so there's no spatial index.
@@ -16,6 +18,8 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
+import { fold, Index } from './lookup.js';
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 // The dataset format this code understands. nap-dashboard bumps SCHEMA in
@@ -36,11 +40,12 @@ export function haversineKm(a, b) {
   return 2 * R_KM * Math.asin(Math.sqrt(h));
 }
 
-// Distance from p to the polyline, and how far along it (km from the start)
-// the closest point is. Uses a local equirectangular projection per segment,
+// Distance from p to the polyline, how far along it (km from the start) the
+// closest point is, and the segment it's closest to (the direction of travel
+// there). Uses a local equirectangular projection per segment,
 // which is accurate to well under 1 % at Portugal's latitudes and segment sizes.
 export function routeDistance(p, route) {
-  let best = { km: Infinity, alongKm: 0 };
+  let best = { km: Infinity, alongKm: 0, seg: null };
   let walked = 0;
   for (let i = 0; i < route.length - 1; i++) {
     const a = route[i], b = route[i + 1];
@@ -51,13 +56,11 @@ export function routeDistance(p, route) {
     const t = len2 ? Math.max(0, Math.min(1, (px * bx + py * by) / len2)) : 0;
     const km = Math.hypot(px - t * bx, py - t * by);
     const seg = Math.sqrt(len2);
-    if (km < best.km) best = { km, alongKm: walked + t * seg };
+    if (km < best.km) best = { km, alongKm: walked + t * seg, seg: { from: a, to: b } };
     walked += seg;
   }
   return best;
 }
-
-const fold = s => (s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
 
 export class Dataset {
   constructor(raw) {
@@ -76,6 +79,9 @@ export class Dataset {
         this.pointById.set(p.id, bare === undefined ? { site: s, point: p } : null);
       }
     }
+    // ~150 ms, so it's built here (at boot and on the weekly swap), not on
+    // somebody's first question.
+    this.index = new Index(this.sites);
   }
 
   // "SITE/POINT", or a bare point id when it's unique. null when unknown or
@@ -113,13 +119,42 @@ export class Dataset {
   // Centre of the sites in a municipality/city, for "near Leiria" without
   // coordinates. Matches NAP's `city` field, accent- and case-insensitive.
   resolvePlace(name) {
-    const q = fold(name);
+    // "Leiria, Portugal" or "Leiria (Pombal)": the town is the first part.
+    const q = fold(name.split(/[,(]/)[0]);
+    if (!q) return null;
     let hits = this.sites.filter(s => fold(s.city) === q);
     if (!hits.length) hits = this.sites.filter(s => fold(s.city).includes(q) || fold(s.address).includes(q));
     if (!hits.length) return null;
     const lat = hits.reduce((a, s) => a + s.lat, 0) / hits.length;
     const lon = hits.reduce((a, s) => a + s.lon, 0) / hits.length;
     return { lat, lon, matchedSites: hits.length };
+  }
+
+  // Sites by what the user calls them (see lookup.js), best match first and,
+  // among equally good ones, nearest to `near` when given. Points that fail
+  // the filter are dropped, and so are sites left with none.
+  lookup(query, { near, radiusKm, limit = 5, ...filter } = {}) {
+    const hits = this.index.find(query);
+    // Without coordinates, a town in the query orders the results by
+    // distance to it (only ordering: the radius needs real coordinates).
+    const town = near ? null : this.index.townIn(query);
+    const centre = near ?? (town && this.resolvePlace(town));
+    const ok = this.pointFilter(filter);
+    let out = [];
+    for (const h of hits) {
+      const points = h.site.points.filter(ok);
+      if (!points.length) continue;
+      const km = centre ? haversineKm(centre, h.site) : undefined;
+      if (near && radiusKm != null && km > radiusKm) continue;
+      out.push({ ...h, points, km });
+    }
+    // Equally good matches: the ones that matched on who runs the charger or
+    // its name before the ones that only matched on the town, then nearest.
+    const strong = h => h.matched.some(f => f !== 'city' && f !== 'address') ? 0 : 1;
+    out.sort((a, b) => b.score - a.score || strong(a) - strong(b) || (a.km ?? 0) - (b.km ?? 0) || a.site.id.localeCompare(b.site.id));
+    const total = out.length;
+    out = out.slice(0, limit);
+    return { total, town: town ?? undefined, results: out };
   }
 
   pointFilter({ minKw, connectors, dcOnly } = {}) {
@@ -131,15 +166,17 @@ export class Dataset {
 
   // Sites near a point or along a route, nearest first (or in route order),
   // each with only the points that pass the filter.
-  search({ near, radiusKm = 5, route, corridorKm = 2, limit = 20, ...filter }) {
+  // `only`: a Set of site ids to keep (a text filter, from lookup()).
+  search({ near, radiusKm = 5, route, corridorKm = 2, limit = 20, only, ...filter }) {
     const ok = this.pointFilter(filter);
     const out = [];
     for (const s of this.sites) {
+      if (only && !only.has(s.id)) continue;
       let dist;
       if (route) {
         const d = routeDistance(s, route);
         if (d.km > corridorKm) continue;
-        dist = { offRouteKm: d.km, alongKm: d.alongKm };
+        dist = { offRouteKm: d.km, alongKm: d.alongKm, seg: d.seg };
       } else {
         const km = haversineKm(near, s);
         if (km > radiusKm) continue;
@@ -149,6 +186,23 @@ export class Dataset {
       if (points.length) out.push({ site: s, points, ...dist });
     }
     out.sort(route ? (a, b) => a.alongKm - b.alongKm : (a, b) => a.km - b.km);
-    return { total: out.length, results: out.slice(0, limit) };
+    const kept = route ? this.ourSide(out) : out;
+    for (const r of kept) delete r.seg;
+    return { total: kept.length, results: kept.slice(0, limit) };
+  }
+
+  // Along a route the direction of travel is known, so the far side of a
+  // motorway service area (across the road) goes, when the sites say which
+  // way they serve. Not by the right-hand rule: a route is often a few
+  // waypoints, and its segments don't follow the road closely enough for
+  // twins only a hundred metres apart. Then both sides stay. See direction.js.
+  ourSide(results) {
+    const drop = new Set();
+    for (const area of serviceAreas(clusterPlaces(results))) {
+      if (area.length < 2) continue;
+      const pick = sideFor(area, area[0][0].seg, name => this.resolvePlace(name), { geometry: false });
+      if (pick) for (const pl of area) if (!pick.places.includes(pl)) pl.forEach(h => drop.add(h));
+    }
+    return results.filter(r => !drop.has(r));
   }
 }

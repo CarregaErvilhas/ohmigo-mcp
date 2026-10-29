@@ -66,6 +66,8 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/mcp.js` | Tools, argument schemas, the instructions the assistant reads |
 | `src/i18n.js` | Every user-facing sentence, in English and Portuguese |
 | `src/data.js` | Loads the dataset; searches by distance and along a route |
+| `src/lookup.js` | Finds a charger by what the user calls it: code, operator or brand, OSM name, town, address |
+| `src/direction.js` | Motorway service areas: which side the driver can reach, from where they're heading |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |
 | `src/quote.js` | Prices one plug for every way to pay; ranks plugs |
 | `src/charging.js` | Session energy and duration, as constant-power segments |
@@ -85,6 +87,65 @@ Follow one `find_cheapest_charging` call through the code:
 | `scripts/scrape-offers.mjs` | Weekly scrape of the blog (`.github/workflows/offers.yml`) |
 | `scripts/offer-gaps.mjs` | Lists operators that probably sell directly and have no offer |
 | `test/` | `npm test` |
+
+## Finding the charger the user means
+
+Nobody knows a charger's id. People say "the Continente in Leiria", "IONITY
+Mealhada", "the Lidl in Coimbra", or read the code off the sticker
+("LRA-00156"). `lookup_charger` takes those words (`src/lookup.js`):
+
+- **A code** finds its site however it's written: with or without the
+  operator prefix (`GLP-LRA-00156`), MOBI.E's (`MOBI-LRA-00156`), the leading
+  zeros, or the socket number (`LRA-00156-02`). Ids that aren't MOBI.E codes
+  (Tesla's UUIDs, Continente's `0001PL0002`) match whole.
+- **Words** must all appear in what the site is known by: the NAP's operator,
+  the network labels in `offers/networks.json` ("Powerdot" for `HORZ`), the
+  `osm` block from nap-dashboard (OpenStreetMap's name, brand, operator:
+  often the chargers' owner or the shop they're at), town and address. A word matches the start of a
+  site word, and longer words forgive one typo. Words like "posto", "area de
+  servico" or "near" are ignored.
+- A **town** in the words orders the matches by distance to it, so "IONITY
+  Mealhada" lists the IONITY sites nearest Mealhada when there's none in it.
+  When no site has every word, each result says which words it lacks
+  (`missing`), and the assistant is told not to pass it off as the one.
+
+`estimate_charging_cost` takes the same text as `site`. Several NAP sites in
+one spot (a motorway service area often has one per charger) are one place to
+the driver and are priced together; matches in different places come back as
+a question for the user. The other two search tools take the words as `query`,
+a filter on top of the place or route ("Continente" near Leiria).
+
+**Who operates vs who owns.** The NAP's operator is the OPC that runs the
+charger and bills its fee. The owner can be someone else: Lidl's chargers are
+owned by Lidl and operated by Galp, so the NAP says Galp and OSM's brand says
+Lidl. Both are right, and both are searchable.
+
+## Motorways: which side of the road
+
+A motorway service area usually has a charger site on each side of the road,
+and a driver can only reach the one on their side. Both often share a name
+and even an address in the NAP, so what tells them apart is where the driver
+is heading (`src/direction.js`):
+
+- **Without a direction**, `estimate_charging_cost` doesn't guess: it answers
+  with the sides and tells the assistant to ask the user which way they're
+  going, then call again with `towards` (a town or lat/lon).
+  `lookup_charger` flags the pair (`directionNeeded`, `otherSide`).
+- **With a direction**, the side is the one whose published direction
+  agrees ("N/S", "S-N", "sentido Lisboa", in the NAP address or the OSM
+  name). Without one, the **right-hand rule**: Portugal drives on the right,
+  so the service area to the right of the travel direction. That's a guess
+  from coordinates, so it only decides when one side is clearly to the right,
+  and the result carries an assumption telling the user to check the signs.
+  When it can't decide, both sides are priced.
+- **On a route**, the far side is dropped only when the sites publish their
+  direction. Routes are often a few waypoints, too coarse for twins a hundred
+  metres apart.
+
+The rule is checked against every pair the data labels
+(`test/direction.test.js`). Because twins can stand closer together than two
+chargers of one car park, motorway sites only count as one place when their
+labels agree or they're a few dozen metres apart (`samePlace`).
 
 ## Design decisions worth knowing
 
