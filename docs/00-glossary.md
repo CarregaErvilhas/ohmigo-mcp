@@ -69,7 +69,9 @@ regulator (ERSE). It's inside the CEME's energy price.
 platform manager.
 
 **VAT (IVA)** — 23 % on the mainland, less in Madeira and the Azores. Applies
-to the whole invoice, OPC fee included.
+to the whole invoice, OPC fee included. Every price MOBI.E and the NAP
+publish (OPC fee, ad hoc, the price of chargers outside MOBI.E) comes
+without it, so ohmigo adds the charger's region's VAT.
 
 **Vazio / fora de vazio** — off-peak / peak hours. "Bi-horário" tariffs have
 two prices; the hours depend on the region and the tariff's cycle.

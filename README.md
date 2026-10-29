@@ -81,8 +81,8 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
 - **Some MOBI.E chargers publish no operator fee anywhere.** Their price is
   energy only, shown as "≥".
 - **Chargers outside MOBI.E** (Continente, Tesla) are priced from the NAP's
-  per-site price, taken as final with VAT (the NAP doesn't say), next to any
-  offers for that network. `offers/nap-notes.json` drops a NAP price known to
-  be wrong.
+  per-site price plus the region's VAT (the NAP publishes prices without
+  VAT), next to any offers for that network. `offers/nap-notes.json` drops a
+  NAP price known to be wrong.
 - **Direct offers come from one public price list.** Each one shows its
   source and date; `npm run offers:gaps` shows operators with no offer yet.

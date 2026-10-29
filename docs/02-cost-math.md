@@ -101,8 +101,15 @@ slice.
 **Some sockets publish two values for one component**, with nothing to say
 which one is right. We return both ends as `low` / `high` and say so.
 
-**These fees come without VAT.** VAT applies to the whole invoice, so
-`quote.js` multiplies the fee by the region's VAT.
+**These fees come without VAT.** So does every price MOBI.E and the NAP
+publish: the ad hoc price and the NAP's price for chargers outside MOBI.E
+too (the NAP confirmed it, and the numbers agree: MOBI.E's ad hoc price at
+IONITY × 1.23 is IONITY's own walk-up price). VAT applies to the whole
+invoice, so `quote.js` multiplies each of them by the VAT of the charger's
+region: ceme-v2's `vat` for the operator fee next to a CEME tariff,
+`REGION_VAT` in `opc.js` (a copy of ceme-v2's table) for the prices that
+don't go through ceme-v2. That's what makes these prices right on Madeira
+and the Azores, where VAT is lower.
 
 Where the fee comes from, in order:
 1. MOBI.E's tariff file (in the dataset), which has the per-minute tiers;
@@ -159,9 +166,8 @@ that fits the socket and saves something, one row each, with `applied`
 saying whether it's already in a shown total (those are always listed, even
 when they cost more, so the user sees why). It's absent when there are none.
 
-**`adhoc`** — bank card / QR at the charger: MOBI.E's `AD_HOC_PAYMENT` price.
-We assume it includes VAT, since it's a consumer price, but MOBI.E doesn't
-say so.
+**`adhoc`** — bank card / QR at the charger: MOBI.E's `AD_HOC_PAYMENT` price
+× the region's VAT (MOBI.E publishes it without VAT, like the operator fee).
 
 **`direct`** — walk-up card terminal or QR, the operator's own app or
 subscription, or a roaming app ([04](04-operator-offers.md)): kWh × the
@@ -171,8 +177,10 @@ fee covers every session that month. If the charger's own operator has a
 walk-up offer priced for this band, it replaces MOBI.E's ad hoc price.
 
 **`opc_direct`** — chargers outside MOBI.E (Continente, Tesla...): the NAP's
-price for that site × kWh, paid to the operator. The NAP doesn't say whether
-VAT is in it; we take it as final and say so in the assumptions. It's listed
+price for that site × the region's VAT × kWh, paid to the operator
+(`eurPerKwhExVat` is the NAP's number, `eurPerKwh` has the VAT in). The NAP
+doesn't say whether the price covers anything besides the kWh; we take it as
+the whole price and say so in the assumptions, with the VAT rate added. It's listed
 next to the network's `direct` offers, not instead of them: an offer is one
 price for the whole network, the NAP's is this site's. It's left out only
 when `offers/nap-notes.json` has a note saying the NAP's price for that
@@ -206,7 +214,7 @@ Two summary fields:
 | Car specs guessed | an assumption line naming the guess |
 | Operator fee unknown | "≥" before the price, `complete: false` |
 | Two values published for one fee | a price range |
-| Price outside MOBI.E | an assumption line: the NAP's price taken as final |
+| Price outside MOBI.E | an assumption line: the NAP's price taken as the whole €/kWh, plus the region's VAT |
 | Direct offers from a price list | the source and the date it was checked; "may be out of date" after 90 days |
 | A CEME promotion in the price | an assumption naming it and its end date |
 | Live status stale | `live.fresh: false`, said in the footer |

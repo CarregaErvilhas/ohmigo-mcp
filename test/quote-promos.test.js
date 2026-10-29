@@ -86,17 +86,28 @@ test('EDP × UVE at an EDP charger: the all-in price is the total, operator fee 
   assert.equal(away.headline.total, r2(7 + (1 + 0.2 * away.session.kwhBilled) * 1.23), 'not at Galp');
 });
 
-test('outside MOBI.E: the NAP site price is listed next to the direct offers, never instead', async () => {
+test('outside MOBI.E: the NAP site price, plus VAT, is listed next to the direct offers, never instead', async () => {
   const tesla = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
   const q = await quotePoint({ site: { ...site('TSLA'), operator: 'Tesla' }, point: tesla }, car, { at, lang: 'en' });
   assert.ok(q.options.some(o => o.kind === 'direct'), 'Tesla has direct offers in offers/');
   const nap = q.options.find(o => o.kind === 'opc_direct');
-  assert.ok(Math.abs(nap.total - 0.3 * q.session.kwhBilled) < 0.02, 'NAP price x billed kWh');
-  assert.equal(nap.eurPerKwh, 0.3);
+  assert.equal(nap.total, r2(0.3 * 1.23 * q.session.kwhBilled), 'NAP price (excl. VAT) x VAT x billed kWh');
+  assert.equal(nap.eurPerKwh, 0.369);
+  assert.equal(nap.eurPerKwhExVat, 0.3);
   // Cheaper than any offer, so it's ranked like one: it's `best`.
   assert.equal(q.best.kind, 'opc_direct');
   assert.equal(q.total.complete, true);
-  assert.ok(q.assumptions.some(a => a.includes("operator's price from the NAP")));
+  assert.ok(q.assumptions.some(a => a.includes("operator's price from the NAP") && a.includes('(23 %)')));
+});
+
+test('outside MOBI.E on the islands: the NAP price takes the island VAT', async () => {
+  const tesla = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
+  for (const [region, vat] of [['MAD', 1.22], ['AZO', 1.16]]) {
+    const q = await quotePoint({ site: { ...site('TSLA'), operator: 'Tesla', region }, point: tesla }, car, { at, lang: 'pt' });
+    const nap = q.options.find(o => o.kind === 'opc_direct');
+    assert.equal(nap.total, r2(0.3 * vat * q.session.kwhBilled), region);
+    assert.ok(q.assumptions.some(a => a.includes(`(${Math.round((vat - 1) * 100)} %)`)), region);
+  }
 });
 
 test('outside MOBI.E with a MOBI.E ad hoc price: says bank card / QR, and stands in without the NAP price', async () => {
@@ -107,7 +118,9 @@ test('outside MOBI.E with a MOBI.E ad hoc price: says bank card / QR, and stands
   assert.match(q.best.label, /Bank card \/ QR/);
   const off = await quotePoint({ site: hgp, point: { id: 'h2', kw: 22, dc: false, connector: 'T2', regime: 'sem_ceme', opc } }, car, { at, lang: 'en' });
   assert.equal(off.best.kind, 'adhoc');
-  assert.ok(Math.abs(off.best.total - 0.28 * off.session.kwhBilled) < 0.02);
+  assert.equal(off.best.total, r2(0.28 * off.session.kwhBilled * 1.23), 'MOBI.E ad hoc price + VAT');
+  const azo = await quotePoint({ site: { ...hgp, region: 'AZO' }, point: { id: 'h2', kw: 22, dc: false, connector: 'T2', regime: 'sem_ceme', opc } }, car, { at, lang: 'en' });
+  assert.equal(azo.best.total, r2(0.28 * azo.session.kwhBilled * 1.16), 'island VAT');
 });
 
 test('rank: MOBI.E and outside MOBI.E share one list, the price decides', async () => {
