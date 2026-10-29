@@ -64,7 +64,12 @@ export const MESSAGES = {
     'err.target': () => 'target_pct must be above start_pct.',
     'err.noMatch': () => 'No chargers match. Widen radius_km/corridor_km or relax the filters.',
     'err.noneLeft': () => 'No charger matches (time limit, availability or filters). Raise max_minutes, set available_only=false or widen the search.',
-    'err.point': ({ id }) => `Unknown or ambiguous point_id ${id}. Use the "SITE/POINT" id from find_chargers.`,
+    'err.point': ({ id }) => `Unknown or ambiguous point_id ${id}. Pass the charger as site (its siteId, code or name) instead.`,
+    'err.which': () => 'Say which charger: site (siteId, code or name from lookup_charger) or point_id.',
+    'err.lookup': ({ query }) => `No charger matches "${query}". Try fewer words (operator or brand + town), the code on the charger's sticker, or lat/lon.`,
+    'err.several': ({ query, n }) => `"${query}" fits chargers in ${n} places. Ask the user which one and pass its siteId as site ("+N": more sites at that same spot, priced together). The best matches:`,
+    'credit.osm': () => '"osm" data © OpenStreetMap contributors (ODbL), openstreetmap.org/copyright',
+    'note.partial': ({ words }) => `No charger matches every word; the best ones lack: ${words}. Don't present them as the charger the user meant without saying so.`,
   },
   pt: {
     'progress.live': () => 'A obter o estado dos postos em tempo real no PAN…',
@@ -110,7 +115,12 @@ export const MESSAGES = {
     'err.target': () => 'target_pct tem de ser maior que start_pct.',
     'err.noMatch': () => 'Nenhum posto corresponde. Alarga radius_km/corridor_km ou alivia os filtros.',
     'err.noneLeft': () => 'Nenhum posto serve (limite de tempo, disponibilidade ou filtros). Sobe max_minutes, põe available_only=false ou alarga a pesquisa.',
-    'err.point': ({ id }) => `point_id ${id} desconhecido ou ambíguo. Usa o id "LOCAL/PONTO" do find_chargers.`,
+    'err.point': ({ id }) => `point_id ${id} desconhecido ou ambíguo. Passa antes o posto em site (o siteId, o código ou o nome).`,
+    'err.which': () => 'Diz qual é o posto: site (siteId, código ou nome do lookup_charger) ou point_id.',
+    'err.lookup': ({ query }) => `Nenhum posto corresponde a "${query}". Tenta menos palavras (operador ou marca + localidade), o código no autocolante do posto, ou lat/lon.`,
+    'err.several': ({ query, n }) => `"${query}" serve a postos em ${n} sítios. Pergunta ao utilizador qual é e passa o siteId dele em site ("+N": mais locais nesse mesmo sítio, cotados juntos). Os que mais se aproximam:`,
+    'credit.osm': () => 'Dados "osm" © contribuidores do OpenStreetMap (ODbL), openstreetmap.org/copyright',
+    'note.partial': ({ words }) => `Nenhum posto tem todas as palavras; aos melhores falta: ${words}. Não os apresentes como o posto que o utilizador queria sem o dizer.`,
   },
 };
 

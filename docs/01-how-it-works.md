@@ -65,6 +65,7 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/mcp.js` | Tools, argument schemas, the instructions the assistant reads |
 | `src/i18n.js` | Every user-facing sentence, in English and Portuguese |
 | `src/data.js` | Loads the dataset; searches by distance and along a route |
+| `src/lookup.js` | Finds a charger by what the user calls it: code, operator or brand, OSM name, town, address |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |
 | `src/quote.js` | Prices one plug for every way to pay; ranks plugs |
 | `src/charging.js` | Session energy and duration, as constant-power segments |
@@ -83,6 +84,33 @@ Follow one `find_cheapest_charging` call through the code:
 | `scripts/scrape-offers.mjs` | Weekly scrape of the blog (`.github/workflows/offers.yml`) |
 | `scripts/offer-gaps.mjs` | Lists operators that probably sell directly and have no offer |
 | `test/` | `npm test` |
+
+## Finding the charger the user means
+
+Nobody knows a charger's id. People say "the Continente in Leiria", "IONITY
+Mealhada", "the Lidl in Coimbra", or read the code off the sticker
+("LRA-00156"). `lookup_charger` takes those words (`src/lookup.js`):
+
+- **A code** finds its site however it's written: with or without the
+  operator prefix (`GLP-LRA-00156`), MOBI.E's (`MOBI-LRA-00156`), the leading
+  zeros, or the socket number (`LRA-00156-02`). Ids that aren't MOBI.E codes
+  (Tesla's UUIDs, Continente's `0001PL0002`) match whole.
+- **Words** must all appear in what the site is known by: the NAP's operator,
+  the network labels in `offers/networks.json` ("Powerdot" for `HORZ`), the
+  `osm` block from nap-dashboard (OpenStreetMap's name, brand, operator: the
+  shop or car park it's at), town and address. A word matches the start of a
+  site word, and longer words forgive one typo. Words like "posto", "area de
+  servico" or "near" are ignored.
+- A **town** in the words orders the matches by distance to it, so "IONITY
+  Mealhada" lists the IONITY sites nearest Mealhada when there's none in it.
+  When no site has every word, each result says which words it lacks
+  (`missing`), and the assistant is told not to pass it off as the one.
+
+`estimate_charging_cost` takes the same text as `site`. Several NAP sites in
+one spot (a motorway service area often has one per charger) are one place to
+the driver and are priced together; matches in different places come back as
+a question for the user. The other two search tools take the words as `query`,
+a filter on top of the place or route ("Continente" near Leiria).
 
 ## Design decisions worth knowing
 
