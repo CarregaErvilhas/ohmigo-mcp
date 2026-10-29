@@ -120,6 +120,42 @@ keep the ones that fit this plug:
 - if the user gave their `tariff_ids`, only those; otherwise the top 3 (or
   `tariffs_shown`) of ceme-v2's "popular" list.
 
+**CEME promotions** (`promos.js`) — some CEMEs give a discount only at one
+network: cheaper energy at Powerdot chargers, a subscription that cuts the
+operator's fee there, an all-in price on the CEME's own network. A few hold
+at any charger (free kWh every month). They're CEME offers, so they live in
+ceme-v2 (`PROMOS` in its `seed-data.js`, served with every tariff by
+`/v1/simulate`), tagged with a network label that `offers/networks.json` maps
+to operator ids (no label: any MOBI.E charger). At each charger you keep the
+ones that hold there. Each has a `target`:
+- `ENERGIA`: ceme-v2's discounted `totalEur` replaces the energy part (it's
+  energy math, so ceme-v2 does it);
+- `OPC`: `pct` off the operator fee, applied here, since `opc.js` computes
+  that fee (the option carries `opcDiscountPct`);
+- `FINAL`: ceme-v2's `totalEur` is the whole session, operator fee
+  included, and replaces the sum (`opcIncluded`, `energyEur: null`). It's
+  what you're billed, so it applies even where the sum would be lower;
+- `KWH_GRATIS`: the first kWh of each month are free. The server stores
+  nothing, so the assistant counts what the user charged this month and
+  sends it as `month_kwh` (`{ tariff_id: kWh }`); `ceme.js expandMonthKwh`
+  copies each count to the tariff's other voltage variant, and ceme-v2 puts
+  the free kWh still left at the start of the session. Without a count it
+  can't be applied, and it's a tip priced as if none were used yet.
+
+Then:
+- a promotion for **every customer** of the tariff goes into that option's
+  total (free kWh only with a count). The option carries `promos`, and an
+  assumption names the promotion. With a promotion in, another of the user's
+  tariffs can become the headline;
+- a promotion for **new customers only** never changes a price: almost
+  nobody who asks qualifies. It goes in the plug's `promos` list as a tip,
+  with what this session would cost with it (`total`) and the `saving`.
+
+`promos` on the plug lists every promotion that holds here for any tariff
+that fits the socket and saves something, one row each, with `applied`
+saying whether it's already in a shown total (those are always listed, even
+when they cost more, so the user sees why). It's absent when there are none.
+
 **`adhoc`** — bank card / QR at the charger: MOBI.E's `AD_HOC_PAYMENT` price.
 We assume it includes VAT, since it's a consumer price, but MOBI.E doesn't
 say so.
@@ -161,4 +197,5 @@ Two summary fields:
 | Two values published for one fee | a price range |
 | Price outside MOBI.E | an asterisk and a note |
 | Direct offers from a price list | the source and the date it was checked; "may be out of date" after 90 days |
+| A CEME promotion in the price | an assumption naming it and its end date |
 | Live status stale | `live.fresh: false`, said in the footer |

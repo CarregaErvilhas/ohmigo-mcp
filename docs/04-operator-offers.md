@@ -11,6 +11,12 @@ often cheaper:
 
 In ohmigo these are options of kind `direct` ([02](02-cost-math.md)).
 
+A discount a **CEME** gives at one network (LUZiGÁS cheaper at Powerdot, miio
+one cutting Powerdot's fee) is not a direct offer: you still pay with the CEME
+card or app. Those live in ceme-v2, next to the tariffs (`PROMOS` in its
+`seed-data.js`), and only borrow `networks.json` from here to find the
+chargers ([02](02-cost-math.md), "CEME promotions").
+
 ## Why not from the NAP?
 
 We checked. In the NAP, `brandsAccepted` is the same 54 CEME codes at every

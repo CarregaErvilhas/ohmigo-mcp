@@ -64,26 +64,50 @@ function cached(key, fn) {
 // With one, the key is the profile itself: points with the same power and
 // start share it, so a ranking needs one call per distinct charging speed.
 //   detail: ask for each tariff's per-slice breakdown (period, price, OMIE).
-export function simulate({ kwh, at = new Date(), region = 'CONT', profile = null, detail = false }) {
+//   monthKwh: what the user already charged this month per tariff, for
+//   free-kWh promotions (see expandMonthKwh). Part of the cache key.
+export function simulate({ kwh, at = new Date(), region = 'CONT', profile = null, detail = false, monthKwh = null }) {
+  const mk = monthKwh && Object.keys(monthKwh).length ? monthKwh : null;
+  const mkKey = mk ? JSON.stringify(Object.entries(mk).sort()) : '';
   if (profile?.length) {
     const slices = profile.map(({ at, kwh }) => ({ at, kwh }));
     const sum = slices.reduce((a, x) => a + x.kwh, 0);
-    const key = `simp|${region}|${detail ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',')}`;
+    const key = `simp|${region}|${detail ? 1 : 0}|${mkKey}|${slices.map(x => `${x.at}=${x.kwh}`).join(',')}`;
     return cached(key, () => call('/v1/simulate', {
       method: 'POST',
-      body: JSON.stringify({ kwh: Math.round(sum * 1000) / 1000, at: slices[0].at, region, useSpot: true, profile: slices, detail }),
+      body: JSON.stringify({ kwh: Math.round(sum * 1000) / 1000, at: slices[0].at, region, useSpot: true, profile: slices, detail, ...(mk && { monthKwh: mk }) }),
     }));
   }
   const k = Math.max(0.1, Math.round(kwh * 10) / 10);
   const q = new Date(Math.floor(at.getTime() / 900_000) * 900_000);
-  return cached(`sim|${region}|${k}|${q.toISOString()}`, () => call('/v1/simulate', {
+  return cached(`sim|${region}|${mkKey}|${k}|${q.toISOString()}`, () => call('/v1/simulate', {
     method: 'POST',
-    body: JSON.stringify({ kwh: k, at: q.toISOString(), region, useSpot: true }),
+    body: JSON.stringify({ kwh: k, at: q.toISOString(), region, useSpot: true, ...(mk && { monthKwh: mk }) }),
   }));
+}
+
+// The assistant says how much the user charged this month with each of their
+// tariffs, by the tariff_id list_ceme_tariffs gave it: one voltage variant
+// ("goldenergy-bt-clientesgold"). A charger may use the other one (MT), so
+// every variant of the same tariff gets the same count. `key` is quote.js's
+// tariffKey, passed in to keep this module free of quote.js.
+export async function expandMonthKwh(monthKwh, key) {
+  if (!monthKwh || !Object.keys(monthKwh).length) return null;
+  const all = await tariffs();
+  const want = new Map(Object.entries(monthKwh).map(([id, kwh]) => [key(id), kwh]));
+  const out = {};
+  for (const t of all.data ?? all) if (want.has(key(t.id))) out[t.id] = want.get(key(t.id));
+  return Object.keys(out).length ? out : null;
 }
 
 export function tariffs() {
   return cached('tariffs', () => call('/v1/tariffs'));
+}
+
+// CEME promotions that haven't ended yet (each with `active` = already on).
+// The cost tools get them per tariff from simulate; this is for listing.
+export function promos() {
+  return cached('promos', () => call('/v1/promos'));
 }
 
 // MOBI.E voltage level of the socket -> the CEME tariff variant that applies.
