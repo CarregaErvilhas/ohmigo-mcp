@@ -54,6 +54,20 @@
       "prices": { "dcMax": 0.38 },
       "source": "https://fleetmagazine.pt/ionity-portugal/",
       "checkedAt": "2026-10-28"
+    },
+    {
+      "id": "tesla-subscricao-12-mes-tesla-supercharger",
+      "disable": true,
+      "source": "https://www.tesla.com/pt_PT/findus/list/superchargers/Portugal",
+      "checkedAt": "2026-10-29",
+      "why": "Tesla prices every Supercharger on its own and by time of day (Mealhada in the Tesla app, 29 Oct 2026: 0.27 / 0.41 / 0.58 €/kWh without subscription); the blog's one price for the whole network is wrong at most sites and hours. The NAP's per-site price (offers/nap-notes.json) stands in."
+    },
+    {
+      "id": "tesla-tpa-tesla-supercharger",
+      "disable": true,
+      "source": "https://www.tesla.com/pt_PT/findus/list/superchargers/Portugal",
+      "checkedAt": "2026-10-29",
+      "why": "Tesla prices every Supercharger on its own and by time of day (Mealhada in the Tesla app, 29 Oct 2026: 0.27 / 0.41 / 0.58 €/kWh without subscription); the blog's one price for the whole network is wrong at most sites and hours. The NAP's per-site price (offers/nap-notes.json) stands in."
     }
   ]
 }

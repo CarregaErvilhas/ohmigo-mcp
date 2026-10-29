@@ -110,7 +110,7 @@ naming it.
 Every entry needs a `source` (https) and the `checkedAt` date you read it.
 After 90 days, users are told the price may be out of date.
 
-## The NAP's own price is wrong: `offers/nap-notes.json`
+## Notes on the NAP's own price: `offers/nap-notes.json`
 
 Outside MOBI.E (Continente, Tesla...) the NAP publishes one price per charger,
 and ohmigo shows it as the operator's price, ranked like any other. If you
@@ -124,7 +124,22 @@ says otherwise, say), add a note and that price is left out; the note's
 ```
 
 `scope` takes `operatorIds` (NAP operator ids) or `siteIds`. Every note needs
-`why`, `source` and `checkedAt`. Don't use it to prefer the offers: a NAP
+`why`, `source` and `checkedAt`.
+
+A note can also keep the price and say how to read it, instead of dropping
+it:
+
+- `"vatIncluded": true`: the operator publishes its NAP price **with** VAT,
+  unlike the rest of the NAP. No VAT is added on top. Check it against the
+  operator's own app at one site before adding one (the note on Tesla in
+  the file says how it was checked).
+- `"timeOfUse": true`: the operator's price changes during the day and the
+  NAP only carries one fixed value, its highest (the DATEX II feed has no
+  way to publish hourly bands). The option gets `peakPrice`,
+  `lookup_charger` gets `napPriceIsPeak`, and both tell the user the price
+  is a ceiling and that only the operator's app has the price per hour.
+- `"walkUp": true`: a bank card at the charger's terminal pays the same
+  price, so the option's label names the app and the card. Don't use it to prefer the offers: a NAP
 price that differs from an offer isn't wrong by itself, both are shown.
 
 ## Finding what's missing

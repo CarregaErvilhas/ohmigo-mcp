@@ -20,7 +20,8 @@
 //                (Electroverse, Elli...). From offers/ (see src/offers.js).
 //   opc_direct   chargers outside MOBI.E (Continente, Tesla...): the NAP's
 //                price for this site + the region's VAT; next to any direct
-//                offers, never instead. offers/nap-notes.json can drop it.
+//                offers, never instead. offers/nap-notes.json can drop it,
+//                or say the operator publishes it with VAT in (Tesla).
 // MOBI.E and the NAP publish every price without VAT (opc.js), so each of
 // these adds the VAT of the charger's region: 23 % on the mainland, less on
 // Madeira and the Azores.
@@ -219,7 +220,8 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // pricePerDeliveryUnit per point, without VAT like every NAP price; we
     // take it plus the region's VAT as the operator's whole €/kWh (an
     // assumption, stated) and rank it like any other price, unless
-    // offers/nap-notes.json says it's wrong for this charger. It sits next to
+    // offers/nap-notes.json says it's wrong for this charger, or that this
+    // operator publishes it with VAT in (then no VAT is added). It sits next to
     // the direct offers, not instead of them: an offer is one price for the
     // whole network, the NAP's is this site's (Tesla's vary by site).
     // When MOBI.E also lists an AD_HOC_PAYMENT price for the socket, that's
@@ -228,17 +230,30 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // feed is down.
     const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
     const vat = vatFor(base.region);
-    const wrong = napNote(site);
+    const note = napNote(site);
+    const wrong = note && !note.vatIncluded && !note.timeOfUse;
     const walkUp = !!point.opc?.AD_HOC_PAYMENT;
     base.options.push(...directOptions(direct, session, t, base.region));
-    if (nap != null && wrong) base.assumptions.push(t('assume.napWrong', { why: wrong.why }));
+    if (nap != null && wrong) base.assumptions.push(t('assume.napWrong', { why: note.why }));
     else if (nap != null) {
-      const label = walkUp ? t('option.opcDirect.walkUp', { operator: site.operator || '' })
+      // A note's walkUp: the operator's card terminal charges the app price
+      // (Tesla), so one option covers both.
+      const label = note?.walkUp ? t('option.opcDirect.appOrCard', { operator: site.operator || '' })
+        : walkUp ? t('option.opcDirect.walkUp', { operator: site.operator || '' })
         : site.operator ? t('option.opcDirect', { operator: site.operator }) : t('option.opcDirect.noName');
+      // Tesla's NAP price is what its app shows, VAT in: adding VAT again
+      // put it above Tesla's own card terminal price.
+      const withVat = note?.vatIncluded ? nap : nap * vat;
       base.options.push({ kind: 'opc_direct', label,
-        total: r2(nap * vat * session.kwh), eurPerKwh: r4(nap * vat), eurPerKwhExVat: nap,
-        note: t('option.opcDirect.note', { price: t.num(nap), vat: pct(vat, t) }) });
-      base.assumptions.push(t('assume.napPrice', { vat: pct(vat, t) }));
+        total: r2(withVat * session.kwh), eurPerKwh: r4(withVat), eurPerKwhExVat: r4(withVat / vat),
+        ...(note?.vatIncluded && { napVatIncluded: true }),
+        // Tesla publishes one fixed price on the NAP, its daily peak, and no
+        // public source has the hourly one: the total is a ceiling.
+        ...(note?.timeOfUse && { peakPrice: true }),
+        note: [note?.vatIncluded ? t('option.opcDirect.noteVatIn', { price: t.num(nap) }) : t('option.opcDirect.note', { price: t.num(nap), vat: pct(vat, t) }),
+          ...(note?.timeOfUse ? [t('option.opcDirect.peak')] : [])].join('; ') });
+      base.assumptions.push(note?.vatIncluded ? t('assume.napVatIn') : t('assume.napPrice', { vat: pct(vat, t) }));
+      if (note?.timeOfUse) base.assumptions.push(t('assume.napTimeOfUse'));
     } else if (walkUp) {
       base.options.push(adhocOption(point, session, t, base.region));
     }
