@@ -84,8 +84,9 @@ never recomputes it.
 ## Data sources
 
 **NAP / PAN** — *National Access Point* (*Ponto de Acesso Nacional* in
-Portuguese). The government's open data portal where MOBI.E publishes the
-network, in a European XML format called **DATEX II**. Two feeds:
+Portuguese). The government's open data portal where Portugal's public
+chargers are published, MOBI.E's and those outside it (Tesla, Continente...),
+in a European XML format called **DATEX II**. Two feeds:
 - *static*: every site and charger, plugs, power, address, payment methods (once a week is plenty);
 - *dynamic*: the live status of every charger plus the OPC fees (republished every few minutes).
 
