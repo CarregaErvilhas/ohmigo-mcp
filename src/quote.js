@@ -37,10 +37,11 @@ import { isStale, offersAt, ownWalkUp, SOURCE } from './offers.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 
-// ceme-v2 tariff ids are `ceme-voltage-name`, e.g. "edp-bt-cartoedp-4". Each
-// tariff exists twice, for low (bt) and medium (mt) voltage chargers, and the
+// ceme-v2 tariff ids carry the voltage as one dash-separated segment, in the
+// middle ("edp-bt-cartoedp-4") or at the end ("luzigas-ceme-bt"). A tariff
+// can exist twice, for low (bt) and medium (mt) voltage chargers, and the
 // user doesn't care which. Dropping the voltage gives the "same tariff" key.
-export const tariffKey = id => id.replace(/-(bt|mt)-/, '-');
+export const tariffKey = id => id.replace(/-(bt|mt)(?=-|$)/, '');
 
 export const DEFAULT_SHOWN = 3;
 
