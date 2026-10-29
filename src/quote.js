@@ -236,7 +236,10 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     base.options.push(...directOptions(direct, session, t, base.region));
     if (nap != null && wrong) base.assumptions.push(t('assume.napWrong', { why: note.why }));
     else if (nap != null) {
-      const label = walkUp ? t('option.opcDirect.walkUp', { operator: site.operator || '' })
+      // A note's walkUp: the operator's card terminal charges the app price
+      // (Tesla), so one option covers both.
+      const label = note?.walkUp ? t('option.opcDirect.appOrCard', { operator: site.operator || '' })
+        : walkUp ? t('option.opcDirect.walkUp', { operator: site.operator || '' })
         : site.operator ? t('option.opcDirect', { operator: site.operator }) : t('option.opcDirect.noName');
       // Tesla's NAP price is what its app shows, VAT in: adding VAT again
       // put it above Tesla's own card terminal price.

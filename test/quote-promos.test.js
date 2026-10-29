@@ -107,6 +107,7 @@ test('Tesla: the NAP price is its app price with VAT in, and the only one', asyn
   assert.equal(nap.total, r2(0.3 * q.session.kwhBilled), 'offers/nap-notes.json: VAT already in, none added');
   assert.equal(nap.eurPerKwh, 0.3);
   assert.equal(nap.napVatIncluded, true);
+  assert.match(nap.label, /app, or a bank card/);
   assert.equal(q.best.kind, 'opc_direct');
   assert.ok(q.assumptions.some(a => a.includes('with VAT included')));
   assert.ok(q.assumptions.some(a => a.includes('time of day')));

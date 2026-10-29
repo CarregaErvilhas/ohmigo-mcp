@@ -135,7 +135,9 @@ it:
   the file says how it was checked).
 - `"timeOfUse": true`: the operator's price changes during the day and the
   NAP only carries one value. The quote and `lookup_charger` then tell the
-  user to check the app for the price at their hour. Don't use it to prefer the offers: a NAP
+  user to check the app for the price at their hour.
+- `"walkUp": true`: a bank card at the charger's terminal pays the same
+  price, so the option's label names the app and the card. Don't use it to prefer the offers: a NAP
 price that differs from an offer isn't wrong by itself, both are shown.
 
 ## Finding what's missing

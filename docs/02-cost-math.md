@@ -188,7 +188,9 @@ operator or site is wrong (the note's why goes into the assumptions). A
 note can also say the operator publishes it **with VAT in** (`vatIncluded`,
 Tesla): then no VAT is added and the option carries `napVatIncluded`; and
 that its price **changes with the time of day** (`timeOfUse`) while the NAP
-has one value, which adds an assumption telling the user to check the app.
+has one value, which adds an assumption telling the user to check the app;
+and that a bank card at the terminal pays the same (`walkUp`), which the
+label then says.
 Some of these chargers also have an `AD_HOC_PAYMENT` price in MOBI.E's file
 (HighGreenPower): it's the same walk-up price, so the label says you pay by
 bank card / QR, and when the NAP price is missing (live feed down) the
