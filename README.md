@@ -2,8 +2,10 @@
 
 Your charging amigo: "ohm" + "amigo".
 
-An MCP server that answers two questions about Portugal's public EV charging
-network, from inside ChatGPT, Claude or any other AI assistant:
+An MCP server that answers two questions about every public EV charger in
+Portugal, on every network published on the National Access Point (NAP):
+MOBI.E and the ones outside it (Tesla, Continente...). From inside ChatGPT,
+Claude or any other AI assistant:
 
 - **How much will this charge cost?**
 - **Where's the cheapest place to charge near me, or on my way?**
