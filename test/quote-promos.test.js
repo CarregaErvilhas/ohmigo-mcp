@@ -99,6 +99,17 @@ test('outside MOBI.E: the NAP site price is listed next to the direct offers, ne
   assert.ok(q.assumptions.some(a => a.includes("operator's price from the NAP")));
 });
 
+test('outside MOBI.E with a MOBI.E ad hoc price: says bank card / QR, and stands in without the NAP price', async () => {
+  const opc = { AD_HOC_PAYMENT: { energy: [0.28] } };
+  const hgp = { ...site('HIGH'), operator: 'HighGreenPower' };
+  const q = await quotePoint({ site: hgp, point: { id: 'h1', kw: 22, dc: false, connector: 'T2', regime: 'sem_ceme', napPrice: 0.28, opc } }, car, { at, lang: 'en' });
+  assert.equal(q.best.kind, 'opc_direct');
+  assert.match(q.best.label, /Bank card \/ QR/);
+  const off = await quotePoint({ site: hgp, point: { id: 'h2', kw: 22, dc: false, connector: 'T2', regime: 'sem_ceme', opc } }, car, { at, lang: 'en' });
+  assert.equal(off.best.kind, 'adhoc');
+  assert.ok(Math.abs(off.best.total - 0.28 * off.session.kwhBilled) < 0.02);
+});
+
 test('rank: MOBI.E and outside MOBI.E share one list, the price decides', async () => {
   const { rank } = await import('../src/quote.js');
   const cont = { id: 'c1', kw: 50, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.05 };
