@@ -72,6 +72,8 @@ CEME promotions: some CEMEs give a discount only at one network (e.g. a CEME's e
 Monthly free kWh (promos with target KWH_GRATIS, e.g. a CEME giving its electricity clients the first kWh of each month free, on any charger): this server stores nothing, so YOU keep the count, per tariff and per calendar month (Portugal time). Keep a running log in your memory of the user's sessions: date, tariff_id, kWh. Add one when the user says they charged (ask for the kWh on the invoice/app if they know it; otherwise use the session.kwhBilled of the estimate they followed) and start again from zero on the 1st of each month. On every cost call, pass month_kwh: { tariff_id: kWh charged so far this month } for the tariffs that have such a promotion. With it, the option's total already uses the free kWh still left (freeKwhLeft), and applied is true. Without it, monthKwhKnown is false and the promotion is only a tip priced as if no free kWh were used yet: if you don't know the count, ask the user how many sessions and roughly how many kWh they've charged with that card this month, rather than guessing.
 Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract). Lead with it, and point out when a subscription or another CEME would be cheaper. Every result carries all its ways to pay in "options", usually more than you show: always tell the user there are more (subscriptions, other CEMEs, apps) and offer to list them.
 
+Peak prices (peakPrice on an option, napPriceIsPeak in lookup_charger; today Tesla Superchargers): the operator's price changes during the day, but on the NAP it publishes one fixed value, the highest of the day, and there is no public source with the price at each hour. Always tell the driver, in plain words: the price shown is the most it can cost at that charger (congestion fees aside), it's usually much cheaper at night and off-peak, and only the operator's app shows the price for their hour. Never present it as the price they will pay, and when it decides a ranking, say a peak-priced charger may well be cheaper at their time.
+
 Time of day matters: a session lasts minutes to hours, and the energy price can change while it runs (peak to off-peak "vazio" hours, the wholesale OMIE price every 15 minutes for indexed tariffs, even a clock change). The server prices the session quarter-hour by quarter-hour from its start (at, default now) to its estimated end; session.startLocal/endLocal give the window. A CEME option with kwhByPeriod crossed periods: mention it when it changes the picture (e.g. "starting 30 min later puts most of it in off-peak"). If the user asks how a price was built, or why it changes with the time, call again with detail: true and explain the timeline (when the kWh go in and, per tariff, each stretch's period, price and OMIE; quarters that look the same are merged into one run).
 
 Charger status comes from the NAP's live feed; live.publishedAt says when it was published. The feed is a large file fetched on demand, so the first call after a few quiet minutes can take ~20-30 s. If live.fresh is false or live.publishedAt is null, say status may be stale or unknown. A charger can still be taken by the time they arrive. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
@@ -226,6 +228,7 @@ function siteCard(h, live, t) {
   // Most NAP prices come without VAT; offers/nap-notes.json names the
   // operators that publish theirs with it (Tesla).
   const vatIn = !!napNote(site)?.vatIncluded;
+  const peak = !!napNote(site)?.timeOfUse;
   const groups = new Map();
   for (const p of h.points) {
     const lp = live.get(site.id, p.id);
@@ -238,6 +241,7 @@ function siteCard(h, live, t) {
       operatorFeeSource: fee ? (fromNap ? 'nap' : 'mobie') : undefined,
       adHoc: p.opc?.AD_HOC_PAYMENT ? describePlan(p.opc.AD_HOC_PAYMENT, t) : undefined,
       ...(vatIn ? { napPriceWithVat: napPrice } : { napPriceExVat: napPrice }),
+      ...(peak && napPrice != null && { napPriceIsPeak: true }),
       direct: offersAt(site, p).map(({ offer, eurPerKwh }) => ({ label: offer.label, eurPerKwh, walkUp: !!offer.walkUp || undefined, subscription: !!offer.subscription || undefined })),
     };
     const key = JSON.stringify(card);
@@ -555,7 +559,7 @@ export function createServer(getDataset, live) {
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // Summary lines on top of the JSON in the text (see ok).
-    const lines = top.map((q, i) => `${i + 1}. ${q.best ? q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
+    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
     return ok(data, [...notes, ...lines].join('\n'));
   });
 
@@ -585,7 +589,7 @@ export function createServer(getDataset, live) {
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
-    const lines = results.map(q => `${q.best ? `${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${q.kw} kW ${q.connector} [${q.pointId}]`);
+    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${q.kw} kW ${q.connector} [${q.pointId}]`);
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true, notes: [t('note.noCeme')] }), results },
       [...(cemeDown ? [t('note.noCeme')] : []), ...lines].join('\n'));
   });

@@ -40,7 +40,8 @@ export const MESSAGES = {
     'assume.napPrice': ({ vat }) => `operator's price from the NAP, taken as the whole €/kWh price; the NAP publishes prices without VAT, so this region's VAT (${vat} %) is added`,
     'assume.napWrong': ({ why }) => `the NAP's price for this charger is left out, it's known to be wrong: ${why}`,
     'assume.napVatIn': () => "operator's price from the NAP, taken as the whole €/kWh price; this operator publishes it with VAT included (checked in its app), so no VAT is added",
-    'assume.napTimeOfUse': () => "this operator's price changes with the time of day and the NAP has only one value, its highest: at other hours its app can charge much less (and add congestion fees); check the app",
+    'assume.napTimeOfUse': () => "this operator's price changes with the time of day, but on the NAP it publishes only one fixed value, the highest of the day: this estimate is the most the session can cost (congestion fees aside). At other hours it can cost much less. There is no public source with the price at each hour; only the operator's own app shows it",
+    'option.opcDirect.peak': () => 'the highest price of the day at this charger; lower at other hours (see the operator\'s app)',
 
     'option.adhoc': () => 'Bank card / QR at the charger (no CEME)',
     'option.adhoc.note': ({ vat }) => `MOBI.E's ad hoc price, published without VAT; ${vat} % VAT added`,
@@ -128,7 +129,8 @@ export const MESSAGES = {
     'assume.napPrice': ({ vat }) => `preço do operador vindo do PAN, assumido como o preço total por kWh; o PAN publica os preços sem IVA, por isso somamos o IVA desta região (${vat} %)`,
     'assume.napWrong': ({ why }) => `o preço do PAN para este posto fica de fora, sabe-se que está errado: ${why}`,
     'assume.napVatIn': () => 'preço do operador vindo do PAN, assumido como o preço total por kWh; este operador publica-o com IVA incluído (confirmado na app dele), por isso não somamos IVA',
-    'assume.napTimeOfUse': () => 'o preço deste operador muda com a hora do dia e o PAN só tem um valor, o mais alto: noutras horas a app pode cobrar bastante menos (e somar taxas de ocupação); confirma na app',
+    'assume.napTimeOfUse': () => 'o preço deste operador muda com a hora do dia, mas no PAN ele publica um só valor fixo, o mais alto do dia: esta estimativa é o máximo que o carregamento pode custar (sem contar taxas de ocupação). Noutras horas pode custar bastante menos. Não há nenhuma fonte pública com o preço de cada hora; só a app do operador o mostra',
+    'option.opcDirect.peak': () => 'preço mais alto do dia neste posto; mais baixo noutras horas (ver a app do operador)',
 
     'option.adhoc': () => 'Cartão bancário / QR no posto (sem CEME)',
     'option.adhoc.note': ({ vat }) => `preço ad hoc da MOBI.E, publicado sem IVA; somamos ${vat} % de IVA`,

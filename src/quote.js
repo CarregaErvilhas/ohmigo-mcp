@@ -247,7 +247,11 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
       base.options.push({ kind: 'opc_direct', label,
         total: r2(withVat * session.kwh), eurPerKwh: r4(withVat), eurPerKwhExVat: r4(withVat / vat),
         ...(note?.vatIncluded && { napVatIncluded: true }),
-        note: note?.vatIncluded ? t('option.opcDirect.noteVatIn', { price: t.num(nap) }) : t('option.opcDirect.note', { price: t.num(nap), vat: pct(vat, t) }) });
+        // Tesla publishes one fixed price on the NAP, its daily peak, and no
+        // public source has the hourly one: the total is a ceiling.
+        ...(note?.timeOfUse && { peakPrice: true }),
+        note: [note?.vatIncluded ? t('option.opcDirect.noteVatIn', { price: t.num(nap) }) : t('option.opcDirect.note', { price: t.num(nap), vat: pct(vat, t) }),
+          ...(note?.timeOfUse ? [t('option.opcDirect.peak')] : [])].join('; ') });
       base.assumptions.push(note?.vatIncluded ? t('assume.napVatIn') : t('assume.napPrice', { vat: pct(vat, t) }));
       if (note?.timeOfUse) base.assumptions.push(t('assume.napTimeOfUse'));
     } else if (walkUp) {
