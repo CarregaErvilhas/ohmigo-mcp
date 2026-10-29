@@ -99,10 +99,10 @@ test('outside MOBI.E: the NAP site price, plus VAT, is ranked like any other', a
   assert.ok(q.assumptions.some(a => a.includes("operator's price from the NAP") && a.includes('(23 %)')));
 });
 
-test('Tesla: the NAP price is its app price with VAT in, next to the direct offers, never instead', async () => {
+test('Tesla: the NAP price is its app price with VAT in, and the only one', async () => {
   const tesla = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
   const q = await quotePoint({ site: { ...site('TSLA'), operator: 'Tesla' }, point: tesla }, car, { at, lang: 'en' });
-  assert.ok(q.options.some(o => o.kind === 'direct'), 'Tesla has direct offers in offers/');
+  assert.ok(!q.options.some(o => o.kind === 'direct'), "manual.json disables the blog's network-wide Tesla prices");
   const nap = q.options.find(o => o.kind === 'opc_direct');
   assert.equal(nap.total, r2(0.3 * q.session.kwhBilled), 'offers/nap-notes.json: VAT already in, none added');
   assert.equal(nap.eurPerKwh, 0.3);

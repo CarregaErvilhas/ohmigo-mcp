@@ -98,9 +98,9 @@ test('offersAt: operator offers + MOBI.E-wide ones, priced for the band', () => 
   const labels = at.map(x => x.offer.label);
   assert.equal(labels.length, new Set(labels).size, 'a network-specific row replaces the same provider\'s MOBI.E-wide row');
   assert.equal(ownWalkUp(ionity, at), true);
-  // Outside MOBI.E, MOBI.E-wide offers don't apply.
-  const tesla = offersAt({ operatorId: 'TSLA' }, { kw: 250, dc: true, regime: 'sem_ceme' });
-  assert.ok(tesla.length && tesla.every(x => x.offer.scope.operatorIds?.includes('TSLA')));
+  // Outside MOBI.E, MOBI.E-wide offers don't apply: Tesla, whose own blog
+  // rows manual.json disables, gets none.
+  assert.deepEqual(offersAt({ operatorId: 'TSLA' }, { kw: 250, dc: true, regime: 'sem_ceme' }), []);
   // An offer without a price for this band is not offered here.
   assert.ok(!offersAt(ionity, { kw: 22, dc: false, regime: 'mobie' }).some(x => x.offer.id === 'ionity-tpa-ionity'));
 });
