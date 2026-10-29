@@ -167,10 +167,12 @@ Subscription fees are listed next to the price, not added, because one monthly
 fee covers every session that month. If the charger's own operator has a
 walk-up offer priced for this band, it replaces MOBI.E's ad hoc price.
 
-**`opc_direct`** — chargers outside MOBI.E (Continente, Tesla) with no direct
-offer: the NAP's single price × kWh, with an asterisk. The NAP
-doesn't say whether that number is the final price, so these are never ranked
-against MOBI.E.
+**`opc_direct`** — chargers outside MOBI.E (Continente, Tesla): the NAP's
+single price for that site × kWh, with an asterisk. The NAP doesn't say
+whether that number is the final price, so these are never ranked against
+MOBI.E. It comes after the network's `direct` offers when there are any, not
+instead of them: an offer is one price for the whole network, the NAP's is
+this site's.
 
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the

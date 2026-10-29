@@ -18,7 +18,8 @@
 //                QR, the operator's own app or subscription, a roaming app
 //                (Electroverse, Elli...). From offers/ (see src/offers.js).
 //   opc_direct   chargers outside MOBI.E (Continente, Tesla): the NAP's single
-//                price, with an asterisk because nobody says what it covers
+//                price for this site, with an asterisk because nobody says what
+//                it covers. Listed after any direct offers, never instead.
 // New ways to pay (CEME subscriptions, eMSP flat prices) slot in as new kinds.
 //
 // Two summary fields:
@@ -189,10 +190,12 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // Outside MOBI.E: no CEME, the operator bills directly. The NAP has one
     // pricePerDeliveryUnit with nothing saying whether it's the final price.
     // We estimate as if it were a final €/kWh and mark it, and the ranking
-    // never mixes these with MOBI.E.
+    // never mixes these with MOBI.E. It's shown next to the direct offers,
+    // not instead of them: the offers are one price for the whole network,
+    // the NAP's is this site's (Tesla's vary by site).
     const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
     base.options.push(...directOptions(direct, session, t, base.region));
-    if (!direct.length && nap != null) {
+    if (nap != null) {
       base.options.push({ kind: 'opc_direct', label: t('option.opcDirect', { operator: site.operator ?? 'Operator' }),
         total: r2(nap * session.kwh), asterisk: true, note: t('option.opcDirect.note', { price: t.num(nap) }) });
     }

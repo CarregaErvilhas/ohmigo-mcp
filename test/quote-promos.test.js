@@ -85,3 +85,15 @@ test('EDP × UVE at an EDP charger: the all-in price is the total, operator fee 
   const away = await quotePoint({ site: site('GLPP'), point }, car, { at, tariffIds: ['edp-bt-cartoedp-2'], lang: 'pt' });
   assert.equal(away.headline.total, r2(7 + (1 + 0.2 * away.session.kwhBilled) * 1.23), 'not at Galp');
 });
+
+test('outside MOBI.E: the NAP site price is listed after the direct offers, never instead', async () => {
+  const tesla = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.79 };
+  const q = await quotePoint({ site: { ...site('TSLA'), operator: 'Tesla' }, point: tesla }, car, { at, lang: 'en' });
+  const kinds = q.options.map(o => o.kind);
+  assert.ok(kinds.includes('direct'), 'Tesla has direct offers in offers/');
+  assert.equal(kinds.at(-1), 'opc_direct');
+  const nap = q.options.at(-1);
+  assert.ok(Math.abs(nap.total - 0.79 * q.session.kwhBilled) < 0.02, "NAP price x billed kWh");
+  assert.equal(nap.asterisk, true);
+  assert.notEqual(q.best?.kind, 'opc_direct', 'an asterisked price never wins best');
+});
