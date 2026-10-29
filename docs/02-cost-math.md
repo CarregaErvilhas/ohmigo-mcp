@@ -174,6 +174,10 @@ next to the network's `direct` offers, not instead of them: an offer is one
 price for the whole network, the NAP's is this site's. It's left out only
 when `offers/nap-notes.json` has a note saying the NAP's price for that
 operator or site is wrong (the note's why goes into the assumptions).
+Some of these chargers also have an `AD_HOC_PAYMENT` price in MOBI.E's file
+(HighGreenPower): it's the same walk-up price, so the label says you pay by
+bank card / QR, and when the NAP price is missing (live feed down) the
+`adhoc` option takes its place.
 
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the
