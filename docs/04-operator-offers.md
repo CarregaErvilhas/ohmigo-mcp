@@ -158,6 +158,8 @@ npm test                           # validates all three files
 - **Island VAT.** The blog's prices carry mainland VAT (23 %). Madeira and
   the Azores have lower VAT, and nobody says whether these apps charge less
   there. On island chargers each direct option keeps its price, gets
-  `vatUnverified: true`, and its note tells the user to confirm it.
+  `vatUnverified: true`, and its note tells the user to confirm it. (The
+  NAP and MOBI.E prices don't have this problem: they come without VAT, so
+  `quote.js` adds the island's own rate.)
 - The blog is one person's work. If it stops, the weekly job keeps the last
   prices and `isStale` starts warning users after 90 days.

@@ -14,12 +14,16 @@
 //   ceme         pay through a CEME card/app on MOBI.E:
 //                ceme-v2's total (energy + TAR + taxes + VAT) + OPC fee + VAT on it
 //   adhoc        bank card / QR at the charger, no CEME: MOBI.E's AD_HOC_PAYMENT price
+//                + the region's VAT
 //   direct       anything outside the CEME system: a walk-up card terminal or
 //                QR, the operator's own app or subscription, a roaming app
 //                (Electroverse, Elli...). From offers/ (see src/offers.js).
 //   opc_direct   chargers outside MOBI.E (Continente, Tesla...): the NAP's
-//                price for this site, taken as final; next to any direct
+//                price for this site + the region's VAT; next to any direct
 //                offers, never instead. offers/nap-notes.json can drop it.
+// MOBI.E and the NAP publish every price without VAT (opc.js), so each of
+// these adds the VAT of the charger's region: 23 % on the mainland, less on
+// Madeira and the Azores.
 // New ways to pay (CEME subscriptions, eMSP flat prices) slot in as new kinds.
 //
 // Two summary fields:
@@ -34,12 +38,13 @@ import { estimateSession } from './charging.js';
 import { localOffset, localTime, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
 import { napPlan } from './live.js';
-import { describePlan, opcCost } from './opc.js';
+import { describePlan, opcCost, vatFor } from './opc.js';
 import { isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, withPromos } from './promos.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 const r4 = x => Math.round(x * 10_000) / 10_000;
+const pct = (vat, t) => t.num(r4((vat - 1) * 100), 1);
 
 // ceme-v2 tariff ids carry the voltage as one dash-separated segment, in the
 // middle ("edp-bt-cartoedp-4") or at the end ("luzigas-ceme-bt"). A tariff
@@ -142,15 +147,17 @@ function feePlan(point, live) {
   return { plan: null, source: null };
 }
 
-function adhocOption(point, session, t) {
+// MOBI.E's ad hoc price, which comes without VAT like its operator fees.
+function adhocOption(point, session, t, region) {
   const plan = point.opc?.AD_HOC_PAYMENT;
   if (!plan) return null;
+  const vat = vatFor(region);
   const c = opcCost(plan, { kwh: session.kwh, minutes: session.minutes });
   return {
     kind: 'adhoc', label: t('option.adhoc'),
-    total: r2(c.high), low: r2(c.low), high: r2(c.high),
-    tariff: describePlan(plan, t, { vat: false }),
-    note: t('option.adhoc.note'),
+    total: r2(c.high * vat), low: r2(c.low * vat), high: r2(c.high * vat),
+    tariff: describePlan(plan, t),
+    note: t('option.adhoc.note', { vat: pct(vat, t) }),
   };
 }
 
@@ -209,8 +216,9 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
 
   if (point.regime === 'sem_ceme') {
     // Outside MOBI.E: no CEME, the operator bills directly. The NAP has one
-    // pricePerDeliveryUnit per point; we take it as the operator's final
-    // €/kWh (an assumption, stated) and rank it like any other price, unless
+    // pricePerDeliveryUnit per point, without VAT like every NAP price; we
+    // take it plus the region's VAT as the operator's whole €/kWh (an
+    // assumption, stated) and rank it like any other price, unless
     // offers/nap-notes.json says it's wrong for this charger. It sits next to
     // the direct offers, not instead of them: an offer is one price for the
     // whole network, the NAP's is this site's (Tesla's vary by site).
@@ -219,6 +227,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // pay (bank card / QR, no app or account) and stands in when the live
     // feed is down.
     const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
+    const vat = vatFor(base.region);
     const wrong = napNote(site);
     const walkUp = !!point.opc?.AD_HOC_PAYMENT;
     base.options.push(...directOptions(direct, session, t, base.region));
@@ -227,10 +236,11 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
       const label = walkUp ? t('option.opcDirect.walkUp', { operator: site.operator || '' })
         : site.operator ? t('option.opcDirect', { operator: site.operator }) : t('option.opcDirect.noName');
       base.options.push({ kind: 'opc_direct', label,
-        total: r2(nap * session.kwh), eurPerKwh: nap, note: t('option.opcDirect.note', { price: t.num(nap) }) });
-      base.assumptions.push(t('assume.napPrice'));
+        total: r2(nap * vat * session.kwh), eurPerKwh: r4(nap * vat), eurPerKwhExVat: nap,
+        note: t('option.opcDirect.note', { price: t.num(nap), vat: pct(vat, t) }) });
+      base.assumptions.push(t('assume.napPrice', { vat: pct(vat, t) }));
     } else if (walkUp) {
-      base.options.push(adhocOption(point, session, t));
+      base.options.push(adhocOption(point, session, t, base.region));
     }
     base.options.sort((a, b) => a.total - b.total);
     const first = base.options[0];
@@ -241,9 +251,10 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   }
 
   // An operator whose own walk-up price is in the offers replaces MOBI.E's
-  // ad hoc price here: the published offer is more current (IONITY: MOBI.E's
-  // file says 0.51 €/kWh, IONITY itself says 0.63).
-  const adhoc = ownWalkUp(site, direct) ? null : adhocOption(point, session, t);
+  // ad hoc price here: it's the operator's own word, and can be newer than
+  // MOBI.E's file (IONITY: 0.51 €/kWh there, 0.63 with VAT, the same as its
+  // own price today).
+  const adhoc = ownWalkUp(site, direct) ? null : adhocOption(point, session, t, base.region);
   const want = detail || qa;
   const key = `${base.region}|${want ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',') || `${start.toISOString()}=${session.kwh}`}`;
   if (!simCache.has(key)) simCache.set(key, simulate({ kwh: session.kwh, at: start, region: base.region, profile: slices, detail: want, monthKwh }));

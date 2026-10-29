@@ -15,8 +15,19 @@
 //
 // These prices come without VAT. VAT applies to the whole invoice
 // (mobie.pt/custo-do-carregamento), so the caller (quote.js) adds it.
+// The same goes for every price MOBI.E and the NAP publish: the ad hoc
+// price and the NAP's price for chargers outside MOBI.E too (confirmed with
+// the NAP; MOBI.E's 0.51 €/kWh ad hoc at IONITY x 1.23 is IONITY's own 0.63).
 
 import { translator } from './i18n.js';
+
+// VAT as a multiplier (1.23 = 23 %): lower on Madeira and the Azores.
+// ceme-v2 owns this table (REGIONS in its engine/regions.js) and sends it
+// with every tariff (`vat`), which is what the CEME prices use. This copy is
+// for the prices that don't go through ceme-v2: chargers outside MOBI.E,
+// the ad hoc price, and everything while ceme-v2 is down.
+export const REGION_VAT = { CONT: 1.23, MAD: 1.22, AZO: 1.16 };
+export const vatFor = region => REGION_VAT[region] ?? REGION_VAT.CONT;
 
 // € for `minutes` of charging under a list of per-minute tiers.
 //
@@ -68,7 +79,7 @@ export function opcCost(plan, { kwh, minutes }) {
 }
 
 // The plan as one readable line, e.g. "0.3 €/charge + 0.13 €/min (excl. VAT)".
-export function describePlan(plan, t = translator('en'), { vat = true } = {}) {
+export function describePlan(plan, t = translator('en')) {
   const out = [];
   const n = v => t.num(v);
   const or = ` ${t('plan.or')} `;
@@ -82,5 +93,5 @@ export function describePlan(plan, t = translator('en'), { vat = true } = {}) {
     out.push(s);
   }
   if (!out.length) return t('plan.free');
-  return out.join(' + ') + (vat ? ` ${t('plan.exVat')}` : '');
+  return `${out.join(' + ')} ${t('plan.exVat')}`;
 }
