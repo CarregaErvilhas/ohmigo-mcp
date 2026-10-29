@@ -18,7 +18,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
-import { tariffs } from './ceme.js';
+import { promos, tariffs } from './ceme.js';
 import { pickLang, translator } from './i18n.js';
 import { quotePoint, rank, tariffKey } from './quote.js';
 import { viewHtml } from './view.js';
@@ -53,6 +53,9 @@ When presenting results: give the total in euros and the duration, name the tari
 - "adhoc": bank card / QR code at the charger, no CEME. Always mention it when present: it's what someone without a CEME card pays;
 - "direct": paying outside the CEME system: a card terminal (TPA) or QR at the charger, the operator's own app or subscription (IONITY Power, Atlante GO...), or a roaming app (Electroverse, Elli, Electromaps...). Final prices with VAT, from a public price list (see note and checked date). Subscriptions show a monthly/yearly fee that is NOT included in the session total; say so. When you quote one of these prices, credit its source (named in the note): for the blog, name its author, Alexandre Moleiro. On Madeira and the Azores they carry vatUnverified: the list uses mainland VAT, so tell the user to confirm the price;
 - "opc_direct": chargers outside MOBI.E (Continente, Tesla...), listed apart in outsideMobie. Their price is an asterisked guess, say so.
+CEME promotions: some CEMEs give a discount only at one network (e.g. a CEME's energy cheaper at Powerdot chargers, or a subscription that cuts the operator fee there). A result's "promos" lists the ones at that charger, each with label, total (this session with it), saving, until and note:
+- applied: true means it's for every customer of that tariff and is already in that option's total (the option carries "promos" and, for operator-fee discounts, opcDiscountPct). Say the price includes it and until when.
+- newCustomers: true means it only holds for people who sign up during the promotion (maxHours: how long it lasts after signing up). It is never in any total. Mention it as a tip ("if you're new to X, signing up by <until> would make this session cost <total>"), never as the price.
 Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract). Lead with it, and point out when a subscription or another CEME would be cheaper. Every result carries all its ways to pay in "options", usually more than you show: always tell the user there are more (subscriptions, other CEMEs, apps) and offer to list them.
 
 Time of day matters: a session lasts minutes to hours, and the energy price can change while it runs (peak to off-peak "vazio" hours, the wholesale OMIE price every 15 minutes for indexed tariffs, even a clock change). The server prices the session quarter-hour by quarter-hour from its start (at, default now) to its estimated end; session.startLocal/endLocal give the window. A CEME option with kwhByPeriod crossed periods: mention it when it changes the picture (e.g. "starting 30 min later puts most of it in off-peak"). If the user asks how a price was built, or why it changes with the time, call again with detail: true and explain the timeline (each quarter-hour's kWh, period, price and OMIE).
@@ -160,11 +163,12 @@ export function createServer(getDataset, live) {
 
   server.registerTool('list_ceme_tariffs', {
     title: 'List CEME tariffs',
-    description: 'Lists the CEME (EV charging electricity retailer) tariffs used on MOBI.E chargers, to resolve the card/app the user pays with to a tariff_id. Filter by name.',
+    description: 'Lists the CEME (EV charging electricity retailer) tariffs used on MOBI.E chargers, to resolve the card/app the user pays with to a tariff_id. Filter by name. Also lists the CEMEs\' current promotions at specific charging networks.',
     inputSchema: z.object({ query: z.string().optional().describe('Text to match in the CEME or tariff name, e.g. "edp", "galp", "via verde"') }),
     annotations: { readOnlyHint: true, openWorldHint: false },
   }, async ({ query }) => {
-    const all = await tariffs();
+    // A ceme-v2 without /v1/promos still lists the tariffs.
+    const [all, current] = await Promise.all([tariffs(), promos().catch(() => ({ data: [] }))]);
     const q = (query || '').toLowerCase();
     // One row per tariff, not per voltage: the BT/MT variant is picked per charger.
     const seen = new Map();
@@ -175,7 +179,15 @@ export function createServer(getDataset, live) {
       if (!seen.has(key)) seen.set(key, { tariff_id: t.id, ceme: t.ceme_name ?? t.ceme, name: t.name, kind: t.kind, schedule: t.schedule, cycle: t.cycle, requiresOtherContract: !!t.bundle });
     }
     const rows = [...seen.values()];
-    return ok({ count: rows.length, tariffs: rows.slice(0, 60) });
+    // Promotions of the CEMEs that matched, as ceme-v2 publishes them (its
+    // `name` is Portuguese; the cost tools give translated labels).
+    const cemes = new Set(rows.map(r => r.ceme));
+    const names = new Map((all.data ?? all).map(t => [t.ceme_id, t.ceme_name]));
+    const promoRows = (current.data ?? []).filter(p => !q || cemes.has(names.get(p.ceme)))
+      .map(p => ({ id: p.id, ceme: names.get(p.ceme) ?? p.ceme, name: p.name, network: p.network, target: p.target,
+        ...(p.eurKwh != null && { eurKwh: p.eurKwh }), ...(p.pct != null && { pct: p.pct }),
+        from: p.from, until: p.to, active: p.active, newCustomers: p.newCustomers, tariffIds: p.tariffs, url: p.url }));
+    return ok({ count: rows.length, tariffs: rows.slice(0, 60), ...(promoRows.length && { promos: promoRows }) });
   });
 
   server.registerTool('find_chargers', {

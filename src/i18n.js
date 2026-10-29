@@ -36,6 +36,7 @@ export const MESSAGES = {
     'assume.napFee': () => 'operator fee from the NAP live feed: rounded to the cent, no time tiers',
     'assume.feeRange': () => 'two values published for one fee component; showing the range',
     'assume.perMinute': () => 'per-minute fee counted until the target %, unplugging right away',
+    'assume.promo': ({ label, until }) => `includes the promotion "${label}" (until ${until})`,
 
     'option.adhoc': () => 'Bank card / QR at the charger (no CEME)',
     'option.adhoc.note': () => "MOBI.E's ad-hoc price; assumed to include VAT (consumer price), which MOBI.E does not state",
@@ -47,6 +48,13 @@ export const MESSAGES = {
     'option.feeUnknown': () => '+ subscription fee',
     'option.stale': () => '(checked a while ago: may be out of date)',
     'option.islandVat': () => '(listed with mainland VAT; island VAT is lower, so check the price on the app or at the charger)',
+
+    // CEME promotions at one charging network (src/promos.js).
+    'promo.label': ({ ceme, network, amount }) => `${ceme} at ${network}: ${amount}`,
+    'promo.energy': ({ eur }) => `−${eur} €/kWh on energy`,
+    'promo.opc': ({ pct }) => `−${pct}% on the operator fee`,
+    'promo.note.new': ({ until, hours }) => `new customers only: sign up by ${until}${hours ? `, then the discount lasts ${hours} h` : ''}. Not in any total`,
+    'promo.note.all': ({ until, tariff }) => `for every ${tariff} customer at this network, until ${until}`,
 
     'note.outside': () => 'Outside MOBI.E: pay the operator directly, no CEME.',
     'note.noUserTariff': () => "None of the user's tariffs apply at this socket.",
@@ -82,6 +90,7 @@ export const MESSAGES = {
     'assume.napFee': () => 'tarifa do operador vinda do PAN em tempo real: arredondada ao cêntimo, sem escalões por tempo',
     'assume.feeRange': () => 'dois valores publicados para a mesma componente; mostramos o intervalo',
     'assume.perMinute': () => 'tarifa por minuto contada até à % pretendida, desligando logo a seguir',
+    'assume.promo': ({ label, until }) => `inclui a promoção "${label}" (até ${until})`,
 
     'option.adhoc': () => 'Cartão bancário / QR no posto (sem CEME)',
     'option.adhoc.note': () => 'preço ad hoc da MOBI.E; assumimos que inclui IVA (preço ao consumidor), o que a MOBI.E não diz',
@@ -93,6 +102,12 @@ export const MESSAGES = {
     'option.feeUnknown': () => '+ mensalidade',
     'option.stale': () => '(verificado há algum tempo: pode estar desactualizado)',
     'option.islandVat': () => '(preço com IVA do continente; nas ilhas o IVA é mais baixo, confirme o preço na app ou no posto)',
+
+    'promo.label': ({ ceme, network, amount }) => `${ceme} nos postos ${network}: ${amount}`,
+    'promo.energy': ({ eur }) => `−${eur} €/kWh na energia`,
+    'promo.opc': ({ pct }) => `−${pct}% na tarifa do operador`,
+    'promo.note.new': ({ until, hours }) => `só para clientes novos: adesão até ${until}${hours ? `, e o desconto dura ${hours} h` : ''}. Não entra em nenhum total`,
+    'promo.note.all': ({ until, tariff }) => `para todos os clientes ${tariff} nesta rede, até ${until}`,
 
     'note.outside': () => 'Fora da MOBI.E: paga-se directamente ao operador, sem CEME.',
     'note.noUserTariff': () => 'Nenhum dos tarifários do utilizador se aplica a esta tomada.',

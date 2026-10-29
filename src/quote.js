@@ -7,6 +7,7 @@
 //                   each slice priced at its own period and OMIE quarter)
 //   opc.js       -> the charger operator's fee
 //   offers.js    -> walk-up, operator app, eMSP and subscription prices (offers/)
+//   promos.js    -> CEME promotions at this charger's network (from ceme-v2)
 //   live.js      -> live status and, as a fallback, the operator fee from the NAP
 //
 // Each way to pay becomes one entry in `options`, tagged with a `kind`:
@@ -34,6 +35,7 @@ import { translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { describePlan, opcCost } from './opc.js';
 import { isStale, offersAt, ownWalkUp, SOURCE } from './offers.js';
+import { promosHere, promoTips, withPromos } from './promos.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 
@@ -70,15 +72,25 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
   return { options, headline, best, missing: false };
 }
 
+// One CEME tariff as a way to pay here: ceme-v2's energy total plus the
+// operator fee with VAT, with the tariff's promotions for every customer at
+// this network already in (promos.js; new-customer ones never are).
 // kwhByPeriod is there when the session crosses periods for this tariff
 // (each tariff has its own cycle, so one session can cross for one and not
 // for another): { VAZIO: 12.4, FORA_VAZIO: 20.1 }.
-const cemeOption = (t, opcWithVat) => ({
-  kind: 'ceme', label: `${t.ceme} · ${t.name}`, total: r2(t.totalEur + opcWithVat),
-  tariffId: t.id, ceme: t.ceme, name: t.name, tariffKind: t.kind, period: t.period,
-  ...(t.kwhByPeriod && Object.keys(t.kwhByPeriod).length > 1 && { kwhByPeriod: t.kwhByPeriod }),
-  requiresOtherContract: !!t.bundle, energyEur: t.totalEur,
-});
+//   opc: { low, high } operator fee excl. VAT; vat: the region's multiplier
+function cemeOption(t, { site, opc, vat }) {
+  const promos = promosHere(t, site).filter(p => !p.newCustomers);
+  const w = withPromos(promos, { energyEur: t.totalEur, opc, vat });
+  return {
+    kind: 'ceme', label: `${t.ceme} · ${t.name}`, total: w.high,
+    ...(w.low !== w.high && { low: w.low }),
+    tariffId: t.id, ceme: t.ceme, name: t.name, tariffKind: t.kind, period: t.period,
+    ...(t.kwhByPeriod && Object.keys(t.kwhByPeriod).length > 1 && { kwhByPeriod: t.kwhByPeriod }),
+    requiresOtherContract: !!t.bundle, energyEur: w.energyEur,
+    ...(promos.length && { promos: promos.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }) }),
+  };
+}
 
 // The per-quarter story of a session, for a driver (or a QA run) who asks
 // how the price was built: when each kWh goes in, and for each CEME tariff
@@ -220,23 +232,38 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (opc.low !== opc.high) base.assumptions.push(t('assume.feeRange'));
   if (plan?.time?.length) base.assumptions.push(t('assume.perMinute'));
 
-  const opcVat = opc.high * vat;
-  const low = r2(ceme.totalEur + opc.low * vat), high = r2(ceme.totalEur + opcVat);
+  const ctx = { site, opc, vat };
+  const shownOpts = picked.options.map(o => cemeOption(o, ctx));
+  // The headline, now that promotions may have changed the order: with the
+  // user's tariffs, the cheapest of them; otherwise the cheapest shown one
+  // that needs no other contract (pickTariffs' pick when none qualifies).
+  // Without promotions this is pickTariffs' headline: every option pays the
+  // same operator fee, so the energy order is the total order.
+  const cheapest = list => list.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
+  const head = (tariffIds?.length ? cheapest(shownOpts) : cheapest(shownOpts.filter(o => !o.requiresOtherContract)))
+    ?? cemeOption(ceme, ctx);
   // complete: false when the operator fee is unknown, so the total is only
   // the energy part. Rankings put these after the complete ones.
-  base.total = { eur: high, low, high, complete: !!plan };
-  base.eurPerKwh = session.batteryKwh > 0 ? r2(high / session.batteryKwh) : null;
-  base.headline = cemeOption(ceme, opcVat);
+  base.total = { eur: head.total, low: head.low ?? head.total, high: head.total, complete: !!plan };
+  base.eurPerKwh = session.batteryKwh > 0 ? r2(head.total / session.batteryKwh) : null;
+  base.headline = head;
   base.opc = {
     tariff: plan ? describePlan(plan, t) : null, source,
-    eurExVat: r2(opc.high), eurWithVat: r2(opcVat),
+    eurExVat: r2(opc.high), eurWithVat: r2(opc.high * vat),
     parts: opc.parts && Object.fromEntries(Object.entries(opc.parts).map(([k, v]) => [k, r2(v.high)])),
   };
-  base.options = picked.options.map(o => cemeOption(o, opcVat));
-  if (!base.options.some(o => o.tariffId === ceme.id)) base.options.unshift(base.headline);
-  if (picked.best && !picked.options.some(o => o.id === picked.best.id) && picked.best.totalEur < ceme.totalEur) {
-    base.options.push({ ...cemeOption(picked.best, opcVat), cheaperElsewhere: true });
+  base.options = shownOpts;
+  if (!base.options.some(o => o.tariffId === head.tariffId)) base.options.unshift(head);
+  if (picked.best && !picked.options.some(o => o.id === picked.best.id)) {
+    const b = cemeOption(picked.best, ctx);
+    if (b.total < head.total) base.options.push({ ...b, cheaperElsewhere: true });
   }
+  // Promotions: the ones already in a shown total get an assumption; all of
+  // them at this network (new-customer ones included) are listed as tips.
+  const applied = new Set(base.options.flatMap(o => o.promos || []));
+  const tips = promoTips(applicable(sim.data, point), site, { opc, vat, applied }, t);
+  for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));
+  if (tips.length) base.promos = tips;
   base.options.push(...extras);
   base.best = bestOption(base.options, base.total);
   base.omieSpotEurKwh = sim.omieSpot?.eurKwh ?? null;

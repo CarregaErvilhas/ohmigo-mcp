@@ -71,7 +71,7 @@
       route: (km, off) => `km ${km} of route, ${off} km off`, range: 'range',
       outside: 'Outside MOBI.E: pay the operator directly, price not comparable *',
       adhoc: 'Card / QR at charger', direct: 'Operator direct', contract: 'needs another contract', cheapest: 'cheapest overall',
-      sub: 'subscription', breakdown: 'Breakdown', energy: 'Energy', operator: 'Operator', notPublished: 'not published',
+      sub: 'subscription', promo: 'promotion', promos: 'Promotions', breakdown: 'Breakdown', energy: 'Energy', operator: 'Operator', notPublished: 'not published',
       cardQr: 'Card / QR', own: 'Direct', note: 'Note', assumes: 'Assumes', point: 'Point', directions: 'Directions',
       period: { VAZIO: 'off-peak', FORA_VAZIO: 'peak', UNICO: 'flat' }, timeline: 'Quarter by quarter',
       foot: (at, stale, day) => `Estimates. ${at ? `Status from the NAP at ${at}${stale ? ' (may be stale)' : ''}.` : 'Live status unavailable.'} Chargers as of ${day}.`,
@@ -83,7 +83,7 @@
       route: (km, off) => `km ${km} do percurso, a ${off} km`, range: 'intervalo',
       outside: 'Fora da MOBI.E: paga-se ao operador, preço não comparável *',
       adhoc: 'Cartão / QR no posto', direct: 'Operador directo', contract: 'exige outro contrato', cheapest: 'o mais barato',
-      sub: 'subscrição', breakdown: 'Detalhe', energy: 'Energia', operator: 'Operador', notPublished: 'não publicada',
+      sub: 'subscrição', promo: 'promoção', promos: 'Promoções', breakdown: 'Detalhe', energy: 'Energia', operator: 'Operador', notPublished: 'não publicada',
       cardQr: 'Cartão / QR', own: 'Directo', note: 'Nota', assumes: 'Pressupostos', point: 'Ponto', directions: 'Direcções',
       period: { VAZIO: 'vazio', FORA_VAZIO: 'fora de vazio', UNICO: 'simples' }, timeline: 'Quarto a quarto',
       foot: (at, stale, day) => `Estimativas. ${at ? `Estado do PAN às ${at}${stale ? ' (pode estar desactualizado)' : ''}.` : 'Estado em tempo real indisponível.'} Postos de ${day}.`,
@@ -132,7 +132,7 @@
       const h = q.headline;
       const opts = (q.options || []).map(o => `<li class="${q.best && o.kind === q.best.kind && o.label === q.best.label ? 'hl' : ''}"><span>${eur(o.total)}${o.asterisk ? '*' : ''}</span> ${esc(optName(o))}`
         + `${o.requiresOtherContract ? ` <em>${s.contract}</em>` : ''}${o.cheaperElsewhere ? ` <em>${s.cheapest}</em>` : ''}`
-        + `${o.subscription ? ` <em>${esc(o.subscription.text)}</em>` : ''}</li>`).join('');
+        + `${o.subscription ? ` <em>${esc(o.subscription.text)}</em>` : ''}${o.promos ? ` <em>${s.promo}</em>` : ''}</li>`).join('');
       const head = q.outside && !rows[i - 1]?.outside ? `<div class="sec">${s.outside}</div>` : '';
       return `${head}<div class="row${i === 0 && q.total ? ' best' : ''}">
         <div class="n">${i + 1}</div>
@@ -146,6 +146,7 @@
           ${q.opc ? `<dt>${s.operator}</dt><dd>${eur(q.opc.eurWithVat)} · ${esc(q.opc.tariff ?? s.notPublished)}</dd>` : ''}
           ${(q.options || []).filter(o => o.kind === 'adhoc' || o.kind === 'opc_direct').map(o => `<dt>${o.kind === 'adhoc' ? s.cardQr : s.direct}</dt><dd>${o.tariff ? esc(o.tariff) + ' · ' : ''}${esc(o.note || '')}</dd>`).join('')}
           ${(q.options || []).find(o => o.kind === 'direct') ? `<dt>${s.own}</dt><dd>${esc(q.options.find(o => o.kind === 'direct').note)}</dd>` : ''}
+          ${q.promos ? `<dt>${s.promos}</dt><dd>${q.promos.map(p => `${esc(p.label)}: ${eur(p.total)} · ${esc(p.note)}`).join('<br>')}</dd>` : ''}
           ${q.note ? `<dt>${s.note}</dt><dd>${esc(q.note)}</dd>` : ''}
           <dt>${s.assumes}</dt><dd>${(q.assumptions || []).map(esc).join('; ')}</dd>
           <dt>${s.point}</dt><dd>${esc(q.pointId)}</dd>

@@ -47,7 +47,8 @@ Follow one `find_cheapest_charging` call through the code:
    - **`src/ceme.js`**: one call to ceme-v2 for every CEME tariff's energy price,
      each quarter at its own off-peak/peak period and OMIE price;
    - **`src/opc.js`**: the operator's fee for that energy and time;
-   - **`src/offers.js`**: walk-up, app, eMSP and subscription prices that apply here.
+   - **`src/offers.js`**: walk-up, app, eMSP and subscription prices that apply here;
+   - **`src/promos.js`**: the CEME promotions (from ceme-v2) that hold at this charger's network.
 
    Each way to pay becomes one entry in `options` ([02](02-cost-math.md)).
 6. Still in `quote.js`, `rank` drops busy or broken chargers, keeps the
@@ -72,13 +73,14 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/opc.js` | Operator fee math (flat, per kWh, per-minute tiers) |
 | `src/ceme.js` | Client for ceme-v2's API, with a cache |
 | `src/offers.js` | Loads the direct offers, picks the ones for a charger; finds missing operators |
+| `src/promos.js` | CEME promotions at one network: which hold at a charger, and what they do to the price |
 | `src/offers-parse.js` | Parses the custofinal blog's price tables |
 | `src/view.js` | Builds the inline results page with the MCP Apps bridge |
 | `ui/results.html` | The inline results page |
 | `site/index.html` | The landing page at `/`: what ohmigo is and how to install it, in both languages |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
 | `offers/manual.json` | Hand-made corrections and additions to it |
-| `offers/networks.json` | Which chargers each blog network label means |
+| `offers/networks.json` | Which chargers each network label means (blog offers and CEME promotions) |
 | `scripts/call.mjs` | Dev helper: call a tool from the terminal |
 | `scripts/scrape-offers.mjs` | Weekly scrape of the blog (`.github/workflows/offers.yml`) |
 | `scripts/offer-gaps.mjs` | Lists operators that probably sell directly and have no offer |

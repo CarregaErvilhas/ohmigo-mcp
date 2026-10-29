@@ -86,6 +86,12 @@ export function tariffs() {
   return cached('tariffs', () => call('/v1/tariffs'));
 }
 
+// CEME promotions that haven't ended yet (each with `active` = already on).
+// The cost tools get them per tariff from simulate; this is for listing.
+export function promos() {
+  return cached('promos', () => call('/v1/promos'));
+}
+
 // MOBI.E voltage level of the socket -> the CEME tariff variant that applies.
 export const tariffVoltage = level => (level === 'MT' ? 'MT' : 'BT');
 
