@@ -267,6 +267,7 @@ const USABLE = new Set(['available', 'unknown', null]);
 // price), the energy-only total goes after all the complete ones, and points
 // with no price at all go last.
 const sortKey = q => q.best ? q.best.total : q.total ? 1e6 + q.total.eur : Infinity;
+export const byBest = (a, b) => sortKey(a) - sortKey(b);
 
 // Ranks MOBI.E sites by `best` (see sortKey), one row
 // per site (its cheapest point). Sites outside MOBI.E come back in
