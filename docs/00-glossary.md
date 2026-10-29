@@ -24,7 +24,13 @@ charger.
 energy + the OPC's usage fee. That's the whole reason this project exists:
 nobody shows you both together.
 
-**DPC** — a private charger (home, office) connected to MOBI.E. No OPC fee.
+**DPC** — *Detentor de Ponto de Carregamento*, the holder of a
+**private-access** charger connected to MOBI.E: a home wallbox, a condominium
+garage, a company car park for its staff or fleet. It is not an operator: no
+OPC, no OPC fee, so a session there costs only the CEME energy, EGME and taxes,
+and only the users its owner authorizes can charge. DPC chargers aren't in the
+NAP, so ohmigo never lists them. AI assistants confuse DPC with OPC easily;
+`INSTRUCTIONS` in `src/mcp.js` spells out the difference for them.
 
 **eMSP** — *e-Mobility Service Provider*, the international name for what
 Portugal calls a CEME.
