@@ -18,6 +18,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { fold, Index } from './lookup.js';
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
@@ -39,11 +40,12 @@ export function haversineKm(a, b) {
   return 2 * R_KM * Math.asin(Math.sqrt(h));
 }
 
-// Distance from p to the polyline, and how far along it (km from the start)
-// the closest point is. Uses a local equirectangular projection per segment,
+// Distance from p to the polyline, how far along it (km from the start) the
+// closest point is, and the segment it's closest to (the direction of travel
+// there). Uses a local equirectangular projection per segment,
 // which is accurate to well under 1 % at Portugal's latitudes and segment sizes.
 export function routeDistance(p, route) {
-  let best = { km: Infinity, alongKm: 0 };
+  let best = { km: Infinity, alongKm: 0, seg: null };
   let walked = 0;
   for (let i = 0; i < route.length - 1; i++) {
     const a = route[i], b = route[i + 1];
@@ -54,7 +56,7 @@ export function routeDistance(p, route) {
     const t = len2 ? Math.max(0, Math.min(1, (px * bx + py * by) / len2)) : 0;
     const km = Math.hypot(px - t * bx, py - t * by);
     const seg = Math.sqrt(len2);
-    if (km < best.km) best = { km, alongKm: walked + t * seg };
+    if (km < best.km) best = { km, alongKm: walked + t * seg, seg: { from: a, to: b } };
     walked += seg;
   }
   return best;
@@ -174,7 +176,7 @@ export class Dataset {
       if (route) {
         const d = routeDistance(s, route);
         if (d.km > corridorKm) continue;
-        dist = { offRouteKm: d.km, alongKm: d.alongKm };
+        dist = { offRouteKm: d.km, alongKm: d.alongKm, seg: d.seg };
       } else {
         const km = haversineKm(near, s);
         if (km > radiusKm) continue;
@@ -184,6 +186,23 @@ export class Dataset {
       if (points.length) out.push({ site: s, points, ...dist });
     }
     out.sort(route ? (a, b) => a.alongKm - b.alongKm : (a, b) => a.km - b.km);
-    return { total: out.length, results: out.slice(0, limit) };
+    const kept = route ? this.ourSide(out) : out;
+    for (const r of kept) delete r.seg;
+    return { total: kept.length, results: kept.slice(0, limit) };
+  }
+
+  // Along a route the direction of travel is known, so the far side of a
+  // motorway service area (across the road) goes, when the sites say which
+  // way they serve. Not by the right-hand rule: a route is often a few
+  // waypoints, and its segments don't follow the road closely enough for
+  // twins only a hundred metres apart. Then both sides stay. See direction.js.
+  ourSide(results) {
+    const drop = new Set();
+    for (const area of serviceAreas(clusterPlaces(results))) {
+      if (area.length < 2) continue;
+      const pick = sideFor(area, area[0][0].seg, name => this.resolvePlace(name), { geometry: false });
+      if (pick) for (const pl of area) if (!pick.places.includes(pl)) pl.forEach(h => drop.add(h));
+    }
+    return results.filter(r => !drop.has(r));
   }
 }

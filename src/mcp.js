@@ -19,7 +19,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { tariffs } from './ceme.js';
-import { haversineKm } from './data.js';
+import { clusterPlaces, directionLabel, samePlace, serviceAreas, sideFor } from './direction.js';
 import { pickLang, translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { offersAt } from './offers.js';
@@ -41,7 +41,9 @@ Who's who on MOBI.E (don't mix these up):
 - OPC (Operador de Ponto de Carregamento): the company that operates a PUBLIC charger (IONITY, Powerdot, Galp...). Charges the usage fee on top of the energy. Every charger this server returns has an OPC.
 - DPC (Detentor de Ponto de Carregamento): the holder of a PRIVATE-access charger connected to MOBI.E: a home wallbox, a condominium garage, a company car park for its staff or fleet. It is not an operator, there is no OPC behind it and no OPC fee: the session costs only the CEME energy, the EGME fee and taxes. Only its owner's authorized users can charge there. DPC chargers are not in the public data (NAP), so this server never lists or prices them. "DPC" is not a kind of OPC, not a payment option and not a field in the results; don't call an OPC a DPC or the reverse. If the user charges at a DPC charger (home, work, condo), say that ohmigo can't price it and that the cost is their CEME tariff (list_ceme_tariffs shows it) without any operator fee.
 
-Finding the charger the user means: nobody knows a charger's id, so never ask for one. When the user names a charger ("the Continente in Leiria", "IONITY Mealhada", "the Galp on the A1 at Pombal", "the charger at Lidl in Coimbra") or reads its code off the sticker ("LRA-00156"), call lookup_charger with their words as query, plus lat/lon if you know where they are. It returns what the NAP publishes about that site (every socket's power, plug and live status, the operator fee, the walk-up price, direct offers) and, in "osm", what the OpenStreetMap community mapped there: the place's name or the shop it's at (brand), opening hours, access, parking fee, "underground" car park. "operator" is who runs and bills the charger (from the NAP); osm.brand/osm.operator are often the shop or car park (a Galp charger at a Lidl), so don't mix them up, and credit OpenStreetMap when you use them. Each site's "missing" lists the user's words it lacks: if the best sites still miss some, say so instead of presenting them as the one the user meant, and ask or try fewer words. If several sites fit, list them briefly (operator, address, town) and ask which one. For the cost there, pass its siteId as site to estimate_charging_cost (point_id only when the user picked one socket).
+Finding the charger the user means: nobody knows a charger's id, so never ask for one. When the user names a charger ("the Continente in Leiria", "IONITY Mealhada", "the Galp on the A1 at Pombal", "the charger at Lidl in Coimbra") or reads its code off the sticker ("LRA-00156"), call lookup_charger with their words as query, plus lat/lon if you know where they are. It returns what the NAP publishes about that site (every socket's power, plug and live status, the operator fee, the walk-up price, direct offers) and, in "osm", what the OpenStreetMap community mapped there: the place's name, the brand (often who owns the chargers, or the shop or car park they're at), opening hours, access, parking fee, "underground" car park. "operator" (from the NAP) is the OPC that runs the charger and bills its fee; the owner can be someone else: Lidl's chargers are owned by Lidl and operated by Galp, so the NAP says Galp and OSM says Lidl. Both are right; say who operates it, and credit OpenStreetMap when you use its data. Each site's "missing" lists the user's words it lacks: if the best sites still miss some, say so instead of presenting them as the one the user meant, and ask or try fewer words. If several sites fit, list them briefly (operator, address, town) and ask which one. For the cost there, pass its siteId as site to estimate_charging_cost (point_id only when the user picked one socket).
+
+Motorways: a service area usually has one charger site on each side of the road, and the driver can only reach the one on their side; both often share a name and even an address. When a result says so (directionNeeded, or an error asking for the direction), ask the user which way they're driving (where they're heading) unless they already said, then call again with towards (that town, or its lat/lon). The server picks the side from the direction the site says it serves, or else from the right-hand rule; in that case an assumption tells the user to check the signs: pass it on. On a route (route argument) the far side is left out when the sites say which way they serve; otherwise both sides can show up, so name the direction when you present one.
 
 Before calling a cost tool, make sure you know (ask only for what you don't have or don't remember):
 1. Where: the user's location (lat/lon), a town name, or a route (list of waypoints from origin to destination); or the charger itself (above). For a place that isn't a town (a shopping centre, a street, a motorway service area), use its lat/lon from your own knowledge or a search; place only knows towns and addresses on the NAP.
@@ -109,6 +111,22 @@ const Where = {
   corridor_km: z.number().positive().max(20).default(2).describe('Max distance from the route, km'),
   query: z.string().max(200).optional().describe('Only chargers whose operator, brand, name or address matches these words, e.g. "IONITY", "Continente", "Lidl". A town in it is used as the place when no lat/lon/place/route is given'),
 };
+
+const Towards = {
+  towards: z.union([z.string().max(100), z.object({ lat: z.number().min(30).max(43), lon: z.number().min(-32).max(-6) })]).optional()
+    .describe('Where the user is driving to: a town (e.g. "Lisboa") or lat/lon. Picks the side of a motorway service area they can reach; ask the user when a result says the direction is needed'),
+};
+
+// `towards` as a point and a name for the sentences, or an error.
+function resolveTowards(ds, towards, t) {
+  if (towards == null) return null;
+  if (typeof towards !== 'string') return { point: towards, name: `${towards.lat}, ${towards.lon}` };
+  const p = ds.resolvePlace(towards);
+  return p ? { point: p, name: towards } : { error: t('err.place', { place: towards }) };
+}
+
+// A service area's sides, one line each, for the question to the user.
+const sidesList = area => area.map(([h, ...more]) => `${h.site.id}${more.length ? ` (+${more.length})` : ''}: ${directionLabel(h.site) ?? '?'}, ${h.site.operator ?? ''}, ${h.site.address ?? ''} (${h.site.lat}, ${h.site.lon})`).join('\n');
 
 const Filter = {
   min_kw: z.number().positive().optional().describe('Minimum charger power, kW'),
@@ -184,6 +202,7 @@ function siteCard(h, live, t) {
     siteId: site.id, code: site.code, operator: site.operator, operatorId: site.operatorId ?? undefined,
     website: site.website ?? undefined, address: site.address, city: site.city, region: site.region,
     lat: site.lat, lon: site.lon, km: rnd(h.km), matched: h.matched, missing: h.missing?.length ? h.missing : undefined,
+    direction: h.direction ?? undefined, otherSide: h.otherSide,
     payment: site.payment?.length ? site.payment : undefined,
     osm: site.osm,
     sockets: [...groups.values()].sort((a, b) => (b.named ? 1 : 0) - (a.named ? 1 : 0) || (b.kw ?? 0) - (a.kw ?? 0)),
@@ -217,7 +236,6 @@ const MAX_KINDS = 8;
 // fixed order, and two sockets with the same fees must give the same key.
 const canonical = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x)
   ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x);
-const SAME_PLACE_KM = 0.25;
 function pointsFor(ds, live, a, t) {
   if (a.point_id) {
     const hit = ds.findPoint(a.point_id);
@@ -227,19 +245,31 @@ function pointsFor(ds, live, a, t) {
   if (!a.site) return { error: t('err.which') };
   const r = ds.lookup(a.site, { limit: Infinity, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only });
   if (!r.results.length || r.results[0].missing?.length) return { error: t('err.lookup', { query: a.site }) };
-  // Several sites in the same spot are one place to the driver: a motorway
-  // service area often has one NAP site per charger. Words can fit several
-  // places; then the assistant has to ask which.
-  const places = [];
-  for (const h of r.results) {
-    const place = places.find(pl => haversineKm(pl[0].site, h.site) <= SAME_PLACE_KM);
-    if (place) place.push(h); else places.push([h]);
+  // Several sites in the same spot are one place to the driver (a service
+  // area often has one NAP site per charger). Words can fit several places:
+  // the assistant has to ask which. The two sides of one motorway service
+  // area are a different question: which way the driver is going.
+  const areas = serviceAreas(clusterPlaces(r.results));
+  if (areas.length > 1) {
+    const list = areas.slice(0, 6).map(([[h, ...more], ...sides]) => `${h.site.id}${more.length ? ` (+${more.length})` : ''}: ${h.site.operator ?? ''}, ${h.site.address ?? ''}, ${h.site.city ?? ''} (${h.site.lat}, ${h.site.lon})${sides.length ? ` ${t('several.sides')}` : ''}`).join('\n');
+    return { error: `${t('err.several', { query: a.site, n: areas.length })}\n${list}` };
   }
+  let [places] = areas;
+  const assumptions = [];
   if (places.length > 1) {
-    const list = places.slice(0, 6).map(([h, ...more]) => `${h.site.id}${more.length ? ` (+${more.length})` : ''}: ${h.site.operator ?? ''}, ${h.site.address ?? ''}, ${h.site.city ?? ''} (${h.site.lat}, ${h.site.lon})`).join('\n');
-    return { error: `${t('err.several', { query: a.site, n: places.length })}\n${list}` };
+    const towards = resolveTowards(ds, a.towards, t);
+    if (towards?.error) return towards;
+    if (!towards) return { error: `${t('err.direction', { query: a.site })}\n${sidesList(places)}` };
+    const pick = sideFor(places, { from: places[0][0].site, to: towards.point }, name => ds.resolvePlace(name));
+    // When the direction doesn't settle it, both sides are priced: the driver
+    // will see on the signs which one they're at.
+    if (!pick) assumptions.push(t('assume.bothSides', { to: towards.name }));
+    else {
+      places = pick.places;
+      assumptions.push(pick.by === 'label' ? t('assume.sideLabel', { label: pick.label, to: towards.name }) : t('assume.side', { to: towards.name }));
+    }
   }
-  const sites = places[0];
+  const sites = places.flat();
   // An id or code names one site. Its operator's other sites in the same
   // spot are the rest of that station, so they come too, unless the user
   // named one socket.
@@ -247,7 +277,7 @@ function pointsFor(ds, live, a, t) {
     const [h] = sites;
     const ok = ds.pointFilter({ minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only });
     for (const site of ds.sites) {
-      if (site === h.site || site.operatorId !== h.site.operatorId || haversineKm(site, h.site) > SAME_PLACE_KM) continue;
+      if (site === h.site || site.operatorId !== h.site.operatorId || !samePlace(site, h.site)) continue;
       const points = site.points.filter(ok);
       if (points.length) sites.push({ site, points });
     }
@@ -266,7 +296,7 @@ function pointsFor(ds, live, a, t) {
       if (!cur || (!free(cur.site, cur.point) && free(h.site, point))) kinds.set(key, { site: h.site, point });
     }
   }
-  return [...kinds.values()];
+  return Object.assign([...kinds.values()], { assumptions });
 }
 
 // `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
@@ -301,7 +331,7 @@ export function createServer(getDataset, live) {
       query: z.string().min(1).max(200).describe('What the user calls the charger, in their words: code, operator/brand, place, town, address'),
       lat: Where.lat, lon: Where.lon,
       radius_km: z.number().positive().max(300).optional().describe('With lat/lon: only sites this close'),
-      ...Filter, ...Lang,
+      ...Towards, ...Filter, ...Lang,
       limit: z.number().int().positive().max(20).default(5),
     }),
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -309,14 +339,35 @@ export function createServer(getDataset, live) {
     const ds = getDataset();
     const lang = langOf(a, ctx), t = translator(lang);
     const near = a.lat != null && a.lon != null ? { lat: a.lat, lon: a.lon } : undefined;
-    const r = ds.lookup(a.query, { near, radiusKm: a.radius_km, limit: a.limit, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only });
+    const towards = resolveTowards(ds, a.towards, t);
+    if (towards?.error) return err(towards.error);
+    const r = ds.lookup(a.query, { near, radiusKm: a.radius_km, limit: Infinity, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only });
     if (!r.results.length) return err(t('err.lookup', { query: a.query }));
+    // Motorway service areas among the results: with a direction, keep the
+    // side the driver can reach; without one, flag them so the assistant asks.
+    let results = r.results;
+    const notes = [];
+    let directionNeeded = false;
+    for (const area of serviceAreas(clusterPlaces(results))) {
+      if (area.length < 2) continue;
+      const sides = area.map(pl => pl[0].site.id);
+      for (const pl of area) for (const h of pl) { h.direction = directionLabel(h.site); h.otherSide = sides.filter(id => id !== pl[0].site.id); }
+      if (!towards) { directionNeeded = true; continue; }
+      const pick = sideFor(area, { from: area[0][0].site, to: towards.point }, name => ds.resolvePlace(name));
+      if (!pick) { notes.push(t('assume.bothSides', { to: towards.name })); continue; }
+      const far = new Set(area.filter(pl => !pick.places.includes(pl)).flat());
+      results = results.filter(h => !far.has(h));
+      for (const h of pick.places.flat()) delete h.otherSide;
+      notes.push(pick.by === 'label' ? t('assume.sideLabel', { label: pick.label, to: towards.name }) : t('assume.side', { to: towards.name }));
+    }
+    if (directionNeeded) notes.push(t('note.direction'));
+    if (results[0].missing?.length) notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
     await withLive(live, ctx, t);
     return ok({
-      ...meta(ds, live, lang), query: a.query, total: r.total,
-      note: r.results[0].missing?.length ? t('note.partial', { words: r.results[0].missing.join(', ') }) : undefined,
+      ...meta(ds, live, lang), query: a.query, total: results.length,
+      notes: notes.length ? [...new Set(notes)] : undefined, directionNeeded: directionNeeded || undefined,
       orderedFrom: near ? undefined : r.town,
-      sites: r.results.map(h => siteCard(h, live, t)),
+      sites: results.slice(0, a.limit).map(h => siteCard(h, live, t)),
       // OpenStreetMap's licence (ODbL) asks for this wherever its data shows.
       credit: r.results.some(h => h.site.osm) ? t('credit.osm') : undefined,
     });
@@ -388,7 +439,7 @@ export function createServer(getDataset, live) {
     inputSchema: z.object({
       site: z.string().max(200).optional().describe('The charger: siteId from lookup_charger/find_chargers (e.g. "GLP-LRA-00156"), its code ("LRA-00156"), or the user\'s words if they name one site'),
       point_id: z.string().optional().describe('One socket, "SITE/POINT" as returned by the other tools, e.g. "GLP-LRA-00156/LRA-00156-02". Only when the user picked a socket; otherwise use site'),
-      ...Filter, ...Car, ...Detail, ...Lang,
+      ...Towards, ...Filter, ...Car, ...Detail, ...Lang,
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: VIEW_URI } },
@@ -399,10 +450,12 @@ export function createServer(getDataset, live) {
     await withLive(live, ctx, t);
     const targets = pointsFor(ds, live, a, t);
     if (targets.error) return err(targets.error);
+    const { assumptions = [] } = targets;
     const opts = { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, detail: !!a.detail, qa: QA, simCache: new Map() };
     // Quoting is cheap once the first one has called ceme-v2 (simCache), so
     // every kind is priced and the cheapest are kept.
     const results = (await Promise.all(targets.map(hit => quotePoint(hit, car(a), opts)))).sort(byBest).slice(0, MAX_KINDS);
+    for (const q of results) q.assumptions.push(...assumptions);
     return ok({ kind: 'single', ...meta(ds, live, lang), results });
   });
 

@@ -83,8 +83,9 @@ Monday.
   its `ref` tag (only when the OSM element is within 1 km of the NAP's
   coordinates). Optional, and so is every field in it: `name`, `brand`,
   `operator`, `openingHours`, `location` (`underground`...), `access`,
-  `parkingFee`, `maxstay`. Its `brand`/`operator` are often the shop or car
-  park the charger is at, not the company that bills it (that's `operator`).
+  `parkingFee`, `maxstay`. Its `brand`/`operator` are often the chargers' owner
+  or the shop they're at (Lidl owns its chargers, Galp operates them), not
+  the OPC that bills the fee (that's the site's `operator`).
   `lookup_charger` searches it and shows it ([01](01-how-it-works.md)).
 - `schema`: bumped by nap-dashboard when the format changes incompatibly.
   ohmigo refuses a schema it doesn't know, rather than misreading it.

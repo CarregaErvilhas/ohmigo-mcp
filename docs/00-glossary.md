@@ -96,7 +96,8 @@ per-minute tiers ("0.18 €/min after 30 min") and the ad hoc price.
 **OpenStreetMap (OSM)** — the community-edited world map. Portuguese mappers
 tag most chargers with their MOBI.E code, plus what the NAP lacks: the name
 people use ("Continente Matosinhos"), the shop or car park it's at, opening
-hours, whether it's underground. ohmigo uses it to find the charger the user
+hours, whether it's underground. Its brand is often the chargers' owner (Lidl
+owns its chargers; the NAP lists Galp, which operates them). ohmigo uses it to find the charger the user
 names ([01](01-how-it-works.md)).
 
 **MOBI.E code** — the site code on the charger's sticker, a municipality
