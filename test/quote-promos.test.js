@@ -85,3 +85,24 @@ test('EDP × UVE at an EDP charger: the all-in price is the total, operator fee 
   const away = await quotePoint({ site: site('GLPP'), point }, car, { at, tariffIds: ['edp-bt-cartoedp-2'], lang: 'pt' });
   assert.equal(away.headline.total, r2(7 + (1 + 0.2 * away.session.kwhBilled) * 1.23), 'not at Galp');
 });
+
+test('outside MOBI.E: the NAP site price is listed next to the direct offers, never instead', async () => {
+  const tesla = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
+  const q = await quotePoint({ site: { ...site('TSLA'), operator: 'Tesla' }, point: tesla }, car, { at, lang: 'en' });
+  assert.ok(q.options.some(o => o.kind === 'direct'), 'Tesla has direct offers in offers/');
+  const nap = q.options.find(o => o.kind === 'opc_direct');
+  assert.ok(Math.abs(nap.total - 0.3 * q.session.kwhBilled) < 0.02, 'NAP price x billed kWh');
+  assert.equal(nap.eurPerKwh, 0.3);
+  // Cheaper than any offer, so it's ranked like one: it's `best`.
+  assert.equal(q.best.kind, 'opc_direct');
+  assert.equal(q.total.complete, true);
+  assert.ok(q.assumptions.some(a => a.includes("operator's price from the NAP")));
+});
+
+test('rank: MOBI.E and outside MOBI.E share one list, the price decides', async () => {
+  const { rank } = await import('../src/quote.js');
+  const cont = { id: 'c1', kw: 50, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.05 };
+  const ranked = await rank([{ site: site('HORZ'), points: [point], km: 1 }, { site: { ...site('XXXX'), operator: 'X' }, points: [cont], km: 2 }], car, { at, lang: 'en' });
+  assert.ok(Array.isArray(ranked));
+  assert.deepEqual(ranked.map(q => q.regime), ['sem_ceme', 'mobie']);
+});

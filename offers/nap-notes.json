@@ -1,0 +1,4 @@
+{
+  "about": "Chargers whose NAP price is known to be wrong. Outside MOBI.E, ohmigo shows the NAP's pricePerDeliveryUnit as the operator's price, ranked like any other, unless a note here covers the charger: then that price is left out and the note's why goes into the assumptions. Scope by NAP operator id (operatorIds) or site id (siteIds). Every note needs why, source and checkedAt. Guide: docs/04-operator-offers.md.",
+  "notes": []
+}

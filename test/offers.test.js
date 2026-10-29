@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { bandFor, parseTables, toOffers } from '../src/offers-parse.js';
-import { gaps, isStale, mergeOffers, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
+import { gaps, isStale, mergeOffers, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
 
 const HEAD = `<thead><tr><th rowspan="2">Operador - Plano</th><th rowspan="2">Postos</th><th colspan="2">AC</th><th colspan="6">DC</th></tr>
 <tr><th>&le;7.4</th><th>11..22</th><th>≤50</th><th>100</th><th>120</th><th>150</th><th>180</th><th>&gt;180</th></tr></thead>`;
@@ -119,4 +119,11 @@ test('offers files are well-formed', () => {
   }
   const custofinal = JSON.parse(readFileSync(new URL('../offers/custofinal.json', import.meta.url), 'utf8'));
   assert.deepEqual(custofinal.unmapped, [], 'custofinal.json has unmapped networks: add them to offers/networks.json');
+});
+
+test('noteFor: a NAP-price note matches by operator or by site', () => {
+  const notes = [{ scope: { operatorIds: ['CONT'] }, why: 'a' }, { scope: { siteIds: ['TSL-1'] }, why: 'b' }];
+  assert.equal(noteFor(notes, { id: 'CONT-9', operatorId: 'CONT' })?.why, 'a');
+  assert.equal(noteFor(notes, { id: 'TSL-1', operatorId: 'TSLA' })?.why, 'b');
+  assert.equal(noteFor(notes, { id: 'TSL-2', operatorId: 'TSLA' }), null);
 });

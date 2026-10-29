@@ -106,6 +106,23 @@ Use `manual.json`:
 Every entry needs a `source` (https) and the `checkedAt` date you read it.
 After 90 days, users are told the price may be out of date.
 
+## The NAP's own price is wrong: `offers/nap-notes.json`
+
+Outside MOBI.E (Continente, Tesla...) the NAP publishes one price per charger,
+and ohmigo shows it as the operator's price, ranked like any other. If you
+find that price is wrong for an operator or a site (the operator's own page
+says otherwise, say), add a note and that price is left out; the note's
+`why` goes into the quote's assumptions so the user knows why:
+
+```json
+{ "scope": { "operatorIds": ["CONT"] }, "why": "the NAP shows 0.37 at every power; Continente's app charges more on DC",
+  "source": "https://...", "checkedAt": "2026-10-29" }
+```
+
+`scope` takes `operatorIds` (NAP operator ids) or `siteIds`. Every note needs
+`why`, `source` and `checkedAt`. Don't use it to prefer the offers: a NAP
+price that differs from an offer isn't wrong by itself, both are shown.
+
 ## Finding what's missing
 
 ```bash

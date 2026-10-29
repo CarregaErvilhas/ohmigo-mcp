@@ -167,16 +167,19 @@ Subscription fees are listed next to the price, not added, because one monthly
 fee covers every session that month. If the charger's own operator has a
 walk-up offer priced for this band, it replaces MOBI.E's ad hoc price.
 
-**`opc_direct`** — chargers outside MOBI.E (Continente, Tesla) with no direct
-offer: the NAP's single price × kWh, with an asterisk. The NAP
-doesn't say whether that number is the final price, so these are never ranked
-against MOBI.E.
+**`opc_direct`** — chargers outside MOBI.E (Continente, Tesla...): the NAP's
+price for that site × kWh, paid to the operator. The NAP doesn't say whether
+VAT is in it; we take it as final and say so in the assumptions. It's listed
+next to the network's `direct` offers, not instead of them: an offer is one
+price for the whole network, the NAP's is this site's. It's left out only
+when `offers/nap-notes.json` has a note saying the NAP's price for that
+operator or site is wrong (the note's why goes into the assumptions).
 
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the
   cheapest popular one that needs no other contract);
 - **`best`**: the cheapest option anyone can use right now, meaning no
-  subscription, no other contract and no asterisk. **The ranking sorts by
+  subscription and no other contract. **The ranking sorts by
   `best`.** That's how an IONITY whose own app beats every CEME ends up where
   it belongs.
 
@@ -186,7 +189,8 @@ Two summary fields:
 2. Drop sessions longer than `max_minutes`, and plugs the live feed reports
    as in use, out of order or blocked (`available_only`).
 3. Keep the cheapest plug per site.
-4. Sort by `best`. Sites outside MOBI.E go in a separate `outsideMobie` list.
+4. Sort by `best`. MOBI.E and the networks outside it share one list: no
+   network is preferred, the price decides.
 
 ## What can be wrong, and how the user finds out
 
@@ -195,7 +199,7 @@ Two summary fields:
 | Car specs guessed | an assumption line naming the guess |
 | Operator fee unknown | "≥" before the price, `complete: false` |
 | Two values published for one fee | a price range |
-| Price outside MOBI.E | an asterisk and a note |
+| Price outside MOBI.E | an assumption line: the NAP's price taken as final |
 | Direct offers from a price list | the source and the date it was checked; "may be out of date" after 90 days |
 | A CEME promotion in the price | an assumption naming it and its end date |
 | Live status stale | `live.fresh: false`, said in the footer |
