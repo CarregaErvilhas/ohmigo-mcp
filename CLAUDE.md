@@ -3,7 +3,8 @@
 Guidance for AI coding agents working in this repo.
 
 ohmigo is an MCP server (Node 24, plain `node:http`, ESM, no build step) that
-prices EV charging sessions on Portugal's MOBI.E network for AI assistants.
+prices EV charging sessions at every public charger in Portugal on the NAP
+(MOBI.E and the networks outside it) for AI assistants.
 Start with `docs/00-glossary.md` if the domain is new; `docs/01-how-it-works.md`
 maps every file.
 
