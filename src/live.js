@@ -9,12 +9,19 @@
 // for whoever asks next.
 //
 // Refreshes use If-None-Match (304 with no body when unchanged) and parse the
-// body as a stream, so the 38 MB never sit in memory as text.
+// body as a stream, so the 38 MB never sit in memory as text. In practice the
+// feed is regenerated every minute or two, so a 304 is rare and almost every
+// refresh is a full download: that's why the TTL is 15 min, not 5 (~96
+// downloads a day per instance instead of 288). Results carry publishedAt, so
+// the assistant can say how old the status is.
+//
+// When the feed is down, failed refreshes back off (30 s, 1, 2, 5 min) instead
+// of starting another 38 MB download on every request.
 
 import { SaxesParser } from 'saxes';
 
 const URL_ = process.env.NAP_STATUS_URL || 'https://pgm.mobie.pt/integration/nap/evActualStatus';
-const TTL_MS = Number(process.env.LIVE_TTL_SECONDS || 300) * 1000;
+const TTL_MS = Number(process.env.LIVE_TTL_SECONDS || 900) * 1000;
 const WAIT_MS = Number(process.env.LIVE_WAIT_SECONDS || 25) * 1000;
 
 // Point ids are only unique within a site (some operators publish bare
@@ -89,6 +96,14 @@ export function napPlan(fees) {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms).unref());
+// ±10 %, so two instances started together drift apart instead of
+// downloading in lockstep.
+const jitter = ms => ms * (0.9 + Math.random() * 0.2);
+const BACKOFF_MS = [30_000, 60_000, 120_000, 300_000];
+// A body cut mid-file (seen: "unclosed tag") or a reset connection is worth
+// one immediate retry; an HTTP error or a refused connection is not, the
+// backoff handles those.
+const retryable = e => /unclosed|unexpected end|ECONNRESET|terminated|socket/i.test(`${e.message} ${e.cause?.code ?? ''}`);
 
 export class LiveStatus {
   constructor({ ttlMs = TTL_MS, waitMs = WAIT_MS, fetchImpl = fetch } = {}) {
@@ -101,17 +116,23 @@ export class LiveStatus {
     this.etag = null;
     this.running = null;
     this.lastError = null;
+    this.failures = 0;
+    this.retryAt = 0;
+    this.freshUntil = 0;
+    this.bytesLast = null;
   }
 
   get(siteId, pointId) { return this.points.get(pointKey(siteId, pointId)) || null; }
 
-  fresh() { return this.fetchedAt != null && Date.now() - this.fetchedAt < this.ttlMs; }
+  fresh() { return this.fetchedAt != null && Date.now() < this.freshUntil; }
 
   // Makes sure the copy is within the TTL, waiting up to the budget for a
   // refresh. `onWait` runs once when the caller is going to wait, so the tool
   // can tell the user why.
   async ensure({ onWait } = {}) {
     if (this.fresh()) return;
+    // Backing off after a failure: answer with what we have, right away.
+    if (!this.running && Date.now() < this.retryAt) return;
     const refresh = this.refresh();
     onWait?.();
     await Promise.race([refresh, sleep(this.waitMs)]);
@@ -119,19 +140,26 @@ export class LiveStatus {
 
   refresh() {
     if (this.running) return this.running;
+    if (Date.now() < this.retryAt) return Promise.resolve();
     this.running = (async () => {
       const t0 = Date.now();
-      // MOBI.E sometimes closes the connection mid-file (seen: a truncated
-      // body that fails as "unclosed tag"), so one failure gets one retry.
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           await this.fetchOnce();
           this.lastError = null;
-          console.log(`[ohmigo] live: ${this.points.size} points, published ${this.publicationTime}, ${Date.now() - t0} ms`);
+          this.failures = 0;
+          this.retryAt = 0;
+          console.log(`[ohmigo] live: ${this.points.size} points, published ${this.publicationTime}, ${this.bytesLast ?? '?'} bytes, ${Date.now() - t0} ms`);
           break;
         } catch (e) {
           this.lastError = e.message;
           console.warn(`[ohmigo] live refresh attempt ${attempt} failed, keeping previous data:`, e.message);
+          if (attempt === 2 || !retryable(e)) {
+            const wait = BACKOFF_MS[Math.min(this.failures, BACKOFF_MS.length - 1)];
+            this.failures++;
+            this.retryAt = Date.now() + jitter(wait);
+            break;
+          }
         }
       }
       this.running = null;
@@ -144,14 +172,20 @@ export class LiveStatus {
       headers: this.etag ? { 'if-none-match': this.etag } : {},
       signal: AbortSignal.timeout(120_000),
     });
-    if (res.status === 304) { this.fetchedAt = Date.now(); return; }
+    if (res.status === 304) { this.markFetched(); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const { publicationTime, points } = await parseStatus(res.body);
     if (points.size < 1000) throw new Error(`only ${points.size} points parsed`);
     this.points = points;
     this.publicationTime = publicationTime;
     this.etag = res.headers.get('etag');
+    this.bytesLast = Number(res.headers.get('content-length')) || null;
+    this.markFetched();
+  }
+
+  markFetched() {
     this.fetchedAt = Date.now();
+    this.freshUntil = this.fetchedAt + jitter(this.ttlMs);
   }
 
   info() {
@@ -162,6 +196,9 @@ export class LiveStatus {
       refreshing: !!this.running,
       points: this.points.size,
       error: this.lastError,
+      failures: this.failures,
+      retryAt: this.retryAt > Date.now() ? new Date(this.retryAt).toISOString() : null,
+      bytesLast: this.bytesLast,
     };
   }
 }

@@ -19,12 +19,14 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { expandMonthKwh, promos, tariffs } from './ceme.js';
-import { clusterPlaces, directionLabel, samePlace, serviceAreas, sideFor } from './direction.js';
+import { clusterPlaces, directionLabel, sameStation, serviceAreas, sideFor } from './direction.js';
 import { pickLang, translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { offersAt } from './offers.js';
 import { describePlan } from './opc.js';
 import { byBest, quotePoint, rank, tariffKey } from './quote.js';
+import { logged } from './stats.js';
+import { VERSION } from './version.js';
 import { viewHtml } from './view.js';
 
 const VIEW_URI = 'ui://ohmigo/results.html';
@@ -70,7 +72,7 @@ CEME promotions: some CEMEs give a discount only at one network (e.g. a CEME's e
 Monthly free kWh (promos with target KWH_GRATIS, e.g. a CEME giving its electricity clients the first kWh of each month free, on any charger): this server stores nothing, so YOU keep the count, per tariff and per calendar month (Portugal time). Keep a running log in your memory of the user's sessions: date, tariff_id, kWh. Add one when the user says they charged (ask for the kWh on the invoice/app if they know it; otherwise use the session.kwhBilled of the estimate they followed) and start again from zero on the 1st of each month. On every cost call, pass month_kwh: { tariff_id: kWh charged so far this month } for the tariffs that have such a promotion. With it, the option's total already uses the free kWh still left (freeKwhLeft), and applied is true. Without it, monthKwhKnown is false and the promotion is only a tip priced as if no free kWh were used yet: if you don't know the count, ask the user how many sessions and roughly how many kWh they've charged with that card this month, rather than guessing.
 Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract). Lead with it, and point out when a subscription or another CEME would be cheaper. Every result carries all its ways to pay in "options", usually more than you show: always tell the user there are more (subscriptions, other CEMEs, apps) and offer to list them.
 
-Time of day matters: a session lasts minutes to hours, and the energy price can change while it runs (peak to off-peak "vazio" hours, the wholesale OMIE price every 15 minutes for indexed tariffs, even a clock change). The server prices the session quarter-hour by quarter-hour from its start (at, default now) to its estimated end; session.startLocal/endLocal give the window. A CEME option with kwhByPeriod crossed periods: mention it when it changes the picture (e.g. "starting 30 min later puts most of it in off-peak"). If the user asks how a price was built, or why it changes with the time, call again with detail: true and explain the timeline (each quarter-hour's kWh, period, price and OMIE).
+Time of day matters: a session lasts minutes to hours, and the energy price can change while it runs (peak to off-peak "vazio" hours, the wholesale OMIE price every 15 minutes for indexed tariffs, even a clock change). The server prices the session quarter-hour by quarter-hour from its start (at, default now) to its estimated end; session.startLocal/endLocal give the window. A CEME option with kwhByPeriod crossed periods: mention it when it changes the picture (e.g. "starting 30 min later puts most of it in off-peak"). If the user asks how a price was built, or why it changes with the time, call again with detail: true and explain the timeline (when the kWh go in and, per tariff, each stretch's period, price and OMIE; quarters that look the same are merged into one run).
 
 Charger status comes from the NAP's live feed; live.publishedAt says when it was published. The feed is a large file fetched on demand, so the first call after a few quiet minutes can take ~20-30 s. If live.fresh is false or live.publishedAt is null, say status may be stale or unknown. A charger can still be taken by the time they arrive. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
 
@@ -84,14 +86,24 @@ export const QA = process.env.OHMIGO_QA === '1';
 const QA_SHOWN = 10;
 const QA_NOTE = `
 
-QA MODE: this is a test server. Results include "timeline" and "debug". When you answer, also show the session window, the per-quarter timeline of the headline tariff and anything in "debug" that looks wrong, so the tester can check the math. Each charger comes with up to ${QA_SHOWN} tariffs by default: list them all, not just the top 3.`;
+QA MODE: this is a test server. Results include "timeline" and "debug". When you answer, also show the session window, the timeline of the headline tariff and anything in "debug" that looks wrong, so the tester can check the math. Each charger comes with up to ${QA_SHOWN} tariffs by default: list them all, not just the top 3.`;
 
 const Detail = {
-  detail: z.boolean().optional().describe('Include the quarter-hour timeline: when each kWh is delivered and, for each CEME tariff shown, its period (vazio/fora de vazio), price and OMIE per quarter. Use when the user asks how the price was built.'),
+  detail: z.boolean().optional().describe('Include the timeline: when the kWh are delivered and, for each CEME tariff shown, its period (vazio/fora de vazio), price and OMIE over the session (quarter-hours that look the same are merged into runs). Use when the user asks how the price was built. In a ranking, only the first results carry it.'),
 };
 
 const Lang = {
   lang: z.string().max(20).optional().describe('The user\'s language, e.g. "pt", "pt-PT", "en". Portuguese gets Portuguese text; anything else English.'),
+};
+
+// `at` beyond this is a bug in the caller (1970, 2099), not a plan: nobody
+// plans a charge a year out, and the past only matters for "what did that
+// cost" a few days back. Checked per call, so a long-running server moves
+// the window with the clock.
+const AT_PAST_DAYS = 7, AT_AHEAD_DAYS = 365;
+const inWindow = s => {
+  const ms = Date.parse(s) - Date.now();
+  return ms >= -AT_PAST_DAYS * 86_400_000 && ms <= AT_AHEAD_DAYS * 86_400_000;
 };
 
 const Car = {
@@ -105,7 +117,9 @@ const Car = {
     .describe("Car's DC charging curve: power (kW) at state of charge (%), e.g. [{soc:10,kw:150},{soc:50,kw:110},{soc:80,kw:60}]"),
   tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariff ids from list_ceme_tariffs; omit to show the top popular ones"),
   tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: how many popular tariffs to show per charger'),
-  at: z.string().datetime({ offset: true }).optional().describe('When the charge starts, ISO 8601 (default now)'),
+  at: z.string().datetime({ offset: true }).optional()
+    .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`)
+    .describe(`When the charge starts, ISO 8601 (default now; from ${AT_PAST_DAYS} days ago to ${AT_AHEAD_DAYS} days ahead)`),
   month_kwh: z.record(z.string().max(64), z.number().min(0).max(100000)).optional()
     .describe("kWh the user already charged in the current calendar month with each of their tariffs, keyed by tariff_id, e.g. {\"goldenergy-bt-clientesgold\": 12.4}. From your own count of their sessions (see the instructions on monthly free kWh). Omit when unknown."),
 };
@@ -131,11 +145,20 @@ function resolveTowards(ds, towards, t) {
   if (towards == null) return null;
   if (typeof towards !== 'string') return { point: towards, name: `${towards.lat}, ${towards.lon}` };
   const p = ds.resolvePlace(towards);
-  return p ? { point: p, name: towards } : { error: t('err.place', { place: towards }) };
+  return p ? { point: p, name: towards } : { error: placeError(ds, towards, t), code: 'place' };
 }
 
 // A service area's sides, one line each, for the question to the user.
-const sidesList = area => area.map(([h, ...more]) => `${h.site.id}${more.length ? ` (+${more.length})` : ''}: ${directionLabel(h.site) ?? '?'}, ${h.site.operator ?? ''}, ${h.site.address ?? ''} (${h.site.lat}, ${h.site.lon})`).join('\n');
+const sidesList = area => area.map(pl => `${placeLine(pl)} · ${directionLabel(pl[0].site) ?? '?'}`).join('\n');
+
+// One place (sites at the same spot), one line: every operator there, so the
+// assistant never has to guess who runs a site it wasn't shown.
+function placeLine(pl) {
+  const [h] = pl;
+  const ops = [...new Set(pl.map(x => x.site.operator).filter(Boolean))];
+  const more = pl.length > 1 ? ` (+${pl.length - 1}: ${pl.slice(1, 4).map(x => x.site.id).join(', ')}${pl.length > 4 ? ', …' : ''})` : '';
+  return `${h.site.id}${more}: ${ops.join(' + ') || '?'}, ${h.site.address ?? ''}, ${h.site.city ?? ''} (${h.site.lat}, ${h.site.lon})`;
+}
 
 const Filter = {
   min_kw: z.number().positive().optional().describe('Minimum charger power, kW'),
@@ -151,8 +174,13 @@ const car = a => ({
   acKw: a.car_ac_kw, dcKw: a.car_dc_kw, dc10to80Minutes: a.dc_10_80_minutes, curve: a.charge_curve,
 });
 
-const err = msg => ({ isError: true, content: [{ type: 'text', text: msg }] });
-const ok = (data, text) => ({ structuredContent: data, content: [{ type: 'text', text: text ?? JSON.stringify(data) }] });
+// A business error (no such place, which side of the motorway...). The text
+// is what the assistant acts on; structuredContent lets the inline view show
+// it instead of an empty list.
+const err = (msg, code = 'error') => ({ isError: true, structuredContent: { kind: 'error', code, message: msg }, content: [{ type: 'text', text: msg }] });
+// structuredContent is the answer; the text is the fallback for clients that
+// don't read it. Never the same JSON twice: that doubled every response.
+const ok = (data, text) => ({ structuredContent: data, content: [{ type: 'text', text }] });
 
 // The language for this call: the `lang` argument, else the locale some
 // clients put in the request metadata (ChatGPT sends "openai/locale").
@@ -165,7 +193,7 @@ function resolveWhere(ds, a, t) {
   if (a.query) {
     const r = ds.lookup(a.query, { limit: Infinity });
     const full = r.results.filter(h => !h.missing?.length);
-    if (!full.length) return { error: t('err.lookup', { query: a.query }) };
+    if (!full.length) return { error: t('err.lookup', { query: a.query }), code: 'lookup' };
     only = new Set(full.map(h => h.site.id));
     town = r.town;
   }
@@ -174,10 +202,16 @@ function resolveWhere(ds, a, t) {
   const name = a.place ?? town;
   if (name) {
     const p = ds.resolvePlace(name);
-    if (!p) return { error: t('err.place', { place: name }) };
+    if (!p) return { error: placeError(ds, name, t), code: 'place' };
     return { near: p, radiusKm: a.radius_km, only, resolvedPlace: { name, lat: p.lat, lon: p.lon } };
   }
-  return { error: t('err.where') };
+  return { error: t('err.where'), code: 'where' };
+}
+
+// "No such place", or the towns it could be.
+function placeError(ds, name, t) {
+  const c = ds.placeCandidates(name);
+  return c.length > 1 ? t('err.placeWhich', { place: name, towns: c.join('; ') }) : t('err.place', { place: name });
 }
 
 // Everything the data says about one site, for lookup_charger. Sockets that
@@ -220,7 +254,10 @@ function siteCard(h, live, t) {
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
-const meta = (ds, live, lang) => ({ lang, dataAsOf: ds.generatedAt, live: live.info(), ...(QA && { qa: true }) });
+// What a support question needs to reproduce an answer: which server, which
+// data, which live copy.
+const meta = (ds, live, lang) => ({ version: VERSION, lang, dataAsOf: ds.generatedAt, live: liveMeta(live), ...(QA && { qa: true }) });
+const liveMeta = live => { const { publishedAt, checkedAt, fresh, refreshing, points, error } = live.info(); return { publishedAt, checkedAt, fresh, refreshing, points, error }; };
 
 // Brings live status up to date before answering. If that means downloading
 // the feed, tell the client why the answer is taking a while: a progress
@@ -249,26 +286,26 @@ function pointsFor(ds, live, a, t) {
   if (a.point_id) {
     const hit = ds.findPoint(a.point_id);
     if (hit) return [hit];
-    if (!a.site) return { error: t('err.point', { id: a.point_id }) };
+    if (!a.site) return { error: t('err.point', { id: a.point_id }), code: 'point' };
   }
-  if (!a.site) return { error: t('err.which') };
+  if (!a.site) return { error: t('err.which'), code: 'which' };
   const r = ds.lookup(a.site, { limit: Infinity, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only });
-  if (!r.results.length || r.results[0].missing?.length) return { error: t('err.lookup', { query: a.site }) };
+  if (!r.results.length || r.results[0].missing?.length) return { error: t('err.lookup', { query: a.site }), code: 'lookup' };
   // Several sites in the same spot are one place to the driver (a service
   // area often has one NAP site per charger). Words can fit several places:
   // the assistant has to ask which. The two sides of one motorway service
   // area are a different question: which way the driver is going.
   const areas = serviceAreas(clusterPlaces(r.results));
   if (areas.length > 1) {
-    const list = areas.slice(0, 6).map(([[h, ...more], ...sides]) => `${h.site.id}${more.length ? ` (+${more.length})` : ''}: ${h.site.operator ?? ''}, ${h.site.address ?? ''}, ${h.site.city ?? ''} (${h.site.lat}, ${h.site.lon})${sides.length ? ` ${t('several.sides')}` : ''}`).join('\n');
-    return { error: `${t('err.several', { query: a.site, n: areas.length })}\n${list}` };
+    const list = areas.slice(0, 6).map(([first, ...sides]) => `${placeLine(first)}${sides.length ? ` ${t('several.sides')}` : ''}`).join('\n');
+    return { error: `${t('err.several', { query: a.site, n: areas.length })}\n${list}`, code: 'several' };
   }
   let [places] = areas;
   const assumptions = [];
   if (places.length > 1) {
     const towards = resolveTowards(ds, a.towards, t);
     if (towards?.error) return towards;
-    if (!towards) return { error: `${t('err.direction', { query: a.site })}\n${sidesList(places)}` };
+    if (!towards) return { error: `${t('err.direction', { query: a.site })}\n${sidesList(places)}`, code: 'direction' };
     const pick = sideFor(places, { from: places[0][0].site, to: towards.point }, name => ds.resolvePlace(name));
     // When the direction doesn't settle it, both sides are priced: the driver
     // will see on the signs which one they're at.
@@ -286,11 +323,12 @@ function pointsFor(ds, live, a, t) {
     const [h] = sites;
     const ok = ds.pointFilter({ minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only });
     for (const site of ds.sites) {
-      if (site === h.site || site.operatorId !== h.site.operatorId || !samePlace(site, h.site)) continue;
+      if (site === h.site || !sameStation(h.site, site)) continue;
       const points = site.points.filter(ok);
       if (points.length) sites.push({ site, points });
     }
   }
+  if (sites.length > 1) assumptions.push(t('assume.sites', { n: sites.length }));
   const free = (site, p) => live.get(site.id, p.id)?.status === 'available';
   const kinds = new Map();
   for (const h of sites) {
@@ -308,19 +346,57 @@ function pointsFor(ds, live, a, t) {
   return Object.assign([...kinds.values()], { assumptions });
 }
 
+// month_kwh needs the tariff list; without ceme-v2 the free kWh just don't
+// apply (and the CEME prices are flagged as missing anyway).
+const monthKwh = a => expandMonthKwh(a.month_kwh, tariffKey).catch(e => { if (e.ceme) return null; throw e; });
+
+// What a ranking quotes. A car park with ten identical T2s prices the same
+// ten times, so each site keeps one socket per kind (the one most likely
+// free): that halves a 5 km search in Lisbon. And a 50 km radius still has
+// ~4,000 kinds, so sites are taken nearest first (to the centre, or to the
+// route) until MAX_RANKED_POINTS; the response says when that cut bit.
+const MAX_RANKED_POINTS = 2000;
+const DETAIL_IN_RANKING = 3;
+const STATUS_RANK = { available: 0, unknown: 1 };
+function rankCandidates(results, live, route) {
+  const near = route ? [...results].sort((x, y) => x.offRouteKm - y.offRouteKm) : results;
+  const candidates = [];
+  let points = 0;
+  for (const r of near) {
+    const score = p => STATUS_RANK[live.get(r.site.id, p.id)?.status ?? 'unknown'] ?? 2;
+    const kinds = new Map();
+    for (const p of r.points) {
+      const key = canonical([p.kw, p.connector, p.dc, p.level, p.regime, p.opc, p.napPrice]);
+      const cur = kinds.get(key);
+      if (!cur || score(p) < score(cur)) kinds.set(key, p);
+    }
+    if (points + kinds.size > MAX_RANKED_POINTS && candidates.length) break;
+    points += kinds.size;
+    candidates.push({ ...r, points: [...kinds.values()] });
+  }
+  return { candidates, truncated: candidates.length < results.length };
+}
+
 // `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
 // every few hours, and each request should see the current one.
 export function createServer(getDataset, live) {
-  const server = new McpServer({ name: 'ohmigo', title: 'Ohmigo: EV charging costs in Portugal', version: '0.1.0' }, { instructions: INSTRUCTIONS + (QA ? QA_NOTE : '') });
+  const server = new McpServer({ name: 'ohmigo', title: 'Ohmigo: EV charging costs in Portugal', version: VERSION }, { instructions: INSTRUCTIONS + (QA ? QA_NOTE : '') });
+  // Every tool (registerAppTool goes through registerTool too) is timed and
+  // counted, see stats.js.
+  const register = server.registerTool.bind(server);
+  server.registerTool = (name, config, handler) => register(name, config, logged(name, handler));
 
   server.registerTool('list_ceme_tariffs', {
     title: 'List CEME tariffs',
     description: 'Lists the CEME (EV charging electricity retailer) tariffs used on MOBI.E chargers, to resolve the card/app the user pays with to a tariff_id. Filter by name. Also lists the CEMEs\' current promotions at specific charging networks.',
-    inputSchema: z.object({ query: z.string().optional().describe('Text to match in the CEME or tariff name, e.g. "edp", "galp", "via verde"') }),
-    annotations: { readOnlyHint: true, openWorldHint: false },
-  }, async ({ query }) => {
+    inputSchema: z.object({ query: z.string().optional().describe('Text to match in the CEME or tariff name, e.g. "edp", "galp", "via verde"'), ...Lang }),
+    annotations: { readOnlyHint: true, openWorldHint: true },
+  }, async ({ query, lang: l }, ctx) => {
+    const t = translator(langOf({ lang: l }, ctx));
     // A ceme-v2 without /v1/promos still lists the tariffs.
-    const [all, current] = await Promise.all([tariffs(), promos().catch(() => ({ data: [] }))]);
+    let all, current;
+    try { [all, current] = await Promise.all([tariffs(), promos().catch(() => ({ data: [] }))]); }
+    catch (e) { if (e.ceme) return err(t('err.tariffs'), 'ceme'); throw e; }
     const q = (query || '').toLowerCase();
     // One row per tariff, not per voltage: the BT/MT variant is picked per charger.
     const seen = new Map();
@@ -340,7 +416,9 @@ export function createServer(getDataset, live) {
         ...(p.eurKwh != null && { eurKwh: p.eurKwh }), ...(p.pct != null && { pct: p.pct }),
         ...(p.freeKwh != null && { freeKwhPerMonth: p.freeKwh }),
       from: p.from, until: p.to, active: p.active, newCustomers: p.newCustomers, tariffIds: p.tariffs, url: p.url }));
-    return ok({ count: rows.length, tariffs: rows.slice(0, 60), ...(promoRows.length && { promos: promoRows }) });
+    const shown = rows.slice(0, 60);
+    return ok({ version: VERSION, count: rows.length, tariffs: shown, ...(promoRows.length && { promos: promoRows }) },
+      `${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}`).join('\n')}`);
   });
 
   server.registerTool('lookup_charger', {
@@ -353,15 +431,15 @@ export function createServer(getDataset, live) {
       ...Towards, ...Filter, ...Lang,
       limit: z.number().int().positive().max(20).default(5),
     }),
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, openWorldHint: true },
   }, async (a, ctx) => {
     const ds = getDataset();
     const lang = langOf(a, ctx), t = translator(lang);
     const near = a.lat != null && a.lon != null ? { lat: a.lat, lon: a.lon } : undefined;
     const towards = resolveTowards(ds, a.towards, t);
-    if (towards?.error) return err(towards.error);
+    if (towards?.error) return err(towards.error, towards.code);
     const r = ds.lookup(a.query, { near, radiusKm: a.radius_km, limit: Infinity, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only });
-    if (!r.results.length) return err(t('err.lookup', { query: a.query }));
+    if (!r.results.length) return err(t('err.lookup', { query: a.query }), 'lookup');
     // Motorway service areas among the results: with a direction, keep the
     // side the driver can reach; without one, flag them so the assistant asks.
     let results = r.results;
@@ -382,29 +460,31 @@ export function createServer(getDataset, live) {
     if (directionNeeded) notes.push(t('note.direction'));
     if (results[0].missing?.length) notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
     await withLive(live, ctx, t);
+    const cards = results.slice(0, a.limit).map(h => siteCard(h, live, t));
     return ok({
       ...meta(ds, live, lang), query: a.query, total: results.length,
       notes: notes.length ? [...new Set(notes)] : undefined, directionNeeded: directionNeeded || undefined,
       orderedFrom: near ? undefined : r.town,
-      sites: results.slice(0, a.limit).map(h => siteCard(h, live, t)),
+      sites: cards,
       // OpenStreetMap's licence (ODbL) asks for this wherever its data shows.
       credit: r.results.some(h => h.site.osm) ? t('credit.osm') : undefined,
-    });
+    }, [...notes, ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${g.kw ?? '?'} kW ${g.connector}`).join(', ')}`)].join('\n'));
   });
 
   server.registerTool('find_chargers', {
     title: 'Find chargers',
     description: 'Finds public EV charge points near a location or along a route, with power, plug type and live status. No cost estimate; use find_cheapest_charging for that. For one charger the user names, use lookup_charger.',
     inputSchema: z.object({ ...Where, ...Filter, ...Lang, limit: z.number().int().positive().max(50).default(15) }),
-    annotations: { readOnlyHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, openWorldHint: true },
   }, async (a, ctx) => {
     const ds = getDataset();
     const lang = langOf(a, ctx), t = translator(lang);
     const w = resolveWhere(ds, a, t);
-    if (w.error) return err(w.error);
+    if (w.error) return err(w.error, w.code);
     const { total, results } = ds.search({ ...w, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only, limit: a.limit });
-    if (!results.length) return err(t('err.noMatch'));
+    if (!results.length) return err(t('err.noMatch'), 'noMatch');
     await withLive(live, ctx, t);
+    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${r.points.length} sockets, max ${Math.max(...r.points.map(p => p.kw ?? 0))} kW`).join('\n');
     return ok({
       ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, total,
       sites: results.map(r => ({
@@ -416,7 +496,7 @@ export function createServer(getDataset, live) {
           status: live.get(r.site.id, p.id)?.status ?? null, adHocPayment: !!p.opc?.AD_HOC_PAYMENT,
         })),
       })),
-    });
+    }, `${total} sites:\n${text}`);
   });
 
   registerAppTool(server, 'find_cheapest_charging', {
@@ -433,23 +513,40 @@ export function createServer(getDataset, live) {
     const ds = getDataset();
     const lang = langOf(a, ctx), t = translator(lang);
     const w = resolveWhere(ds, a, t);
-    if (w.error) return err(w.error);
-    if (a.target_pct <= a.start_pct) return err(t('err.target'));
+    if (w.error) return err(w.error, w.code);
+    if (a.target_pct <= a.start_pct) return err(t('err.target'), 'target');
     await withLive(live, ctx, t);
     const { total, results } = ds.search({ ...w, minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only, limit: Infinity });
-    if (!results.length) return err(t('err.noMatch'));
-    const ranked = await rank(results, car(a), {
+    if (!results.length) return err(t('err.noMatch'), 'noMatch');
+    const { candidates, truncated } = rankCandidates(results, live, w.route != null);
+    const ranked = await rank(candidates, car(a), {
       at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang,
-      monthKwh: await expandMonthKwh(a.month_kwh, tariffKey),
+      monthKwh: await monthKwh(a),
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
-    if (!ranked.length) return err(t('err.noneLeft'));
+    if (!ranked.length) return err(t('err.noneLeft'), 'noneLeft');
     const top = ranked.slice(0, a.limit);
-    for (const q of top) { q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm); }
-    const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, results: top };
+    // Any MOBI.E socket without its CEME price was ranked on its other
+    // prices only (or last): say so even when the top rows are all outside
+    // MOBI.E.
+    const cemeDown = ranked.some(q => q.cemeUnavailable);
+    if (cemeDown && !top.some(q => q.best)) return err(t('err.pricing'), 'ceme');
+    for (const [i, q] of top.entries()) {
+      q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm);
+      // The timeline is for "how was this price built", a question about one
+      // charger: ten of them were ~100 KB. The first few keep it.
+      if (i >= DETAIL_IN_RANKING) delete q.timeline;
+    }
+    const notes = [
+      ...(cemeDown ? [t('note.noCeme')] : []),
+      ...(truncated ? [t('note.truncated', { n: candidates.length, total })] : []),
+      ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
+    ];
+    const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
+      ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // The text version, for clients that ignore structuredContent.
     const lines = top.map((q, i) => `${i + 1}. ${q.best ? q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
-    return ok(data, `${lines.join('\n')}\n\n${JSON.stringify(data)}`);
+    return ok(data, [...notes, ...lines].join('\n'));
   });
 
   registerAppTool(server, 'estimate_charging_cost', {
@@ -465,18 +562,22 @@ export function createServer(getDataset, live) {
   }, async (a, ctx) => {
     const ds = getDataset();
     const lang = langOf(a, ctx), t = translator(lang);
-    if (a.target_pct <= a.start_pct) return err(t('err.target'));
+    if (a.target_pct <= a.start_pct) return err(t('err.target'), 'target');
     await withLive(live, ctx, t);
     const targets = pointsFor(ds, live, a, t);
-    if (targets.error) return err(targets.error);
+    if (targets.error) return err(targets.error, targets.code);
     const { assumptions = [] } = targets;
     const opts = { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, detail: !!a.detail, qa: QA, simCache: new Map(),
-      monthKwh: await expandMonthKwh(a.month_kwh, tariffKey) };
+      monthKwh: await monthKwh(a) };
     // Quoting is cheap once the first one has called ceme-v2 (simCache), so
     // every kind is priced and the cheapest are kept.
     const results = (await Promise.all(targets.map(hit => quotePoint(hit, car(a), opts)))).sort(byBest).slice(0, MAX_KINDS);
     for (const q of results) q.assumptions.push(...assumptions);
-    return ok({ kind: 'single', ...meta(ds, live, lang), results });
+    const cemeDown = results.some(q => q.cemeUnavailable);
+    if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
+    const lines = results.map(q => `${q.best ? `${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${q.kw} kW ${q.connector} [${q.pointId}]`);
+    return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true, notes: [t('note.noCeme')] }), results },
+      [...(cemeDown ? [t('note.noCeme')] : []), ...lines].join('\n'));
   });
 
   registerAppResource(server, 'Charging results', VIEW_URI, {

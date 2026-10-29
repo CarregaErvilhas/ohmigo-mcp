@@ -99,9 +99,13 @@ Use `manual.json`:
   merge band by band, so you can fix one column. Ids look like
   `provider-plan-network`; copy them from `custofinal.json`.
 - **`"disable": true`**: removes a scraped offer.
-- **New `id`**: adds an offer. Then every field is needed: `label`,
+- **`"add": true`** with a new `id`: adds an offer. Then every field is needed: `label`,
   `provider`, `plan`, `network`, `scope`, `walkUp`, `subscription`, `fee`,
   `prices`, `source`, `checkedAt`.
+
+An override or `disable` whose `id` isn't in the scrape (a typo, or the blog
+renamed the slug) is skipped with a warning at boot, and `npm test` fails
+naming it.
 
 Every entry needs a `source` (https) and the `checkedAt` date you read it.
 After 90 days, users are told the price may be out of date.

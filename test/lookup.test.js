@@ -100,3 +100,21 @@ test('resolvePlace: the town before a comma', () => {
   assert.ok(ds.resolvePlace('Leiria, Portugal'));
   assert.equal(ds.resolvePlace(', '), null);
 });
+
+test('resolvePlace: whole words from the start, never a substring anywhere', () => {
+  assert.equal(ds.resolvePlace('a'), null, 'too short');
+  assert.equal(ds.resolvePlace('eir'), null, 'inside a word: not Leiria');
+  assert.ok(Math.abs(ds.resolvePlace('lei').lat - 39.75) < 0.01, 'the start of one town');
+  assert.ok(ds.resolvePlace('santa maria'), 'every word of a compound name');
+  assert.equal(ds.resolvePlace('Rua'), null, 'an address word in several towns is not a place');
+});
+
+test('resolvePlace: a prefix of several towns is ambiguous, and says which', () => {
+  const two = new Dataset({ schema: 1, generatedAt: 'x', sites: [
+    site('A-1', 'A1', 'Viana do Castelo', 'R. 1', 'X', 'X', 41.69, -8.83),
+    site('B-1', 'B1', 'Viana do Alentejo', 'R. 2', 'X', 'X', 38.33, -8.0),
+  ] });
+  assert.equal(two.resolvePlace('viana'), null);
+  assert.deepEqual(two.placeCandidates('viana'), ['Viana do Castelo', 'Viana do Alentejo']);
+  assert.ok(two.resolvePlace('Viana do Castelo'));
+});

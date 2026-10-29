@@ -17,28 +17,61 @@ const KEY = process.env.CEME_API_KEY || null;
 const TTL_MS = 5 * 60_000;
 
 let session = null; // { token, until }
+let authing = null; // the session request in flight, shared by concurrent calls
 const cache = new Map(); // key -> { at, value | promise }
 
-async function authHeaders() {
+// Circuit breaker: after BREAKER_FAILURES failures in a row, calls fail at
+// once for BREAKER_MS instead of each waiting up to 10 s for an answer that
+// isn't coming (and piling retries on a ceme-v2 that's already struggling).
+// One success closes it.
+const BREAKER_FAILURES = 3;
+const BREAKER_MS = 45_000;
+const breaker = { failures: 0, until: 0 };
+export const cemeHealth = () => ({ failures: breaker.failures, openUntil: breaker.until > Date.now() ? new Date(breaker.until).toISOString() : null });
+
+// Every error from here is tagged, so the tools can answer without the
+// energy price instead of failing the whole call.
+const unavailable = (msg, cause) => Object.assign(new Error(msg, { cause }), { ceme: true });
+
+function authHeaders() {
   if (KEY) return { 'x-api-key': KEY };
-  if (!session || session.until < Date.now()) {
-    const r = await fetch(`${BASE}/v1/session`, { method: 'POST' });
-    if (!r.ok) throw new Error(`ceme-v2 session: HTTP ${r.status}`);
-    const { token, expires_in } = await r.json();
-    session = { token, until: Date.now() + (expires_in - 60) * 1000 };
-  }
-  return { authorization: `Bearer ${session.token}` };
+  if (session && session.until >= Date.now()) return { authorization: `Bearer ${session.token}` };
+  authing ??= fetch(`${BASE}/v1/session`, { method: 'POST', signal: AbortSignal.timeout(10_000) })
+    .then(async r => {
+      if (!r.ok) throw new Error(`ceme-v2 session: HTTP ${r.status}`);
+      const { token, expires_in } = await r.json();
+      session = { token, until: Date.now() + (expires_in - 60) * 1000 };
+      return { authorization: `Bearer ${token}` };
+    })
+    .finally(() => { authing = null; });
+  return authing;
 }
 
 async function call(path, init = {}) {
-  const r = await fetch(`${BASE}${path}`, {
+  if (Date.now() < breaker.until) throw unavailable(`ceme-v2 ${path}: temporarily unavailable`);
+  try {
+    let r = await send(path, init);
+    // An expired anonymous session: get a new one and try once more (the
+    // body is a string, so it can be sent again).
+    if (r.status === 401 && !KEY) { session = null; r = await send(path, init); }
+    if (r.status === 401 && !KEY) session = null;
+    // A 4xx is our request's fault, not ceme-v2 being down: it answered.
+    const down = r.status >= 500 || r.status === 429;
+    if (!down) breaker.failures = 0;
+    if (!r.ok) throw Object.assign(new Error(`ceme-v2 ${path}: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`), { answered: !down });
+    return await r.json();
+  } catch (e) {
+    if (!e.answered && ++breaker.failures >= BREAKER_FAILURES) breaker.until = Date.now() + BREAKER_MS;
+    throw unavailable(e.message, e);
+  }
+}
+
+async function send(path, init) {
+  return fetch(`${BASE}${path}`, {
     ...init,
     headers: { 'content-type': 'application/json', ...(await authHeaders()), ...init.headers },
     signal: AbortSignal.timeout(10_000),
   });
-  if (r.status === 401 && !KEY) session = null;
-  if (!r.ok) throw new Error(`ceme-v2 ${path}: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
-  return r.json();
 }
 
 function cached(key, fn) {

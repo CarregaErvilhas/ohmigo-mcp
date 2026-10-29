@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { timeCost, opcCost, describePlan } from '../src/opc.js';
 import { estimateSession, batteryKwhNeeded } from '../src/charging.js';
-import { haversineKm, routeDistance } from '../src/data.js';
+import { haversineKm, routeDistance } from '../src/geo.js';
 import { tariffKey } from '../src/quote.js';
 import { applicable } from '../src/ceme.js';
 
@@ -244,4 +244,28 @@ test('live: a truncated download is retried once', async () => {
   assert.equal(n, 2);
   assert.equal(live.points.size, 1000);
   assert.equal(live.info().error, null);
+});
+
+test('live: a feed that is down backs off instead of downloading on every request', async () => {
+  let n = 0;
+  const live = new LiveStatus({ ttlMs: 60_000, waitMs: 1000, fetchImpl: async () => { n++; return { status: 503, ok: false, headers: new Headers() }; } });
+  for (let i = 0; i < 10; i++) await live.ensure();
+  assert.equal(n, 1, 'an HTTP error is not retried at once, and the next calls wait for the backoff');
+  const info = live.info();
+  assert.equal(info.failures, 1);
+  assert.ok(info.retryAt, 'retryAt says when it tries again');
+  // Past the backoff, the next request tries again and recovers.
+  live.retryAt = 0;
+  live.fetch = fakeFetch().impl;
+  await live.ensure();
+  assert.equal(live.points.size, 1000);
+  assert.equal(live.info().failures, 0);
+  assert.equal(live.info().retryAt, null);
+});
+
+test('live: the TTL has jitter, within ±10 %', async () => {
+  const live = new LiveStatus({ ttlMs: 100_000, waitMs: 1000, fetchImpl: fakeFetch().impl });
+  await live.ensure();
+  const ttl = live.freshUntil - live.fetchedAt;
+  assert.ok(ttl >= 90_000 && ttl <= 110_000, String(ttl));
 });

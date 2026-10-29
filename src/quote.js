@@ -39,6 +39,7 @@ import { isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, withPromos } from './promos.js';
 
 const r2 = x => Math.round(x * 100) / 100;
+const r4 = x => Math.round(x * 10_000) / 10_000;
 
 // ceme-v2 tariff ids carry the voltage as one dash-separated segment, in the
 // middle ("edp-bt-cartoedp-4") or at the end ("luzigas-ceme-bt"). A tariff
@@ -95,18 +96,38 @@ function cemeOption(t, { site, opc, vat }) {
   };
 }
 
-// The per-quarter story of a session, for a driver (or a QA run) who asks
-// how the price was built: when each kWh goes in, and for each CEME tariff
-// shown, the period, price and OMIE of every slice.
+// The story of a session, for a driver (or a QA run) who asks how the price
+// was built: when the kWh go in, and for each CEME tariff shown, the period,
+// price and OMIE over time. Quarter-hours that look the same are merged into
+// one run (from-to, how many quarters, their kWh): a 9-hour AC session at one
+// price is one line, not 36 (~20 KB per result before). A run breaks when the
+// power, the period, the price, the OMIE or the UTC offset changes, so
+// indexed tariffs (OMIE every quarter) and the October repeated hour still
+// show quarter by quarter.
 function timeline(region, slices, tariffs, sim) {
+  const local = (at, minutes = 0) => localTime(new Date(Date.parse(at) + minutes * 60_000), region);
+  const runs = (items, same) => {
+    const out = [];
+    items.forEach((x, i) => {
+      const s = slices[i];
+      const row = { ...x, utcOffset: localOffset(s.at, region) };
+      const last = out[out.length - 1];
+      if (last && same(last, row) && last.utcOffset === row.utcOffset) {
+        last.to = local(s.at, s.minutes); last.quarters++; last.kwh = r4(last.kwh + s.kwh);
+      } else out.push({ from: local(s.at), to: local(s.at, s.minutes), utcOffset: row.utcOffset, quarters: 1, kwh: s.kwh, ...x });
+    });
+    return out;
+  };
   return {
     timeZone: REGION_TZ[region] || REGION_TZ.CONT,
     omieQuartersKnown: sim.profile ? `${sim.profile.withSpot}/${sim.profile.slices}` : null,
-    slices: slices.map(s => ({ ...s, local: localTime(s.at, region), utcOffset: localOffset(s.at, region) })),
+    quarters: slices.length,
+    slices: runs(slices.map(s => ({ kw: s.kw })), (a, b) => a.kw === b.kw),
     tariffs: tariffs.filter(Boolean).map(t => ({
       tariffId: t.id, label: `${t.ceme} · ${t.name}`,
-      slices: (t.slices || []).map(x => ({ at: x.at, period: x.period, eurKwhExVat: x.final,
+      runs: runs((t.slices || []).slice(0, slices.length).map(x => ({ period: x.period, eurKwhExVat: x.final,
         ...(x.omie != null && { omieEurKwh: Math.round(x.omie * 1e5) / 1e5, omieSpot: x.omieSpot }) })),
+      (a, b) => a.period === b.period && a.eurKwhExVat === b.eurKwhExVat && a.omieEurKwh === b.omieEurKwh && a.omieSpot === b.omieSpot),
     })),
   };
 }
@@ -155,8 +176,8 @@ function directOptions(direct, session, t, region) {
 // Quotes one point. `simCache` lets a caller ranking many points share the
 // ceme-v2 call: the billed kWh only differs between AC and DC (different
 // losses), so a whole ranking needs one or two calls.
-//   detail: add `timeline` (every quarter-hour slice, and its period and
-//           price for each tariff shown). qa: also `debug` (what went to
+//   detail: add `timeline` (when the kWh go in, and the period and price
+//           over time for each tariff shown). qa: also `debug` (what went to
 //           ceme-v2 and what came back).
 //   monthKwh: { ceme-v2 tariff id: kWh the user already charged with it this
 //           month }, for free-kWh promotions (see ceme.js expandMonthKwh).
@@ -217,7 +238,22 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   const want = detail || qa;
   const key = `${base.region}|${want ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',') || `${start.toISOString()}=${session.kwh}`}`;
   if (!simCache.has(key)) simCache.set(key, simulate({ kwh: session.kwh, at: start, region: base.region, profile: slices, detail: want, monthKwh }));
-  const sim = await simCache.get(key);
+  let sim;
+  try {
+    sim = await simCache.get(key);
+  } catch (e) {
+    if (!e.ceme) throw e;
+    // ceme-v2 is down: the CEME prices are missing, but the walk-up price,
+    // the direct offers and the status didn't come from it. Answer with
+    // those, flagged, and never pass a partial total off as complete.
+    base.total = null;
+    base.cemeUnavailable = true;
+    base.note = t('note.noCeme');
+    base.options.push(...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region));
+    base.options.sort((a, b) => a.total - b.total);
+    base.best = bestOption(base.options, null);
+    return base;
+  }
   // A ceme-v2 without profile support priced everything at the start.
   base.assumptions.push(sim.profile
     ? t('assume.window', { from: base.session.startLocal, to: base.session.endLocal })

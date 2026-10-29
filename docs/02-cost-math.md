@@ -55,8 +55,8 @@ clock changes, Saturdays and the islands.
 Everything is in UTC instants, so the clock changes need no special case:
 in October the 01:00-02:00 hour happens twice, and a 60-minute session that
 spans it still has four quarters. Local times are only for showing
-(`session.startLocal`/`endLocal`, and the `utcOffset` next to each slice in
-the timeline, so the repeated hour isn't ambiguous).
+(`session.startLocal`/`endLocal`, and the `utcOffset` on each run of the
+timeline, which also starts a new run, so the repeated hour isn't ambiguous).
 
 What the driver gets:
 
@@ -64,10 +64,13 @@ What the driver gets:
   assumption saying the energy was priced quarter by quarter in that window,
   and `kwhByPeriod` on each CEME option whose session crossed periods (each
   tariff has its own cycle, so one can cross and another not);
-- with `detail: true` on the tool: `timeline`, every quarter's kWh and
-  power, and for each CEME tariff shown, the period, price (excl. VAT) and
-  OMIE of each quarter (`omieSpot: false` means that quarter's OMIE wasn't
-  published yet, so ceme-v2 used the period's average);
+- with `detail: true` on the tool: `timeline`, when the kWh go in, and for
+  each CEME tariff shown, the period, price (excl. VAT) and OMIE over the
+  session (`omieSpot: false` means that quarter's OMIE wasn't published yet,
+  so ceme-v2 used the period's average). Quarters that look the same (same
+  power, or same period, price and OMIE) are merged into runs with `from`,
+  `to`, `quarters` and `kwh`, so a long AC session at one price is one line.
+  In `find_cheapest_charging` only the first few results carry it;
 - in QA mode (`OHMIGO_QA=1`, [06](06-run-and-deploy.md)): the timeline on
   every result, plus `debug` with the segments, the profile sent and what
   ceme-v2 said about it.
