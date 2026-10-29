@@ -18,8 +18,9 @@ const fmt = (lang, n, digits = 4) => Number(n).toLocaleString(lang === 'pt' ? 'p
 
 export const MESSAGES = {
   en: {
-    // The NAP (National Access Point) is where MOBI.E publishes the live
-    // status of every charger. In Portuguese it's the PAN.
+    // The NAP (National Access Point) is where Portugal's public chargers,
+    // MOBI.E's and those outside it, publish their live status. In
+    // Portuguese it's the PAN.
     'progress.live': () => 'Getting live charger status from the NAP…',
 
     'assume.window': ({ from, to }) => `Energy priced quarter-hour by quarter-hour for a session from ${from} to ${to} (local time): off-peak hours and OMIE changes during the session count`,

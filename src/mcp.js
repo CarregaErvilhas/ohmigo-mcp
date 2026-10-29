@@ -28,9 +28,14 @@ const VIEW_URI = 'ui://ohmigo/results.html';
 // Read once by the assistant when it connects. It's a prompt, not docs: it
 // tells the assistant what to ask the user, what to look up itself, and how to
 // present the results honestly.
-export const INSTRUCTIONS = `Estimates what an EV charging session costs on Portugal's public network (MOBI.E): the CEME energy tariff + the charger operator (OPC) fee + taxes, and finds the cheapest charger near a place or along a route.
+export const INSTRUCTIONS = `Estimates what an EV charging session costs at any public charger in Portugal, on every network published on the NAP (National Access Point, "PAN" in Portuguese): MOBI.E chargers (CEME energy tariff + charger operator (OPC) fee + taxes) and chargers outside MOBI.E (Tesla, Continente...) paid to the operator directly. Finds the cheapest charger near a place or along a route.
 
 Language: always answer the user in the language they write in. Pass lang with their language (e.g. "pt" or "en") on every call; the server's labels, assumptions and progress messages come back in Portuguese or English, and you translate them for any other language.
+
+Who's who on MOBI.E (don't mix these up):
+- CEME: who the user buys the energy from (their card/app). Sets the energy price.
+- OPC (Operador de Ponto de Carregamento): the company that operates a PUBLIC charger (IONITY, Powerdot, Galp...). Charges the usage fee on top of the energy. Every charger this server returns has an OPC.
+- DPC (Detentor de Ponto de Carregamento): the holder of a PRIVATE-access charger connected to MOBI.E: a home wallbox, a condominium garage, a company car park for its staff or fleet. It is not an operator, there is no OPC behind it and no OPC fee: the session costs only the CEME energy, the EGME fee and taxes. Only its owner's authorized users can charge there. DPC chargers are not in the public data (NAP), so this server never lists or prices them. "DPC" is not a kind of OPC, not a payment option and not a field in the results; don't call an OPC a DPC or the reverse. If the user charges at a DPC charger (home, work, condo), say that ohmigo can't price it and that the cost is their CEME tariff (list_ceme_tariffs shows it) without any operator fee.
 
 Before calling a cost tool, make sure you know (ask only for what you don't have or don't remember):
 1. Where: the user's location (lat/lon), a town name, or a route (list of waypoints from origin to destination).
@@ -52,7 +57,7 @@ Chargers are ranked by "best": the cheapest option anyone can use now (no subscr
 
 Time of day matters: a session lasts minutes to hours, and the energy price can change while it runs (peak to off-peak "vazio" hours, the wholesale OMIE price every 15 minutes for indexed tariffs, even a clock change). The server prices the session quarter-hour by quarter-hour from its start (at, default now) to its estimated end; session.startLocal/endLocal give the window. A CEME option with kwhByPeriod crossed periods: mention it when it changes the picture (e.g. "starting 30 min later puts most of it in off-peak"). If the user asks how a price was built, or why it changes with the time, call again with detail: true and explain the timeline (each quarter-hour's kWh, period, price and OMIE).
 
-Charger status comes from the NAP (National Access Point, "PAN" in Portuguese), MOBI.E's live feed; live.publishedAt says when it was published. The feed is a large file fetched on demand, so the first call after a few quiet minutes can take ~20-30 s. If live.fresh is false or live.publishedAt is null, say status may be stale or unknown. A charger can still be taken by the time they arrive. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
+Charger status comes from the NAP's live feed; live.publishedAt says when it was published. The feed is a large file fetched on demand, so the first call after a few quiet minutes can take ~20-30 s. If live.fresh is false or live.publishedAt is null, say status may be stale or unknown. A charger can still be taken by the time they arrive. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
 
 // Argument schemas, shared by the tools. zod turns them into the JSON Schema
 // the assistant sees, and validates what it sends back.
@@ -155,7 +160,7 @@ export function createServer(getDataset, live) {
 
   server.registerTool('list_ceme_tariffs', {
     title: 'List CEME tariffs',
-    description: 'Lists the CEME (EV charging electricity retailer) tariffs on MOBI.E, to resolve the card/app the user pays with to a tariff_id. Filter by name.',
+    description: 'Lists the CEME (EV charging electricity retailer) tariffs used on MOBI.E chargers, to resolve the card/app the user pays with to a tariff_id. Filter by name.',
     inputSchema: z.object({ query: z.string().optional().describe('Text to match in the CEME or tariff name, e.g. "edp", "galp", "via verde"') }),
     annotations: { readOnlyHint: true, openWorldHint: false },
   }, async ({ query }) => {
