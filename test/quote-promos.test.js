@@ -86,24 +86,37 @@ test('EDP × UVE at an EDP charger: the all-in price is the total, operator fee 
   assert.equal(away.headline.total, r2(7 + (1 + 0.2 * away.session.kwhBilled) * 1.23), 'not at Galp');
 });
 
-test('outside MOBI.E: the NAP site price, plus VAT, is listed next to the direct offers, never instead', async () => {
-  const tesla = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
-  const q = await quotePoint({ site: { ...site('TSLA'), operator: 'Tesla' }, point: tesla }, car, { at, lang: 'en' });
-  assert.ok(q.options.some(o => o.kind === 'direct'), 'Tesla has direct offers in offers/');
+test('outside MOBI.E: the NAP site price, plus VAT, is ranked like any other', async () => {
+  const p = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
+  const q = await quotePoint({ site: { ...site('ZZZZ'), operator: 'Someone' }, point: p }, car, { at, lang: 'en' });
   const nap = q.options.find(o => o.kind === 'opc_direct');
   assert.equal(nap.total, r2(0.3 * 1.23 * q.session.kwhBilled), 'NAP price (excl. VAT) x VAT x billed kWh');
   assert.equal(nap.eurPerKwh, 0.369);
   assert.equal(nap.eurPerKwhExVat, 0.3);
-  // Cheaper than any offer, so it's ranked like one: it's `best`.
+  assert.match(nap.label, /no subscription/);
   assert.equal(q.best.kind, 'opc_direct');
   assert.equal(q.total.complete, true);
   assert.ok(q.assumptions.some(a => a.includes("operator's price from the NAP") && a.includes('(23 %)')));
 });
 
-test('outside MOBI.E on the islands: the NAP price takes the island VAT', async () => {
+test('Tesla: the NAP price is its app price with VAT in, next to the direct offers, never instead', async () => {
   const tesla = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
+  const q = await quotePoint({ site: { ...site('TSLA'), operator: 'Tesla' }, point: tesla }, car, { at, lang: 'en' });
+  assert.ok(q.options.some(o => o.kind === 'direct'), 'Tesla has direct offers in offers/');
+  const nap = q.options.find(o => o.kind === 'opc_direct');
+  assert.equal(nap.total, r2(0.3 * q.session.kwhBilled), 'offers/nap-notes.json: VAT already in, none added');
+  assert.equal(nap.eurPerKwh, 0.3);
+  assert.equal(nap.napVatIncluded, true);
+  assert.equal(q.best.kind, 'opc_direct');
+  assert.ok(q.assumptions.some(a => a.includes('with VAT included')));
+  assert.ok(q.assumptions.some(a => a.includes('time of day')));
+  assert.ok(!q.assumptions.some(a => a.includes('(23 %)')));
+});
+
+test('outside MOBI.E on the islands: the NAP price takes the island VAT', async () => {
+  const p = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
   for (const [region, vat] of [['MAD', 1.22], ['AZO', 1.16]]) {
-    const q = await quotePoint({ site: { ...site('TSLA'), operator: 'Tesla', region }, point: tesla }, car, { at, lang: 'pt' });
+    const q = await quotePoint({ site: { ...site('ZZZZ'), operator: 'Someone', region }, point: p }, car, { at, lang: 'pt' });
     const nap = q.options.find(o => o.kind === 'opc_direct');
     assert.equal(nap.total, r2(0.3 * vat * q.session.kwhBilled), region);
     assert.ok(q.assumptions.some(a => a.includes(`(${Math.round((vat - 1) * 100)} %)`)), region);

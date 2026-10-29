@@ -146,3 +146,11 @@ test('noteFor: a NAP-price note matches by operator or by site', () => {
   assert.equal(noteFor(notes, { id: 'TSL-1', operatorId: 'TSLA' })?.why, 'b');
   assert.equal(noteFor(notes, { id: 'TSL-2', operatorId: 'TSLA' }), null);
 });
+
+test('nap-notes.json: every note is scoped and sourced', () => {
+  const { notes } = JSON.parse(readFileSync(new URL('../offers/nap-notes.json', import.meta.url), 'utf8'));
+  for (const n of notes) {
+    assert.ok(n.scope?.operatorIds?.length || n.scope?.siteIds?.length, JSON.stringify(n.scope));
+    assert.ok(n.why && /^https:\/\//.test(n.source) && /^\d{4}-\d{2}-\d{2}$/.test(n.checkedAt), n.why);
+  }
+});

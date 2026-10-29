@@ -1,4 +1,17 @@
 {
-  "about": "Chargers whose NAP price is known to be wrong. Outside MOBI.E, ohmigo shows the NAP's pricePerDeliveryUnit as the operator's price, ranked like any other, unless a note here covers the charger: then that price is left out and the note's why goes into the assumptions. Scope by NAP operator id (operatorIds) or site id (siteIds). Every note needs why, source and checkedAt. Guide: docs/04-operator-offers.md.",
-  "notes": []
+  "about": "Notes on the NAP's own price for some chargers, outside MOBI.E, where ohmigo shows the NAP's pricePerDeliveryUnit as the operator's price. A plain note says that price is wrong: it's left out and the note's why goes into the assumptions. \"vatIncluded\": true says it's right but published with VAT in (every other NAP price comes without): it's kept and no VAT is added. \"timeOfUse\": true says the operator's price changes with the time of day and the NAP carries only one value. Scope by NAP operator id (operatorIds) or site id (siteIds). Every note needs why, source and checkedAt. Guide: docs/04-operator-offers.md.",
+  "notes": [
+    {
+      "scope": {
+        "operatorIds": [
+          "TSLA"
+        ]
+      },
+      "vatIncluded": true,
+      "timeOfUse": true,
+      "why": "Tesla's app price without a subscription, as the app shows it (VAT in), is what the NAP publishes, at its peak value. Mealhada, 29 Oct 2026 at ~22:40: NAP 0.58; the app 0.58 €/kWh 12h-22h, 0.41 8h-12h, 0.27 22h-8h, plus congestion fees up to 0.50 €/min. Without this note ohmigo added 23 % VAT on top (0.71).",
+      "source": "https://www.tesla.com/pt_PT/findus/list/superchargers/Portugal",
+      "checkedAt": "2026-10-29"
+    }
+  ]
 }

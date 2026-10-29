@@ -79,7 +79,7 @@ export function opcCost(plan, { kwh, minutes }) {
 }
 
 // The plan as one readable line, e.g. "0.3 €/charge + 0.13 €/min (excl. VAT)".
-export function describePlan(plan, t = translator('en')) {
+export function describePlan(plan, t = translator('en'), { vatIncluded = false } = {}) {
   const out = [];
   const n = v => t.num(v);
   const or = ` ${t('plan.or')} `;
@@ -93,5 +93,5 @@ export function describePlan(plan, t = translator('en')) {
     out.push(s);
   }
   if (!out.length) return t('plan.free');
-  return `${out.join(' + ')} ${t('plan.exVat')}`;
+  return `${out.join(' + ')} ${t(vatIncluded ? 'plan.withVat' : 'plan.exVat')}`;
 }
