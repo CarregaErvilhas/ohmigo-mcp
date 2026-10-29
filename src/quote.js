@@ -214,14 +214,23 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // offers/nap-notes.json says it's wrong for this charger. It sits next to
     // the direct offers, not instead of them: an offer is one price for the
     // whole network, the NAP's is this site's (Tesla's vary by site).
+    // When MOBI.E also lists an AD_HOC_PAYMENT price for the socket, that's
+    // the same walk-up price (HighGreenPower: 0.28 in both): it says how to
+    // pay (bank card / QR, no app or account) and stands in when the live
+    // feed is down.
     const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
     const wrong = napNote(site);
+    const walkUp = !!point.opc?.AD_HOC_PAYMENT;
     base.options.push(...directOptions(direct, session, t, base.region));
     if (nap != null && wrong) base.assumptions.push(t('assume.napWrong', { why: wrong.why }));
     else if (nap != null) {
-      base.options.push({ kind: 'opc_direct', label: site.operator ? t('option.opcDirect', { operator: site.operator }) : t('option.opcDirect.noName'),
+      const label = walkUp ? t('option.opcDirect.walkUp', { operator: site.operator || '' })
+        : site.operator ? t('option.opcDirect', { operator: site.operator }) : t('option.opcDirect.noName');
+      base.options.push({ kind: 'opc_direct', label,
         total: r2(nap * session.kwh), eurPerKwh: nap, note: t('option.opcDirect.note', { price: t.num(nap) }) });
       base.assumptions.push(t('assume.napPrice'));
+    } else if (walkUp) {
+      base.options.push(adhocOption(point, session, t));
     }
     base.options.sort((a, b) => a.total - b.total);
     const first = base.options[0];
