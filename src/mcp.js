@@ -18,7 +18,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
-import { promos, tariffs } from './ceme.js';
+import { expandMonthKwh, promos, tariffs } from './ceme.js';
 import { pickLang, translator } from './i18n.js';
 import { quotePoint, rank, tariffKey } from './quote.js';
 import { viewHtml } from './view.js';
@@ -56,6 +56,9 @@ When presenting results: give the total in euros and the duration, name the tari
 CEME promotions: some CEMEs give a discount only at one network (e.g. a CEME's energy cheaper at Powerdot chargers, or a subscription that cuts the operator fee there). A result's "promos" lists the ones at that charger, each with label, total (this session with it), saving, until and note:
 - applied: true means it's for every customer of that tariff and is already in that option's total (the option carries "promos" and, for operator-fee discounts, opcDiscountPct). Say the price includes it and until when.
 - newCustomers: true means it only holds for people who sign up during the promotion (maxHours: how long it lasts after signing up). It is never in any total. Mention it as a tip ("if you're new to X, signing up by <until> would make this session cost <total>"), never as the price.
+- target FINAL is an all-in price (operator fee and VAT included) that the CEME charges at its network instead of energy + operator fee; the option carries opcIncluded. It replaces the usual sum even where that would be lower: say so if it costs more.
+
+Monthly free kWh (promos with target KWH_GRATIS, e.g. a CEME giving its electricity clients the first kWh of each month free, on any charger): this server stores nothing, so YOU keep the count, per tariff and per calendar month (Portugal time). Keep a running log in your memory of the user's sessions: date, tariff_id, kWh. Add one when the user says they charged (ask for the kWh on the invoice/app if they know it; otherwise use the session.kwhBilled of the estimate they followed) and start again from zero on the 1st of each month. On every cost call, pass month_kwh: { tariff_id: kWh charged so far this month } for the tariffs that have such a promotion. With it, the option's total already uses the free kWh still left (freeKwhLeft), and applied is true. Without it, monthKwhKnown is false and the promotion is only a tip priced as if no free kWh were used yet: if you don't know the count, ask the user how many sessions and roughly how many kWh they've charged with that card this month, rather than guessing.
 Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract). Lead with it, and point out when a subscription or another CEME would be cheaper. Every result carries all its ways to pay in "options", usually more than you show: always tell the user there are more (subscriptions, other CEMEs, apps) and offer to list them.
 
 Time of day matters: a session lasts minutes to hours, and the energy price can change while it runs (peak to off-peak "vazio" hours, the wholesale OMIE price every 15 minutes for indexed tariffs, even a clock change). The server prices the session quarter-hour by quarter-hour from its start (at, default now) to its estimated end; session.startLocal/endLocal give the window. A CEME option with kwhByPeriod crossed periods: mention it when it changes the picture (e.g. "starting 30 min later puts most of it in off-peak"). If the user asks how a price was built, or why it changes with the time, call again with detail: true and explain the timeline (each quarter-hour's kWh, period, price and OMIE).
@@ -94,6 +97,8 @@ const Car = {
   tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariff ids from list_ceme_tariffs; omit to show the top popular ones"),
   tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: how many popular tariffs to show per charger'),
   at: z.string().datetime({ offset: true }).optional().describe('When the charge starts, ISO 8601 (default now)'),
+  month_kwh: z.record(z.string().max(64), z.number().min(0).max(100000)).optional()
+    .describe("kWh the user already charged in the current calendar month with each of their tariffs, keyed by tariff_id, e.g. {\"goldenergy-bt-clientesgold\": 12.4}. From your own count of their sessions (see the instructions on monthly free kWh). Omit when unknown."),
 };
 
 const Where = {
@@ -186,7 +191,8 @@ export function createServer(getDataset, live) {
     const promoRows = (current.data ?? []).filter(p => !q || cemes.has(names.get(p.ceme)))
       .map(p => ({ id: p.id, ceme: names.get(p.ceme) ?? p.ceme, name: p.name, network: p.network, target: p.target,
         ...(p.eurKwh != null && { eurKwh: p.eurKwh }), ...(p.pct != null && { pct: p.pct }),
-        from: p.from, until: p.to, active: p.active, newCustomers: p.newCustomers, tariffIds: p.tariffs, url: p.url }));
+        ...(p.freeKwh != null && { freeKwhPerMonth: p.freeKwh }),
+      from: p.from, until: p.to, active: p.active, newCustomers: p.newCustomers, tariffIds: p.tariffs, url: p.url }));
     return ok({ count: rows.length, tariffs: rows.slice(0, 60), ...(promoRows.length && { promos: promoRows }) });
   });
 
@@ -236,6 +242,7 @@ export function createServer(getDataset, live) {
     if (!results.length) return err(t('err.noMatch'));
     const { mobie, outsideMobie } = await rank(results, car(a), {
       at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang,
+      monthKwh: await expandMonthKwh(a.month_kwh, tariffKey),
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
     if (!mobie.length && !outsideMobie.length) return err(t('err.noneLeft'));
@@ -261,7 +268,8 @@ export function createServer(getDataset, live) {
     if (!hit) return err(t('err.point', { id: a.point_id }));
     if (a.target_pct <= a.start_pct) return err(t('err.target'));
     await withLive(live, ctx, t);
-    const q = await quotePoint(hit, car(a), { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, detail: !!a.detail, qa: QA });
+    const q = await quotePoint(hit, car(a), { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, detail: !!a.detail, qa: QA,
+      monthKwh: await expandMonthKwh(a.month_kwh, tariffKey) });
     return ok({ kind: 'single', ...meta(ds, live, lang), results: [q] });
   });
 

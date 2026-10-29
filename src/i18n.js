@@ -14,7 +14,7 @@
 // To add a sentence: add the key to BOTH tables. test/i18n.test.js fails if a
 // key is missing from one of them.
 
-const fmt = (lang, n, digits = 4) => Number(n).toLocaleString(lang === 'pt' ? 'pt-PT' : 'en', { maximumFractionDigits: digits });
+const fmt = (lang, n, digits = 4, min = 0) => Number(n).toLocaleString(lang === 'pt' ? 'pt-PT' : 'en', { minimumFractionDigits: min, maximumFractionDigits: Math.max(digits, min) });
 
 export const MESSAGES = {
   en: {
@@ -53,8 +53,15 @@ export const MESSAGES = {
     'promo.label': ({ ceme, network, amount }) => `${ceme} at ${network}: ${amount}`,
     'promo.energy': ({ eur }) => `−${eur} €/kWh on energy`,
     'promo.opc': ({ pct }) => `−${pct}% on the operator fee`,
+    'promo.final': ({ eur }) => `${eur} €/kWh all in (operator fee and VAT included)`,
+    'promo.free': ({ kwh }) => `first ${kwh} kWh of each month free`,
+    'promo.labelAny': ({ ceme, amount }) => `${ceme}: ${amount}`,
+    'promo.note.final': () => 'it replaces the usual energy + operator fee, even where that would be lower',
+    'promo.note.freeLeft': ({ left, free }) => `${left} of this month's ${free} free kWh left, used first in this session; assumed to cover energy and network access only (tax, activation fee and operator fee still paid)`,
+    'promo.note.freeUnknown': ({ free }) => `priced as if none of this month's ${free} free kWh were used yet: pass month_kwh (kWh already charged this month with this tariff) to apply it; assumed to cover energy and network access only`,
     'promo.note.new': ({ until, hours }) => `new customers only: sign up by ${until}${hours ? `, then the discount lasts ${hours} h` : ''}. Not in any total`,
     'promo.note.all': ({ until, tariff }) => `for every ${tariff} customer at this network, until ${until}`,
+    'promo.note.allAny': ({ until, tariff }) => `for every ${tariff} customer at any MOBI.E charger, until ${until}`,
 
     'note.outside': () => 'Outside MOBI.E: pay the operator directly, no CEME.',
     'note.noUserTariff': () => "None of the user's tariffs apply at this socket.",
@@ -106,8 +113,15 @@ export const MESSAGES = {
     'promo.label': ({ ceme, network, amount }) => `${ceme} nos postos ${network}: ${amount}`,
     'promo.energy': ({ eur }) => `−${eur} €/kWh na energia`,
     'promo.opc': ({ pct }) => `−${pct}% na tarifa do operador`,
+    'promo.final': ({ eur }) => `${eur} €/kWh tudo incluído (tarifa do operador e IVA incluídos)`,
+    'promo.free': ({ kwh }) => `primeiros ${kwh} kWh de cada mês grátis`,
+    'promo.labelAny': ({ ceme, amount }) => `${ceme}: ${amount}`,
+    'promo.note.final': () => 'substitui a soma habitual de energia + tarifa do operador, mesmo onde esta seria mais baixa',
+    'promo.note.freeLeft': ({ left, free }) => `restam ${left} dos ${free} kWh grátis deste mês, usados primeiro neste carregamento; assumimos que cobrem só a energia e o acesso às redes (imposto, activação e tarifa do operador pagam-se na mesma)`,
+    'promo.note.freeUnknown': ({ free }) => `cotado como se ainda não tivesse gasto nenhum dos ${free} kWh grátis deste mês: passa month_kwh (kWh já carregados este mês com este tarifário) para o aplicar; assumimos que cobrem só a energia e o acesso às redes`,
     'promo.note.new': ({ until, hours }) => `só para clientes novos: adesão até ${until}${hours ? `, e o desconto dura ${hours} h` : ''}. Não entra em nenhum total`,
     'promo.note.all': ({ until, tariff }) => `para todos os clientes ${tariff} nesta rede, até ${until}`,
+    'promo.note.allAny': ({ until, tariff }) => `para todos os clientes ${tariff} em qualquer posto MOBI.E, até ${until}`,
 
     'note.outside': () => 'Fora da MOBI.E: paga-se directamente ao operador, sem CEME.',
     'note.noUserTariff': () => 'Nenhum dos tarifários do utilizador se aplica a esta tomada.',
@@ -140,6 +154,6 @@ export function translator(lang) {
   const table = MESSAGES[lang] || MESSAGES.en;
   const t = (key, params = {}) => (table[key] || MESSAGES.en[key])(params);
   t.lang = table === MESSAGES.pt ? 'pt' : 'en';
-  t.num = (n, digits) => fmt(t.lang, n, digits);
+  t.num = (n, digits, min) => fmt(t.lang, n, digits, min);
   return t;
 }

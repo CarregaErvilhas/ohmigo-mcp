@@ -11,12 +11,16 @@ const quote = (id, ceme, name, totalEur, extra = {}) => ({
 });
 const LUZ_PROMO = { id: 'luzigas-powerdot-2026-10', network: 'Powerdot', target: 'ENERGIA', eurKwh: 0.12, totalEur: 4, newCustomers: true, maxHours: 168, from: '2026-10-29', to: '2026-11-28', url: 'https://example.pt', checked: '2026-10-29' };
 const MIIO_PROMO = { id: 'miio-powerdot-2026-02', network: 'Powerdot', target: 'OPC', pct: 45, newCustomers: false, from: '2026-02-03', to: '2026-12-31', url: 'https://example.pt', checked: '2026-10-29' };
+const UVE_PROMO = { id: 'edp-uve-2026-09', network: 'EDP', target: 'FINAL', eurKwh: 0.47, newCustomers: false, from: '2026-09-01', to: '2026-12-31', url: 'https://example.pt', checked: '2026-10-29' };
 const SIM = {
   at: '2026-11-10T12:00:00.000Z', kwh: 30, profile: { slices: 1, withSpot: 0 },
   data: [
     quote('luzigas-ceme-bt', 'LUZiGÁS', 'Indexado', 8, { promos: [LUZ_PROMO] }),
     quote('miio-bt-miioonebi', 'miio', 'miio one', 8.5, { bundle: true, popular: false, promos: [MIIO_PROMO] }),
     quote('miio-bt-miiobihor', 'miio', 'miio sem subscrição', 10),
+    // A FINAL total is whatever ceme-v2 says (kWh × price); a fixed 12 €
+    // keeps the test independent of the session estimate.
+    quote('edp-bt-cartoedp-2', 'EDP Comercial', 'Associados UVE', 7, { bundle: true, popular: false, promos: [{ ...UVE_PROMO, totalEur: 12 }] }),
   ],
 };
 
@@ -70,4 +74,14 @@ test('away from Powerdot: no promotions at all', async () => {
   assert.equal(q.promos, undefined);
   assert.equal(q.headline.total, r2(8.5 + fee * 1.23));
   assert.equal(q.headline.promos, undefined);
+});
+
+test('EDP × UVE at an EDP charger: the all-in price is the total, operator fee inside', async () => {
+  const q = await quotePoint({ site: site('EDPC'), point }, car, { at, tariffIds: ['edp-bt-cartoedp-2'], lang: 'pt' });
+  assert.equal(q.headline.total, 12);
+  assert.equal(q.headline.opcIncluded, true);
+  assert.equal(q.headline.energyEur, null);
+  assert.ok(q.assumptions.some(a => a.includes('0,47 €/kWh tudo incluído')));
+  const away = await quotePoint({ site: site('GLPP'), point }, car, { at, tariffIds: ['edp-bt-cartoedp-2'], lang: 'pt' });
+  assert.equal(away.headline.total, r2(7 + (1 + 0.2 * away.session.kwhBilled) * 1.23), 'not at Galp');
 });

@@ -74,3 +74,41 @@ test('promoTips: an OPC discount where the fee is unknown saves nothing and is l
   const quotes = [{ id: 'miio-bt-miioonebi', ceme: 'miio', name: 'miio one', totalEur: 7, promos: [miioOne] }];
   assert.deepEqual(promoTips(quotes, powerdot, { opc: { low: 0, high: 0 }, vat: 1.23 }, translator('en')), []);
 });
+
+const uve = { id: 'edp-uve-2026-09', network: 'EDP', target: 'FINAL', eurKwh: 0.47, totalEur: 14.1, newCustomers: false, from: '2026-09-01', to: '2026-12-31', url: 'https://example.pt', checked: '2026-10-29' };
+const gold = (extra) => ({ id: 'goldenergy-7kwh', network: null, target: 'KWH_GRATIS', freeKwh: 7, totalEur: 6, newCustomers: false, from: '2026-10-29', to: '2026-12-31', url: 'https://example.pt', checked: '2026-10-29', ...extra });
+
+test('withPromos: an all-in price replaces energy + fee, and beats the other promotions', () => {
+  const w = withPromos([miioOne, uve], { energyEur: 10, opc: { low: 1, high: 3 }, vat: 1.23 });
+  assert.deepEqual(w, { energyEur: null, opcPct: 0, final: true, low: 14.1, high: 14.1 });
+});
+
+test('free kWh: any MOBI.E charger; in the total only when the month count came in', async () => {
+  const { appliesToCustomers } = await import('../src/promos.js');
+  assert.equal(onNetwork(galp, null), true);
+  assert.equal(appliesToCustomers(gold({ monthKwhKnown: false, freeKwhLeft: 7 })), false);
+  assert.equal(appliesToCustomers(gold({ monthKwhKnown: true, freeKwhLeft: 2 })), true);
+  const q = { id: 'goldenergy-bt-clientesgold', ceme: 'GoldEnergy', name: 'Clientes', totalEur: 8, bundle: true };
+  const ctx = { opc: { low: 1, high: 1 }, vat: 1.23 };
+  const [unknown] = promoTips([{ ...q, promos: [gold({ monthKwhKnown: false, freeKwhLeft: 7 })] }], galp, ctx, translator('en'));
+  assert.equal(unknown.label, 'GoldEnergy: first 7 kWh of each month free');
+  assert.deepEqual([unknown.freeKwhLeft, unknown.monthKwhKnown, unknown.saving], [7, false, 2]);
+  assert.match(unknown.note, /pass month_kwh/);
+  const [known] = promoTips([{ ...q, promos: [gold({ monthKwhKnown: true, freeKwhLeft: 2, totalEur: 7.4 })] }], galp, ctx, translator('pt'));
+  assert.match(known.note, /restam 2 dos 7 kWh grátis/);
+  // All seven used: saves nothing, so no tip... unless it is in a shown total.
+  const used = [{ ...q, promos: [gold({ monthKwhKnown: true, freeKwhLeft: 0, totalEur: 8 })] }];
+  assert.deepEqual(promoTips(used, galp, ctx, translator('en')), []);
+  assert.equal(promoTips(used, galp, { ...ctx, applied: new Set(['goldenergy-7kwh']) }, translator('en')).length, 1);
+});
+
+test('promoTips: a tariff shown above wins, so the tip matches the price', () => {
+  const quotes = [
+    { id: 'edp-bt-cartoedp-4', ceme: 'EDP', name: 'UVE 30%', totalEur: 6, bundle: true, promos: [{ ...uve, totalEur: 14 }] },
+    { id: 'edp-bt-cartoedp-2', ceme: 'EDP', name: 'UVE 10%', totalEur: 7, bundle: true, promos: [{ ...uve, totalEur: 14 }] },
+  ];
+  const [tip] = promoTips(quotes, { operatorId: 'EDPC' }, { opc: { low: 10, high: 10 }, vat: 1.23, shown: new Set(['edp-bt-cartoedp-2']) }, translator('pt'));
+  assert.equal(tip.tariffId, 'edp-bt-cartoedp-2');
+  assert.equal(tip.label, 'EDP nos postos EDP: 0,47 €/kWh tudo incluído (tarifa do operador e IVA incluídos)');
+  assert.match(tip.note, /nesta rede, até 2026-12-31; substitui/);
+});

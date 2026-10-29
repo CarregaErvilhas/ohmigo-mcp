@@ -35,7 +35,7 @@ import { translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { describePlan, opcCost } from './opc.js';
 import { isStale, offersAt, ownWalkUp, SOURCE } from './offers.js';
-import { promosHere, promoTips, withPromos } from './promos.js';
+import { appliesToCustomers, promosHere, promoTips, withPromos } from './promos.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 
@@ -74,13 +74,15 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
 
 // One CEME tariff as a way to pay here: ceme-v2's energy total plus the
 // operator fee with VAT, with the tariff's promotions for every customer at
-// this network already in (promos.js; new-customer ones never are).
+// this network already in (promos.js; new-customer ones never are). An
+// all-in promotion (FINAL) replaces the sum: energyEur is null and
+// opcIncluded says the operator fee is inside the total.
 // kwhByPeriod is there when the session crosses periods for this tariff
 // (each tariff has its own cycle, so one session can cross for one and not
 // for another): { VAZIO: 12.4, FORA_VAZIO: 20.1 }.
 //   opc: { low, high } operator fee excl. VAT; vat: the region's multiplier
 function cemeOption(t, { site, opc, vat }) {
-  const promos = promosHere(t, site).filter(p => !p.newCustomers);
+  const promos = promosHere(t, site).filter(appliesToCustomers);
   const w = withPromos(promos, { energyEur: t.totalEur, opc, vat });
   return {
     kind: 'ceme', label: `${t.ceme} · ${t.name}`, total: w.high,
@@ -88,7 +90,7 @@ function cemeOption(t, { site, opc, vat }) {
     tariffId: t.id, ceme: t.ceme, name: t.name, tariffKind: t.kind, period: t.period,
     ...(t.kwhByPeriod && Object.keys(t.kwhByPeriod).length > 1 && { kwhByPeriod: t.kwhByPeriod }),
     requiresOtherContract: !!t.bundle, energyEur: w.energyEur,
-    ...(promos.length && { promos: promos.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }) }),
+    ...(promos.length && { promos: promos.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }), ...(w.final && { opcIncluded: true }) }),
   };
 }
 
@@ -155,7 +157,9 @@ function directOptions(direct, session, t, region) {
 //   detail: add `timeline` (every quarter-hour slice, and its period and
 //           price for each tariff shown). qa: also `debug` (what went to
 //           ceme-v2 and what came back).
-export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, detail = false, qa = false, simCache = new Map() } = {}) {
+//   monthKwh: { ceme-v2 tariff id: kWh the user already charged with it this
+//           month }, for free-kWh promotions (see ceme.js expandMonthKwh).
+export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, detail = false, qa = false, monthKwh = null, simCache = new Map() } = {}) {
   const t = translator(lang);
   const session = estimateSession(point, car, t);
   // The session starts at `at` (or now), to the minute so points share the
@@ -205,7 +209,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   const adhoc = ownWalkUp(site, direct) ? null : adhocOption(point, session, t);
   const want = detail || qa;
   const key = `${base.region}|${want ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',') || `${start.toISOString()}=${session.kwh}`}`;
-  if (!simCache.has(key)) simCache.set(key, simulate({ kwh: session.kwh, at: start, region: base.region, profile: slices, detail: want }));
+  if (!simCache.has(key)) simCache.set(key, simulate({ kwh: session.kwh, at: start, region: base.region, profile: slices, detail: want, monthKwh }));
   const sim = await simCache.get(key);
   // A ceme-v2 without profile support priced everything at the start.
   base.assumptions.push(sim.profile
@@ -261,7 +265,8 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   // Promotions: the ones already in a shown total get an assumption; all of
   // them at this network (new-customer ones included) are listed as tips.
   const applied = new Set(base.options.flatMap(o => o.promos || []));
-  const tips = promoTips(applicable(sim.data, point), site, { opc, vat, applied }, t);
+  const shownIds = new Set(base.options.map(o => o.tariffId));
+  const tips = promoTips(applicable(sim.data, point), site, { opc, vat, applied, shown: shownIds }, t);
   for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));
   if (tips.length) base.promos = tips;
   base.options.push(...extras);
