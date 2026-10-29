@@ -87,6 +87,9 @@ test('routeDistance: off-route distance and position along the route', () => {
 test('tariffKey ignores the voltage segment', () => {
   assert.equal(tariffKey('edp-bt-cartoedp-4'), tariffKey('edp-mt-cartoedp-4'));
   assert.notEqual(tariffKey('edp-bt-cartoedp-4'), tariffKey('edp-bt-cartoedp-11'));
+  // Some ids end with the voltage (Luzigás indexed tariffs).
+  assert.equal(tariffKey('luzigas-ceme-bt'), tariffKey('luzigas-ceme-mt'));
+  assert.notEqual(tariffKey('luzigas-ceme-bt'), tariffKey('luzigas-casa-bt'));
 });
 
 test('applicable: voltage variant per socket, AC-only tariffs dropped on DC', () => {
@@ -126,6 +129,14 @@ test('pickTariffs: user tariffs, cheapest of them is the headline', () => {
   assert.deepEqual(t.options.map(o => o.id), ['b-bt-y', 'c-bt-z']);
   assert.equal(t.headline.id, 'b-bt-y');
   assert.equal(t.best.id, 'a-bt-x');
+});
+
+test('pickTariffs: user tariff whose id ends with the voltage matches the other variant', () => {
+  // list_ceme_tariffs hands out the BT id; an MT charger is priced with the MT one.
+  const quotes = [q('luzigas-ceme-mt', 5, { voltage: 'MT' }), q('luzigas-ceme-bt', 5)];
+  const t = pickTariffs(quotes, { level: 'MT', dc: true }, ['luzigas-ceme-bt']);
+  assert.equal(t.headline.id, 'luzigas-ceme-mt');
+  assert.equal(t.missing, false);
 });
 
 test('pickTariffs: default is top 3 popular, headline skips ones needing another contract', () => {
