@@ -68,14 +68,17 @@ test('http: every tool is read-only and talks to the outside world', async () =>
   for (const t of tools) assert.deepEqual(t.annotations, { readOnlyHint: true, openWorldHint: true }, t.name);
 });
 
-test('http: estimate_charging_cost answers with structuredContent and a short text, not the JSON twice', async () => {
+test('http: estimate_charging_cost answers with structuredContent, and the text carries it too for text-only clients', async () => {
   const r = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car });
   assert.equal(r.isError, undefined);
   assert.equal(r.structuredContent.kind, 'single');
   assert.match(r.structuredContent.version, /^\d+\.\d+\.\d+$/);
   assert.ok(r.structuredContent.results.length >= 1);
+  // Clients that only read the text must still see every way to pay.
   const text = r.content[0].text;
-  assert.ok(text.length < 2000 && !text.includes('"kind"'), 'text is lines, not JSON');
+  const json = JSON.parse(text.slice(text.indexOf('\n\n{') + 2));
+  assert.deepEqual(json, r.structuredContent);
+  assert.ok(json.results[0].options.length > 1);
 });
 
 test('http: find_cheapest_charging ranks MOBI.E and the networks outside it', async () => {

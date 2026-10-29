@@ -5,8 +5,8 @@
 // Claude connects to this server, reads `INSTRUCTIONS` and the list of tools
 // (name + description + JSON schema of the arguments), and then decides on
 // its own when to call them. A tool call is a JSON-RPC request; we answer with
-// `structuredContent` (JSON for the assistant to read) plus a short text
-// version. The schemas below are written as much for the assistant as for the
+// `structuredContent` (JSON for the assistant to read) plus a text version:
+// a few summary lines and the same JSON, for clients that only read text. The schemas below are written as much for the assistant as for the
 // code: the `.describe()` text is what tells it what to send.
 //
 // MCP Apps: two tools also point at a `ui://` HTML resource (ui/results.html).
@@ -178,9 +178,13 @@ const car = a => ({
 // is what the assistant acts on; structuredContent lets the inline view show
 // it instead of an empty list.
 const err = (msg, code = 'error') => ({ isError: true, structuredContent: { kind: 'error', code, message: msg }, content: [{ type: 'text', text: msg }] });
-// structuredContent is the answer; the text is the fallback for clients that
-// don't read it. Never the same JSON twice: that doubled every response.
-const ok = (data, text) => ({ structuredContent: data, content: [{ type: 'text', text }] });
+// structuredContent is the answer, but several assistants (Claude's apps
+// among them) only hand the model the text. So the text carries the same
+// JSON, after a few summary lines: with the lines alone, those assistants saw
+// one price per charger, none of the other ways to pay, assumptions or fees.
+// The MCP spec asks for this too. Payload is kept down elsewhere (merged
+// timeline, timeline only on the first results), not by thinning the text.
+const ok = (data, summary) => ({ structuredContent: data, content: [{ type: 'text', text: `${summary ? `${summary}\n\n` : ''}${JSON.stringify(data)}` }] });
 
 // The language for this call: the `lang` argument, else the locale some
 // clients put in the request metadata (ChatGPT sends "openai/locale").
@@ -544,7 +548,7 @@ export function createServer(getDataset, live) {
     ];
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
-    // The text version, for clients that ignore structuredContent.
+    // Summary lines on top of the JSON in the text (see ok).
     const lines = top.map((q, i) => `${i + 1}. ${q.best ? q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
     return ok(data, [...notes, ...lines].join('\n'));
   });

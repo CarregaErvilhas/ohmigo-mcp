@@ -59,8 +59,9 @@ Follow one `find_cheapest_charging` call through the code:
    anyone can use.
    If ceme-v2 doesn't answer, plugs on MOBI.E come back without a CEME total
    (`cemeUnavailable`) and the other ways to pay still rank.
-7. `mcp.js` returns the top results as `structuredContent`, plus a few lines
-   of text for clients that don't read it. Chat apps that
+7. `mcp.js` returns the top results as `structuredContent`, and the same
+   JSON as text (after a few summary lines) for clients that only pass the
+   text to the model. Chat apps that
    support **MCP Apps** also load `ui/results.html` (built by `src/view.js`)
    and show it inline.
 
