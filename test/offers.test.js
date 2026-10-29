@@ -61,12 +61,31 @@ test('mergeOffers: manual overrides fields and prices band by band, adds, disabl
   const merged = mergeOffers(scraped, [
     { id: 'a', prices: { dcMax: 0.63 }, why: 'official' },
     { id: 'b', disable: true },
-    { id: 'c', label: 'C', prices: { dc50: 0.3 } },
+    { id: 'c', add: true, label: 'C', prices: { dc50: 0.3 } },
   ]);
   assert.deepEqual(merged.map(o => [o.id, o.prices, o.origin]), [
     ['a', { dc50: 0.5, dcMax: 0.63 }, 'manual'],
     ['c', { dc50: 0.3 }, 'manual'],
   ]);
+  assert.deepEqual(merged.orphans, []);
+});
+
+test('mergeOffers: a typo in an id is reported, never a phantom offer', () => {
+  const scraped = [{ id: 'a', label: 'A', prices: { dc50: 0.5 } }];
+  const merged = mergeOffers(scraped, [
+    { id: 'a-typo', prices: { dc50: 0.4 } },
+    { id: 'gone', disable: true },
+    { id: 'a', add: true, label: 'A2', prices: { dc50: 0.1 } },
+  ]);
+  assert.deepEqual(merged.map(o => o.id), ['a']);
+  assert.equal(merged[0].label, 'A', 'an "add" never replaces a scraped offer');
+  assert.equal(merged.orphans.length, 3);
+  assert.match(merged.orphans.join('\n'), /a-typo.*override/);
+  assert.match(merged.orphans.join('\n'), /gone.*disable/);
+});
+
+test('offers/manual.json: every override and disable still matches the scrape', () => {
+  assert.deepEqual(OFFERS.orphans, [], 'fix the id in offers/manual.json, or drop the entry');
 });
 
 test('offersAt: operator offers + MOBI.E-wide ones, priced for the band', () => {

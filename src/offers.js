@@ -29,17 +29,26 @@ export const STALE_DAYS = 90;
 const read = name => JSON.parse(readFileSync(new URL(`../offers/${name}`, import.meta.url), 'utf8'));
 
 // Applies manual.json on top of the scraped offers: same id = override the
-// listed fields (prices merge band by band), `disable` = drop, new id = add.
+// listed fields (prices merge band by band), `disable` = drop, `add: true` =
+// a new offer. An override or disable whose id isn't in the scrape (a typo,
+// or the blog renamed the slug) is skipped and reported in `orphans`, never
+// turned into a half-filled offer; test/offers.test.js fails on any, so the
+// weekly scrape PR shows it. Skipped rather than thrown: a scrape that drops
+// an offer must not stop the server from booting.
 export function mergeOffers(scraped, manual) {
   const byId = new Map(scraped.map(o => [o.id, { ...o }]));
+  const orphans = [];
   for (const m of manual) {
-    const { why, disable, ...fields } = m;
-    if (disable) { byId.delete(m.id); continue; }
+    const { why, disable, add, ...fields } = m;
     const base = byId.get(m.id);
-    if (base) byId.set(m.id, { ...base, ...fields, prices: { ...base.prices, ...fields.prices }, origin: 'manual' });
-    else byId.set(m.id, { ...fields, origin: 'manual' });
+    if (add) {
+      if (base) orphans.push(`${m.id}: "add" but the scrape has it (make it an override)`);
+      else byId.set(m.id, { ...fields, origin: 'manual' });
+    } else if (!base) orphans.push(`${m.id}: ${disable ? 'disable' : 'override'} matches no scraped offer`);
+    else if (disable) byId.delete(m.id);
+    else byId.set(m.id, { ...base, ...fields, prices: { ...base.prices, ...fields.prices }, origin: 'manual' });
   }
-  return [...byId.values()];
+  return Object.assign([...byId.values()], { orphans });
 }
 
 // Loaded once at boot: a change to the files means a redeploy, which is also
@@ -47,6 +56,7 @@ export function mergeOffers(scraped, manual) {
 const scraped = read('custofinal.json');
 export const SOURCE = scraped.source;
 export const OFFERS = mergeOffers(scraped.offers, read('manual.json').offers);
+for (const o of OFFERS.orphans) console.warn('[ohmigo] offers/manual.json:', o);
 
 const mobieWide = OFFERS.filter(o => o.scope.mobie);
 const byOperator = new Map();

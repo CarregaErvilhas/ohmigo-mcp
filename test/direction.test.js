@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Dataset } from '../src/data.js';
-import { clusterPlaces, directionLabel, samePlace, serviceAreas, sideFor } from '../src/direction.js';
+import { clusterPlaces, directionLabel, samePlace, sameStation, serviceAreas, sideFor } from '../src/direction.js';
 
 // Every pair of motorway sites the data labels with the direction it serves
 // (NAP addresses, OSM names), as of the 2026-10-28 dataset: [the side for
@@ -93,4 +93,22 @@ test('direction: a route keeps only the side it drives past', () => {
   assert.deepEqual(ds.search({ route: [...down].reverse(), corridorKm: 2 }).results.map(r => r.site.id), ['IOY-ADV-00018']);
   // Near a point (no direction), both stay.
   assert.equal(ds.search({ near: sites[0], radiusKm: 1 }).results.length, 2);
+});
+
+test('samePlace: in town, two operators at different addresses are two places', () => {
+  // Colombo's Capwatt car park and a Galp on the avenue, 64 m apart.
+  const cap = { id: 'CAP-LSB-00380', operatorId: 'CAPW', lat: 38.75454, lon: -9.18871, address: 'CC Colombo - Piso -3 Zona Laranja' };
+  const glp = { id: 'GLP-LSB-00517', operatorId: 'GLPP', lat: 38.75428, lon: -9.18806, address: 'AV. LUSÍADA' };
+  assert.equal(samePlace(cap, glp), false);
+  assert.equal(samePlace(cap, { ...glp, operatorId: 'CAPW' }), true, 'one operator: one station spread over sites');
+  assert.equal(samePlace(cap, { ...glp, address: 'CC Colombo - Piso -3 Zona Laranja' }), true, 'same address');
+  assert.equal(samePlace(cap, { ...glp, lat: 38.75440, lon: -9.18840 }), true, 'within 60 m');
+});
+
+test('sameStation: the same operator down the road at another address is another charger', () => {
+  const a = { id: 'G-1', operatorId: 'GLPP', lat: 39.7469, lon: -8.8157, address: 'Avenida 25 de Abril' };
+  assert.equal(sameStation(a, { id: 'G-2', operatorId: 'GLPP', lat: 39.7487, lon: -8.8157, address: 'Rua X' }), false, '200 m, other address');
+  assert.equal(sameStation(a, { id: 'G-3', operatorId: 'GLPP', lat: 39.7487, lon: -8.8157, address: 'Avenida 25 de Abril' }), true);
+  assert.equal(sameStation(a, { id: 'G-4', operatorId: 'GLPP', lat: 39.7472, lon: -8.8157, address: 'Rua X' }), true, '33 m');
+  assert.equal(sameStation(a, { id: 'E-1', operatorId: 'EDPC', lat: 39.7470, lon: -8.8157, address: 'Avenida 25 de Abril' }), false);
 });

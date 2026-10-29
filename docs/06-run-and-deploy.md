@@ -38,8 +38,18 @@ the path and has the same two-language strings block and parity test. If the
 server starts keeping or sending anything new about the user, update the
 privacy page first.
 
-`GET /healthz` shows how fresh the data is:
-`{ ok, dataAsOf, live: { publishedAt, checkedAt, fresh, refreshing, error } }`.
+`GET /healthz` shows how the server is doing: `status` is `ok`, or
+`degraded` with the reasons in `problems` (the last live feed refresh failed,
+ceme-v2 isn't answering, the dataset missed its weekly rebuild). It answers 200
+either way, so the platform doesn't restart a container over an outage
+elsewhere; point a monitor at `status`. Also there: `version`, `dataAsOf`,
+`dataAgeHours`, the live feed (`publishedAt`, `fresh`, `failures`, `retryAt`,
+`bytesLast`), the ceme-v2 breaker, per-tool counters (`calls`, `errors`,
+`avgMs`, `maxMs`, `maxBytes`) and memory.
+
+Every tool call logs one JSON line (`tool`, `ms`, `isError`, `code`,
+`bytes`). Never the arguments: they carry the user's location, car and
+tariffs. Results carry `version`, to match a report with a deploy.
 
 ## Connect an AI assistant
 
@@ -65,7 +75,7 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `DATASET_PATH` | none | read the dataset from this file |
 | `DATASET_URL` | the Pages URL | read the dataset from this URL |
 | `DATASET_CHECK_HOURS` | `6` | how often to check for a new dataset |
-| `LIVE_TTL_SECONDS` | `300` | how long a live feed copy counts as fresh |
+| `LIVE_TTL_SECONDS` | `900` | how long a live feed copy counts as fresh (±10 %) |
 | `LIVE_WAIT_SECONDS` | `25` | how long a request waits for a live download |
 | `LIVE_WARMUP` | on | `0` skips the boot download |
 | `OHMIGO_QA` | off | `1` turns on QA mode: every result carries the quarter-hour `timeline` and a `debug` block, and the assistant is told to show them. Never in production |
@@ -95,7 +105,11 @@ Production is `https://ohmigo.ocarroeletrico.com/mcp`, Zerops project
   Zerops console.
 
 The readiness check is `/healthz`. Boot loads the dataset (a few seconds) and
-answers before the live feed finishes downloading.
+answers before the live feed finishes downloading. If the dataset download
+fails, boot retries for a while, inside the readiness timeout
+(`loadDataset` in `src/server.js`; keep the two in step), then exits, so the
+previous version keeps serving. On `SIGTERM` (a deploy), the server stops
+taking connections and lets the requests in flight finish, with a cap.
 
 ### Shipping a new version
 
@@ -138,5 +152,8 @@ Cloudflare, 200.
 Not built in. Calls from ChatGPT and Claude come from their servers, not from
 the user's device, so a per-IP limit would throttle all of a platform's users
 as one. The expensive part is the ceme-v2 call, and it's cached (same kWh to
-0.1 and same quarter-hour = same answer, for 5 minutes). Put Cloudflare in
+0.1 and same quarter-hour = same answer, for 5 minutes); after a few failures in
+a row the client stops calling for a while (`BREAKER_*` in `src/ceme.js`)
+and the tools answer without CEME prices. A ranking quotes a capped number
+of plugs, nearest first (`MAX_RANKED_POINTS` in `src/mcp.js`). Put Cloudflare in
 front for DDoS protection; add per-client limits only if abuse shows up.

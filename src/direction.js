@@ -17,7 +17,7 @@
 //      labels: none decided wrong), and says so in an assumption telling the
 //      user to check the signs.
 
-import { haversineKm } from './data.js';
+import { haversineKm } from './geo.js';
 import { fold } from './lookup.js';
 
 // Sites this close count as one place to the driver (a service area often has
@@ -27,6 +27,11 @@ import { fold } from './lookup.js';
 // spread over 43 m).
 export const SAME_PLACE_KM = 0.25;
 const MOTORWAY_PLACE_KM = 0.06;
+// In town, 250 m is a whole street: two car parks with different operators
+// (Colombo's Capwatt and a Galp across the avenue, 64 m apart) are not one
+// place. There it takes URBAN_PLACE_KM, or the same operator (one station
+// spread over several NAP sites), address or OSM name.
+export const URBAN_PLACE_KM = 0.06;
 // Places this close, all on a motorway, are taken for the sides of one
 // service area.
 export const PAIR_KM = 2;
@@ -57,8 +62,18 @@ export function samePlace(a, b) {
   if (km > SAME_PLACE_KM) return false;
   const la = heading(parseLabel(a)), lb = heading(parseLabel(b));
   if (la && lb) return la === lb;
-  return !(onMotorway(a) || onMotorway(b)) || km <= MOTORWAY_PLACE_KM;
+  if (onMotorway(a) || onMotorway(b)) return km <= MOTORWAY_PLACE_KM;
+  return km <= URBAN_PLACE_KM || (a.operatorId != null && a.operatorId === b.operatorId) || sameSpot(a, b);
 }
+
+const sameSpot = (a, b) => (!!a.address && fold(a.address) === fold(b.address ?? ''))
+  || (!!a.osm?.name && a.osm.name === b.osm?.name);
+
+// Is b part of the same station as a (same operator, same car park)? Stricter
+// than samePlace, for adding a site's neighbours to a quote: the same
+// operator 200 m down the road at another address is another charger.
+export const sameStation = (a, b) => a.operatorId === b.operatorId && samePlace(a, b)
+  && (haversineKm(a, b) <= URBAN_PLACE_KM || sameSpot(a, b) || onMotorway(a));
 
 // Groups hits ({ site, ... }) into places (samePlace as the place's first
 // site).

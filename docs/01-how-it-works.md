@@ -36,11 +36,14 @@ Follow one `find_cheapest_charging` call through the code:
 2. **`src/mcp.js`** validates the arguments against the zod schema, picks the
    language (`lang`), and turns "Leiria" into coordinates
    (`Dataset.resolvePlace`).
-3. **`src/live.js`** makes sure the live status is less than 5 minutes old.
+3. **`src/live.js`** makes sure the live status is less than 15 minutes old.
    If it isn't, it downloads the NAP feed while the user sees a progress
    message ([03](03-live-status.md)).
 4. **`src/data.js`** finds every site within the radius, or along the route,
-   and keeps the plugs that pass the filters.
+   and keeps the plugs that pass the filters. `mcp.js` keeps one plug per
+   kind per site (ten identical T2s price the same) and, on a wide search,
+   only the nearest sites up to a cap; the result says `truncated` when that
+   bit.
 5. **`src/quote.js`** prices every plug:
    - **`src/charging.js`**: how many kWh the meter will count, and how long it takes;
    - **`src/profile.js`**: when each of those kWh goes in, cut into quarter-hours;
@@ -54,7 +57,10 @@ Follow one `find_cheapest_charging` call through the code:
 6. Still in `quote.js`, `rank` drops busy or broken chargers, keeps the
    cheapest plug per site, and sorts sites by `best`: the cheapest option
    anyone can use.
-7. `mcp.js` returns the top results as `structuredContent`. Chat apps that
+   If ceme-v2 doesn't answer, plugs on MOBI.E come back without a CEME total
+   (`cemeUnavailable`) and the other ways to pay still rank.
+7. `mcp.js` returns the top results as `structuredContent`, plus a few lines
+   of text for clients that don't read it. Chat apps that
    support **MCP Apps** also load `ui/results.html` (built by `src/view.js`)
    and show it inline.
 
@@ -65,7 +71,8 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/server.js` | HTTP server, boot, health check, landing page, weekly dataset swap |
 | `src/mcp.js` | Tools, argument schemas, the instructions the assistant reads |
 | `src/i18n.js` | Every user-facing sentence, in English and Portuguese |
-| `src/data.js` | Loads the dataset; searches by distance and along a route |
+| `src/data.js` | Loads the dataset; searches by distance and along a route; town names to coordinates |
+| `src/geo.js` | Distances: haversine, distance to a route |
 | `src/lookup.js` | Finds a charger by what the user calls it: code, operator or brand, OSM name, town, address |
 | `src/direction.js` | Motorway service areas: which side the driver can reach, from where they're heading |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |
@@ -73,11 +80,13 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/charging.js` | Session energy and duration, as constant-power segments |
 | `src/profile.js` | Lays the session on the clock: kWh per quarter-hour, local times |
 | `src/opc.js` | Operator fee math (flat, per kWh, per-minute tiers) |
-| `src/ceme.js` | Client for ceme-v2's API, with a cache |
+| `src/ceme.js` | Client for ceme-v2's API, with a cache and a circuit breaker |
 | `src/offers.js` | Loads the direct offers, picks the ones for a charger; finds missing operators |
 | `src/promos.js` | CEME promotions at one network: which hold at a charger, and what they do to the price |
 | `src/offers-parse.js` | Parses the custofinal blog's price tables |
 | `src/view.js` | Builds the inline results page with the MCP Apps bridge |
+| `src/stats.js` | One log line per tool call, counters for `/healthz` |
+| `src/version.js` | The version, read from `package.json` |
 | `ui/results.html` | The inline results page |
 | `site/index.html` | The landing page at `/`: what ohmigo is and how to install it, in both languages |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |

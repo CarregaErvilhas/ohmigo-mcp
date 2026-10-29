@@ -52,7 +52,7 @@
 </style>
 </head>
 <body>
-<div id="list" class="empty"></div>
+<div id="list" class="empty" aria-live="polite"></div>
 <div id="foot" class="foot"></div>
 <script>/*__BRIDGE__*/</script>
 <script>
@@ -96,8 +96,10 @@
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const eur = v => v == null ? 'n/a' : v.toLocaleString(lang === 'pt' ? 'pt-PT' : 'en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  // Coordinates go into an attribute: numbers only.
+  const coord = v => Number.isFinite(Number(v)) ? Number(v) : '';
   const km = v => v.toLocaleString(lang === 'pt' ? 'pt-PT' : 'en', { maximumFractionDigits: 1 });
-  const app = new McpApps.App({ name: 'ohmigo-results', version: '0.1.0' });
+  const app = new McpApps.App({ name: 'ohmigo-results', version: '__VERSION__' });
 
   function optName(o) {
     if (o.kind === 'adhoc') return S().adhoc;
@@ -113,16 +115,14 @@
     const rows = data?.results || [];
     if (!rows.length) { list.className = 'empty'; list.textContent = s.none; return; }
     list.className = '';
-    // Only when the tool was called with detail (or in QA): each quarter's
-    // kWh, and the headline tariff's period and price (excl. VAT) in it.
+    // Only when the tool was called with detail (or in QA): the headline
+    // tariff's runs (from-to, kWh, period, price excl. VAT), or just when the
+    // kWh go in when no tariff has them.
     const timelineHtml = (q, h, s) => {
       const tl = q.timeline;
       if (!tl) return '';
-      const per = (tl.tariffs.find(x => h && x.tariffId === h.tariffId) || tl.tariffs[0] || { slices: [] }).slices;
-      const lines = tl.slices.map((x, i) => {
-        const p = per[i];
-        return `${esc(x.local)} ${km(x.kwh)} kWh${p ? ` · ${esc(s.period[p.period] || p.period)} ${esc(p.eurKwhExVat?.toFixed(4))} €/kWh${p.omieEurKwh != null ? ` (OMIE ${esc(p.omieEurKwh.toFixed(4))}${p.omieSpot ? '' : '~'})` : ''}` : ''}`;
-      });
+      const runs = (tl.tariffs.find(x => h && x.tariffId === h.tariffId) || tl.tariffs[0] || {}).runs || tl.slices;
+      const lines = runs.map(r => `${esc(r.from)}–${esc(r.to)} ${km(r.kwh)} kWh${r.period ? ` · ${esc(s.period[r.period] || r.period)} ${esc(r.eurKwhExVat?.toFixed(4))} €/kWh${r.omieEurKwh != null ? ` (OMIE ${esc(r.omieEurKwh.toFixed(4))}${r.omieSpot ? '' : '~'})` : ''}` : ''}`);
       return `<dt>${s.timeline}</dt><dd>${lines.join('<br>')}</dd>`;
     };
     list.innerHTML = rows.map((q, i) => {
@@ -149,13 +149,14 @@
           <dt>${s.assumes}</dt><dd>${(q.assumptions || []).map(esc).join('; ')}</dd>
           <dt>${s.point}</dt><dd>${esc(q.pointId)}</dd>
         </dl>
-        <button data-lat="${q.lat}" data-lon="${q.lon}">${s.directions}</button></details>
+        <button data-lat="${coord(q.lat)}" data-lon="${coord(q.lon)}">${s.directions}</button></details>
       </div>`;
     }).join('');
     const lv = data.live || {};
     const at = lv.publishedAt ? new Date(lv.publishedAt).toLocaleTimeString(lang === 'pt' ? 'pt-PT' : 'en', { hour: '2-digit', minute: '2-digit' }) : null;
+    const hasDirect = rows.some(q => (q.options || []).some(o => o.kind === 'direct'));
     document.getElementById('foot').textContent = s.foot(at, !lv.fresh, (data.dataAsOf || '').slice(0, 10))
-      + (JSON.stringify(data).includes('"kind":"direct"') ? ' ' + s.credit : '');
+      + (hasDirect ? ' ' + s.credit : '');
   }
 
   document.addEventListener('click', e => {
@@ -168,7 +169,17 @@
   }
   setLang(navigator.language);
   document.getElementById('list').textContent = S().waiting;
-  app.ontoolresult = r => render(r.structuredContent);
+  // A business error (which town? which side of the motorway?) shows its
+  // message, not an empty "no results".
+  function renderError(msg) {
+    const list = document.getElementById('list');
+    list.className = 'empty';
+    list.textContent = msg || S().none;
+    document.getElementById('foot').textContent = '';
+  }
+  app.ontoolresult = r => (r.isError || r.structuredContent?.kind === 'error')
+    ? renderError(r.structuredContent?.message ?? r.content?.[0]?.text)
+    : render(r.structuredContent);
   app.onhostcontextchanged = applyHost;
   app.connect().then(() => applyHost(app.getHostContext()));
 </script>

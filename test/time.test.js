@@ -117,14 +117,19 @@ test('quote: detail adds the timeline, qa the debug block', async () => {
   fakeCeme();
   const q = await quotePoint({ site, point }, car, { at: new Date('2026-11-10T21:30:00Z'), lang: 'pt', detail: true });
   assert.equal(q.timeline.timeZone, 'Europe/Lisbon');
-  assert.equal(q.timeline.slices[0].local, '21:30');
+  assert.equal(q.timeline.slices[0].from, '21:30');
   assert.equal(q.timeline.slices[0].utcOffset, '+00:00');
-  assert.deepEqual(q.timeline.tariffs[0].slices.slice(1, 3).map(s => s.period), ['FORA_VAZIO', 'VAZIO']);
-  assert.equal(q.timeline.omieQuartersKnown, `0/${q.timeline.slices.length}`);
+  // Quarters with the same period and price are one run; the kWh add up.
+  const runs = q.timeline.tariffs[0].runs;
+  assert.deepEqual(runs.map(r => r.period), ['FORA_VAZIO', 'VAZIO']);
+  assert.equal(runs[1].from, runs[0].to, 'runs are back to back');
+  assert.equal(runs.reduce((a, r) => a + r.quarters, 0), q.timeline.quarters);
+  assert.ok(near(runs.reduce((a, r) => a + r.kwh, 0), q.session.kwhBilled, 0.01));
+  assert.equal(q.timeline.omieQuartersKnown, `0/${q.timeline.quarters}`);
   assert.equal(q.debug, undefined);
   const qa = await quotePoint({ site, point }, car, { at: new Date('2026-11-10T21:30:00Z'), lang: 'pt', qa: true });
   assert.ok(qa.timeline, 'qa implies detail');
-  assert.equal(qa.debug.profileSent.length, qa.timeline.slices.length);
+  assert.equal(qa.debug.profileSent.length, qa.timeline.quarters);
   assert.ok(qa.debug.segments.length >= 1);
 });
 

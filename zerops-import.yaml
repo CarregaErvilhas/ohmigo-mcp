@@ -13,7 +13,8 @@ services:
       cpuMode: SHARED
       minCpu: 1
       maxCpu: 1
-      minRam: 0.25
+      # A 50 km ranking peaked at ~200 MB RSS with the dataset loaded.
+      minRam: 0.5
       maxRam: 1
       minDisk: 1
       maxDisk: 2

@@ -17,8 +17,11 @@ We've asked for a chunked version. Until then, we live with the whole file.
 **On demand, with a cache.** Nothing is downloaded until a user asks a
 question. Then:
 
-1. If our copy is **less than 5 minutes old** (`LIVE_TTL_SECONDS`), we use it,
-   with no network at all.
+1. If our copy is **less than 15 minutes old** (`LIVE_TTL_SECONDS`, ±10 %
+   so instances drift apart), we use it, with no network at all. Why not
+   fresher: every refresh is a full 38 MB download (see below), so a 5-minute
+   TTL meant three times the traffic for a status that's best-effort anyway. Results carry
+   `live.publishedAt`, so the assistant can say how old the status is.
 2. Otherwise we start **one** download. If ten users ask at the same moment,
    they all wait on that same download (`refresh()` hands back the one
    already running).
@@ -32,7 +35,9 @@ question. Then:
 **Cheap re-checks.** Every download sends the `ETag` of the copy we have
 (`If-None-Match`). When the file hasn't changed, MOBI.E answers `304 Not
 Modified` with no body. It still takes their server a few seconds, but we
-don't download 38 MB again.
+don't download 38 MB again. In practice MOBI.E regenerates the file every
+minute or two (the ETag and size change between checks), so a 304 is rare.
+The feed has no gzip; asking MOBI.E to compress it would cut ~90 %.
 
 **Streaming parse.** We read the XML as it arrives, piece by piece (with the
 `saxes` parser), and keep only a small map: `"SITE/POINT" → { status, fees }`.
@@ -40,9 +45,14 @@ The 38 MB never sit in memory as one string. Parsing takes about 0.2 s; the
 download is the slow part.
 
 **One retry** when the download arrives cut short (the parser fails with an
-"unclosed tag" error).
+"unclosed tag" error) or the connection resets. Other failures (an HTTP
+error, a refused connection) are not retried at once: the next attempts back
+off (`BACKOFF_MS` in `src/live.js`), and requests in between answer with the copy we
+have instead of starting another download. `/healthz` shows `failures`,
+`retryAt` and the size of the last download (`bytesLast`).
 
-**One warm-up at boot**, so the first user after a deploy doesn't wait.
+**One warm-up at boot**, so the first user after a deploy doesn't wait, a
+random 0-20 s after start so two instances don't download together.
 
 ## Why not a poller?
 

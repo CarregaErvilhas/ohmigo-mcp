@@ -10,7 +10,7 @@
     "test": "node --test test/*.test.js",
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "build:data": "python3 scripts/build_dataset.py ../nap-dashboard/data data/chargers.json",
+    "build:data": "../nap-dashboard/venv/bin/python ../nap-dashboard/scripts/ohmigo_dataset.py ../nap-dashboard/data data/chargers.json",
     "offers:gaps": "node scripts/offer-gaps.mjs",
     "offers:scrape": "node scripts/scrape-offers.mjs"
   },

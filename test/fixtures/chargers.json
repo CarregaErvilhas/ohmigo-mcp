@@ -1,0 +1,275 @@
+{
+ "schema": 1,
+ "generatedAt": "2026-10-28T17:29:02+00:00",
+ "sites": [
+  {
+   "id": "GLP-MOBI-LSB-00105",
+   "code": "MOBI-LSB-00105",
+   "lat": 38.757183,
+   "lon": -9.175313,
+   "region": "CONT",
+   "city": "Lisboa",
+   "address": "RUA TOMÁS DA FONSECA TORRE A PISO -1",
+   "operator": "Galp Power OPC",
+   "operatorId": "GLPP",
+   "website": null,
+   "payment": [
+    "apps",
+    "rfid"
+   ],
+   "points": [
+    {
+     "id": "MOBI-LSB-00105-01",
+     "kw": 3.7,
+     "connector": "T2",
+     "dc": false,
+     "phases": 1,
+     "level": "MT",
+     "regime": "mobie",
+     "opc": {
+      "REGULAR": {
+       "flat": [
+        0.2608
+       ],
+       "energy": [
+        0
+       ],
+       "time": [
+        {
+         "eur": 0,
+         "from": 0,
+         "to": null
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "GLP-LRA-00156",
+   "code": "LRA-00156",
+   "lat": 39.746872,
+   "lon": -8.815711,
+   "region": "CONT",
+   "city": "Leiria",
+   "address": "Avenida 25 de Abril - Bairro de Sao Francisco",
+   "operator": "Galp Power OPC",
+   "operatorId": "GLPP",
+   "website": null,
+   "payment": [
+    "apps",
+    "rfid"
+   ],
+   "points": [
+    {
+     "id": "LRA-00156-01",
+     "kw": 22,
+     "connector": "T2",
+     "dc": false,
+     "phases": 1,
+     "level": "MT",
+     "regime": "mobie",
+     "opc": {
+      "REGULAR": {
+       "flat": [
+        0
+       ],
+       "energy": [
+        0
+       ],
+       "time": [
+        {
+         "eur": 0.125,
+         "from": 0,
+         "to": null
+        }
+       ]
+      },
+      "AD_HOC_PAYMENT": {
+       "flat": [
+        0
+       ],
+       "energy": [
+        0.6
+       ],
+       "time": [
+        {
+         "eur": 0,
+         "from": 0,
+         "to": null
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "LRA-00156-02",
+     "kw": 50,
+     "connector": "CCS",
+     "dc": true,
+     "phases": null,
+     "level": "MT",
+     "regime": "mobie",
+     "opc": {
+      "REGULAR": {
+       "flat": [
+        0
+       ],
+       "energy": [
+        0
+       ],
+       "time": [
+        {
+         "eur": 0.125,
+         "from": 0,
+         "to": null
+        }
+       ]
+      },
+      "AD_HOC_PAYMENT": {
+       "flat": [
+        0
+       ],
+       "energy": [
+        0.6
+       ],
+       "time": [
+        {
+         "eur": 0,
+         "from": 0,
+         "to": null
+        }
+       ]
+      }
+     }
+    },
+    {
+     "id": "LRA-00156-03",
+     "kw": 50,
+     "connector": "CHADEMO",
+     "dc": true,
+     "phases": null,
+     "level": "MT",
+     "regime": "mobie",
+     "opc": {
+      "AD_HOC_PAYMENT": {
+       "flat": [
+        0
+       ],
+       "energy": [
+        0.6
+       ],
+       "time": [
+        {
+         "eur": 0,
+         "from": 0,
+         "to": null
+        }
+       ]
+      },
+      "REGULAR": {
+       "flat": [
+        0
+       ],
+       "energy": [
+        0
+       ],
+       "time": [
+        {
+         "eur": 0.125,
+         "from": 0,
+         "to": null
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "CNT-9648PL0001",
+   "code": "9648PL0001",
+   "lat": 39.733234,
+   "lon": -8.797733,
+   "region": "CONT",
+   "city": "Leiria",
+   "address": "R. Vale de Lobos 37",
+   "operator": "Modelo Continente Hipermercados, S.A.",
+   "operatorId": "CONT",
+   "website": null,
+   "payment": [
+    "apps"
+   ],
+   "points": [
+    {
+     "id": "9648PL0001.01",
+     "kw": 22,
+     "connector": "T2",
+     "dc": false,
+     "phases": 3,
+     "level": null,
+     "regime": "sem_ceme",
+     "napPrice": 0.37
+    },
+    {
+     "id": "9648PL0001.02",
+     "kw": 22,
+     "connector": "T2",
+     "dc": false,
+     "phases": 3,
+     "level": null,
+     "regime": "sem_ceme",
+     "napPrice": 0.37
+    }
+   ]
+  },
+  {
+   "id": "CNT-9648PR0002",
+   "code": "9648PR0002",
+   "lat": 39.733234,
+   "lon": -8.797733,
+   "region": "CONT",
+   "city": "Leiria",
+   "address": "R. Vale de Lobos 37",
+   "operator": "Modelo Continente Hipermercados, S.A.",
+   "operatorId": "CONT",
+   "website": null,
+   "payment": [
+    "apps"
+   ],
+   "points": [
+    {
+     "id": "9648PR0002.01",
+     "kw": 120,
+     "connector": "CCS",
+     "dc": true,
+     "phases": null,
+     "level": null,
+     "regime": "sem_ceme",
+     "napPrice": 0.37
+    },
+    {
+     "id": "9648PR0002.02",
+     "kw": 50,
+     "connector": "CHADEMO",
+     "dc": true,
+     "phases": null,
+     "level": null,
+     "regime": "sem_ceme",
+     "napPrice": 0.37
+    },
+    {
+     "id": "9648PR0002.03",
+     "kw": 120,
+     "connector": "CCS",
+     "dc": true,
+     "phases": null,
+     "level": null,
+     "regime": "sem_ceme",
+     "napPrice": 0.37
+    }
+   ]
+  }
+ ]
+}

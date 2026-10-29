@@ -4,9 +4,11 @@
 // What happens on boot:
 //   1. load the charger dataset (data.js), from a local file in development or
 //      from nap-dashboard's Pages copy in production;
-//   2. start one download of the live status feed (live.js), so the first user
-//      after a deploy doesn't have to wait for it;
-//   3. listen for requests.
+//   2. start one download of the live status feed (live.js), a few seconds
+//      later on each instance, so the first user after a deploy doesn't have
+//      to wait for it;
+//   3. listen for requests, until SIGTERM (a deploy): then finish the ones
+//      in flight and exit.
 //
 // Every request gets a brand new MCP server object (cheap: it's a few closures)
 // with no session id. "Stateless" means any request can land on any instance,
@@ -15,9 +17,12 @@
 import { createServer as createHttp } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { cemeHealth } from './ceme.js';
 import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
 import { createServer, QA } from './mcp.js';
+import { statsSummary } from './stats.js';
+import { VERSION } from './version.js';
 
 const PORT = Number(process.env.PORT || 3002);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -25,11 +30,26 @@ const MAX_BODY = 256 * 1024;
 // How often to ask whether a new weekly dataset is out. See below.
 const DATASET_CHECK_MS = Number(process.env.DATASET_CHECK_HOURS || 6) * 3600_000;
 
-let ds = await Dataset.load();
+// A CDN hiccup at boot shouldn't crash-loop the container. 4 tries of 15 s
+// with 2/4/8 s between them is ~74 s, inside Zerops' 120 s readiness
+// timeout (zerops.yml); past that, exit and let the platform keep the old
+// version.
+async function loadDataset(tries = 4) {
+  for (let i = 1; ; i++) {
+    try { return await Dataset.load({ timeoutMs: 15_000 }); } catch (e) {
+      console.error(`[ohmigo] dataset load ${i}/${tries} failed: ${e.message}`);
+      if (i === tries) process.exit(1);
+      await new Promise(r => setTimeout(r, 2_000 * 2 ** (i - 1)));
+    }
+  }
+}
+let ds = await loadDataset();
 console.log(`[ohmigo] ${ds.sites.length} sites, data as of ${ds.generatedAt}`);
 
 const live = new LiveStatus();
-if (process.env.LIVE_WARMUP !== '0') live.refresh();
+// Jittered, so two instances booting together don't both pull the 38 MB feed
+// at the same second. A request before then just triggers it itself.
+if (process.env.LIVE_WARMUP !== '0') setTimeout(() => live.refresh(), Math.random() * 20_000).unref();
 
 // The dataset changes once a week (Monday morning), but the server may run for
 // weeks without a restart. So every few hours it asks "has it changed?" with
@@ -71,7 +91,7 @@ const SITE_HEADERS = {
 };
 
 const send = (res, status, body, type = 'application/json') => {
-  res.writeHead(status, { 'content-type': type });
+  res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' });
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 };
 
@@ -85,13 +105,37 @@ const CORS = {
   'access-control-expose-headers': 'mcp-session-id, mcp-protocol-version',
 };
 
-createHttp(async (req, res) => {
+// ok: every dependency answers. degraded: answering, but the last live feed
+// refresh failed, or CEME prices are off (the tools say so in their results).
+// An old live copy alone isn't degraded: the feed is fetched on demand, so a
+// quiet server has an old one. Always
+// 200 while the server can answer at all, so a ceme-v2 outage doesn't make
+// the platform restart a healthy container; monitors read `status`.
+function health() {
+  const lv = live.info(), ceme = cemeHealth();
+  const problems = [
+    ...(lv.error ? ['live: ' + lv.error] : []),
+    ...(ceme.openUntil ? ['ceme-v2: unavailable'] : []),
+  ];
+  const ageH = (Date.now() - Date.parse(ds.generatedAt)) / 3600_000;
+  // The dataset is rebuilt weekly; past ~9 days the pipeline has missed one.
+  if (ageH > 9 * 24) problems.push('dataset: older than 9 days');
+  const mem = process.memoryUsage();
+  return {
+    ok: true, status: problems.length ? 'degraded' : 'ok', problems, version: VERSION,
+    dataAsOf: ds.generatedAt, dataAgeHours: Math.round(ageH * 10) / 10,
+    live: lv, ceme, tools: statsSummary(),
+    memoryMb: { rss: Math.round(mem.rss / 1048576), heapUsed: Math.round(mem.heapUsed / 1048576) },
+  };
+}
+
+const httpServer = createHttp(async (req, res) => {
   for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
   const url = new URL(req.url, 'http://x');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   // Health check for the hosting platform (and for you: it shows how fresh
   // the data is).
-  if (url.pathname === '/healthz') return send(res, 200, { ok: true, dataAsOf: ds.generatedAt, live: live.info() });
+  if (url.pathname === '/healthz') return send(res, 200, health());
   if (url.pathname === '/' && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, SITE_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : SITE);
@@ -100,7 +144,9 @@ createHttp(async (req, res) => {
     res.writeHead(200, SITE_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : LEGAL);
   }
-  if (url.pathname !== '/mcp') return send(res, 404, { error: 'not found' });
+  if (url.pathname === '/robots.txt') return send(res, 200, 'User-agent: *\nAllow: /\nDisallow: /mcp\n', 'text/plain; charset=utf-8');
+  if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
+  if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
   // Someone pasted the MCP address into a browser. MCP clients never ask for
   // text/html, so send the person to the page that explains what to do.
   if (req.method === 'GET' && /text\/html/.test(req.headers.accept || '')) {
@@ -126,4 +172,19 @@ createHttp(async (req, res) => {
     console.error('[ohmigo]', e);
     if (!res.headersSent) send(res, 500, { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null });
   }
-}).listen(PORT, HOST, () => console.log(`[ohmigo] http://${HOST}:${PORT}/mcp`));
+}).listen(PORT, HOST, () => console.log(`[ohmigo] ${VERSION} http://${HOST}:${httpServer.address().port}/mcp`));
+
+// A deploy sends SIGTERM to the old process: stop taking connections, let
+// the requests in flight finish (a ranking, a ceme-v2 call: seconds), then
+// exit. 15 s is the cap, for a request stuck on the 38 MB feed.
+let stopping = false;
+function stop(signal) {
+  if (stopping) return;
+  stopping = true;
+  console.log(`[ohmigo] ${signal}: finishing requests in flight`);
+  httpServer.close(() => process.exit(0));
+  httpServer.closeIdleConnections();
+  setTimeout(() => process.exit(0), 15_000).unref();
+}
+process.on('SIGTERM', () => stop('SIGTERM'));
+process.on('SIGINT', () => stop('SIGINT'));

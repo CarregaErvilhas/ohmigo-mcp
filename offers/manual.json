@@ -1,5 +1,5 @@
 {
-  "about": "Hand-maintained corrections and additions to offers/custofinal.json (the scraped blog). An entry whose id exists there overrides the fields it lists; {\"id\": ..., \"disable\": true} removes it; a new id adds an offer (all fields required). Every entry needs source and checkedAt. Guide: docs/04-operator-offers.md.",
+  "about": "Hand-maintained corrections and additions to offers/custofinal.json (the scraped blog). An entry whose id exists there overrides the fields it lists; {\"id\": ..., \"disable\": true} removes it; {\"add\": true} adds a new offer (all fields required); an override or disable whose id is not in the scrape fails the tests. Every entry needs source and checkedAt. Guide: docs/04-operator-offers.md.",
   "offers": [
     {
       "id": "ionity-tpa-ionity",
@@ -24,6 +24,7 @@
     },
     {
       "id": "ionity-app-ionity",
+      "add": true,
       "label": "IONITY - App (no subscription)",
       "provider": "IONITY", "plan": "App", "network": "Ionity",
       "scope": { "operatorIds": ["IONY"] },
@@ -34,6 +35,7 @@
     },
     {
       "id": "ionity-motion-365-ionity",
+      "add": true,
       "label": "IONITY - Motion 365 59,99€/ano",
       "provider": "IONITY", "plan": "Motion 365", "network": "Ionity",
       "scope": { "operatorIds": ["IONY"] },
@@ -44,6 +46,7 @@
     },
     {
       "id": "ionity-power-365-ionity",
+      "add": true,
       "label": "IONITY - Power 365 119,99€/ano",
       "provider": "IONITY", "plan": "Power 365", "network": "Ionity",
       "scope": { "operatorIds": ["IONY"] },

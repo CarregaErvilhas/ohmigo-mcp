@@ -15,6 +15,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { VERSION } from './version.js';
 
 const require = createRequire(import.meta.url);
 let html = null;
@@ -32,6 +33,6 @@ export async function viewHtml() {
   // A function replacer, because the bundle contains `$&`-style sequences
   // that a replacement string would interpret. `</script` inside the bundle
   // would end our <script> element early, so it's escaped.
-  html = page.replace('/*__BRIDGE__*/', () => bridge.replace(/<\/script/gi, '<\\/script'));
+  html = page.replaceAll('__VERSION__', VERSION).replace('/*__BRIDGE__*/', () => bridge.replace(/<\/script/gi, '<\\/script'));
   return html;
 }

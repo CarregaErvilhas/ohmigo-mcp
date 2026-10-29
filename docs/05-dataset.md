@@ -96,8 +96,11 @@ From a nap-dashboard checkout whose pipeline has run (`fetch_data.sh` +
 `nap_etl.py`):
 
 ```bash
-../nap-dashboard/venv/bin/python ../nap-dashboard/scripts/ohmigo_dataset.py ../nap-dashboard/data data/chargers.json
+npm run build:data
+# = ../nap-dashboard/venv/bin/python ../nap-dashboard/scripts/ohmigo_dataset.py ../nap-dashboard/data data/chargers.json
 ```
+
+The builder needs pandas, hence nap-dashboard's venv.
 
 With `data/chargers.json` present, the server uses it instead of the Pages
 copy.
