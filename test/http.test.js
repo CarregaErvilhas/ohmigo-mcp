@@ -122,6 +122,34 @@ test('http: with ceme-v2 down, the other ways to pay still come back, flagged', 
   } finally { cemeDown = false; }
 });
 
+test('http: the landing page is rendered in each language at its own URL, for crawlers', async () => {
+  const pt = await (await fetch(`${base}/`)).text();
+  assert.match(pt, /<html lang="pt-PT">/);
+  assert.match(pt, /<h1 data-i="hero.title">Pergunta ao teu assistente/);
+  assert.match(pt, /<link rel="canonical" href="https:\/\/ohmigo\.ocarroeletrico\.com\/">/);
+  assert.match(pt, /hreflang="en" href="https:\/\/ohmigo\.ocarroeletrico\.com\/en"/);
+  assert.match(pt, /og:image" content="https:\/\/ohmigo\.ocarroeletrico\.com\/og\.png"/);
+  assert.match(pt, /href="https:\/\/ceme\.ocarroeletrico\.com">comparador/);
+  const ld = JSON.parse(pt.match(/<script type="application\/ld\+json">(.*?)<\/script>/)[1]);
+  assert.equal(ld['@type'], 'WebApplication');
+  assert.doesNotMatch(pt, /data-i="[^"]+"><\//, 'no element left empty');
+
+  const en = await (await fetch(`${base}/en`)).text();
+  assert.match(en, /<html lang="en">/);
+  assert.match(en, /<link rel="canonical" href="https:\/\/ohmigo\.ocarroeletrico\.com\/en">/);
+  assert.match(en, /data-lang="en" aria-current="page"/);
+
+  const old = await fetch(`${base}/?lang=en&from=x`, { redirect: 'manual' });
+  assert.equal(old.status, 301);
+  assert.equal(old.headers.get('location'), '/en?from=x');
+
+  const map = await (await fetch(`${base}/sitemap.xml`)).text();
+  assert.match(map, /<loc>https:\/\/ohmigo\.ocarroeletrico\.com\/en<\/loc>/);
+  assert.match(await (await fetch(`${base}/robots.txt`)).text(), /Sitemap: https:\/\/ohmigo\.ocarroeletrico\.com\/sitemap\.xml/);
+  const og = await fetch(`${base}/og.png`);
+  assert.equal(og.headers.get('content-type'), 'image/png');
+});
+
 test('http: /healthz, robots.txt, favicon and 404', async () => {
   const h = await (await fetch(`${base}/healthz`)).json();
   assert.equal(h.ok, true);
