@@ -58,8 +58,10 @@ The server speaks MCP over HTTP ("Streamable HTTP") at `/mcp`, with no auth.
 - **Claude Code**: `claude mcp add --transport http ohmigo http://127.0.0.1:3002/mcp`
 - **Claude (web/desktop)**: Settings → Connectors → Add custom connector →
   `https://ohmigo.ocarroeletrico.com/mcp`.
-- **ChatGPT**: Settings → Apps & Connectors → developer mode → Create →
-  `https://ohmigo.ocarroeletrico.com/mcp`, no authentication.
+- **ChatGPT** (browser, desktop or mobile — not the mobile app): left
+  sidebar → Plugins → Add (top right) → Custom → name it, paste
+  `https://ohmigo.ocarroeletrico.com/mcp`, switch authentication to
+  "No authentication", tick the trust box, and create.
 - **MCP Inspector**, for poking at it: `npx @modelcontextprotocol/inspector`,
   then connect to the URL.
 
