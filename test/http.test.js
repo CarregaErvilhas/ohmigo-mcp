@@ -107,6 +107,43 @@ test('http: at outside the window is refused', async () => {
   assert.equal(ok.isError, undefined);
 });
 
+test('http: /dados with ceme-v2 down goes out without tariffs, cached 1 min only', async () => {
+  // Two failed calls (simulate, promos): under the circuit breaker's three,
+  // and a partial result isn't memoized, so the next test gets a fresh one.
+  cemeDown = true;
+  try {
+    const r = await fetch(`${base}/dados.json`);
+    assert.equal(r.headers.get('cache-control'), 'public, max-age=60, s-maxage=60');
+    const d = await r.json();
+    assert.equal(d.partial, true);
+    assert.ok(d.ceme.error);
+    assert.equal(d.counts.sites, 4);
+  } finally { cemeDown = false; }
+});
+
+test('http: /dados is public, cacheable, unindexed, and has nothing that depends on the hour', async () => {
+  const page = await fetch(`${base}/dados`);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-type'), /text\/html/);
+  assert.match(page.headers.get('cache-control'), /s-maxage=3600/);
+  assert.match(page.headers.get('x-robots-tag'), /noindex/);
+  assert.equal(page.headers.get('cache-tag'), 'ohmigo-dados');
+
+  const r = await fetch(`${base}/dados.json`);
+  assert.match(r.headers.get('cache-control'), /s-maxage=3600/);
+  assert.match(r.headers.get('x-robots-tag'), /noindex/);
+  const d = await r.json();
+  assert.equal(d.partial, false);
+  assert.equal(d.counts.sites, 4);
+  assert.deepEqual(d.ceme.tariffs.map(t => t.id), ['edp-bt-x']);
+  assert.equal('totalEur' in d.ceme.tariffs[0], false);
+  assert.ok(d.operators.some(o => o.id === 'CONT'));
+  assert.ok(d.offers.list.length > 0);
+
+  const postos = await (await fetch(`${base}/dados/postos.json?op=CONT`)).json();
+  assert.deepEqual(postos.map(s => s.id).sort(), ['CNT-9648PL0001', 'CNT-9648PR0002']);
+});
+
 test('http: with ceme-v2 down, the other ways to pay still come back, flagged', async () => {
   cemeDown = true;
   try {

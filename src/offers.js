@@ -69,7 +69,7 @@ for (const o of OFFERS) for (const id of o.scope.operatorIds || []) {
 // hand-made like manual.json). Outside MOBI.E the NAP's price is shown as the
 // operator's price unless a note here says otherwise; scope by operator id or
 // by site id.
-const NAP_NOTES = read('nap-notes.json').notes;
+export const NAP_NOTES = read('nap-notes.json').notes;
 export const noteFor = (notes, site) => notes.find(n =>
   n.scope.siteIds?.includes(site.id) || n.scope.operatorIds?.includes(site.operatorId)) ?? null;
 export const napNote = site => noteFor(NAP_NOTES, site);
