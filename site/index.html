@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ohmigo · onde carregar o carro elétrico mais barato em Portugal</title>
-<meta name="description" content="Pergunta ao ChatGPT ou ao Claude onde é mais barato carregar o teu carro elétrico em Portugal. Grátis, sem registo.">
+<meta name="description" content="Pergunta ao ChatGPT, ao Claude ou ao Grok onde é mais barato carregar o teu carro elétrico em Portugal. Grátis, sem registo.">
 <!-- seo: src/site.js fills this per language (canonical, hreflang, Open Graph, JSON-LD) -->
 <meta name="theme-color" content="#16a34a">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='14' width='44' height='40' rx='14' fill='%2322c55e'/%3E%3Crect x='20' y='4' width='6' height='12' rx='3' fill='%23334155'/%3E%3Crect x='38' y='4' width='6' height='12' rx='3' fill='%23334155'/%3E%3Ccircle cx='24' cy='32' r='4' fill='%230f172a'/%3E%3Ccircle cx='40' cy='32' r='4' fill='%230f172a'/%3E%3Cpath d='M24 42q8 6 16 0' stroke='%230f172a' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -428,6 +428,7 @@
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" id="t-claude" aria-controls="p-claude" aria-selected="true"><span class="dot" style="background:#d97757"></span>Claude</button>
         <button class="tab" role="tab" id="t-chatgpt" aria-controls="p-chatgpt" aria-selected="false" tabindex="-1"><span class="dot" style="background:#10a37f"></span>ChatGPT</button>
+        <button class="tab" role="tab" id="t-grok" aria-controls="p-grok" aria-selected="false" tabindex="-1"><span class="dot" style="background:#6b7280"></span>Grok</button>
         <button class="tab" role="tab" id="t-phone" aria-controls="p-phone" aria-selected="false" tabindex="-1"><span class="dot" style="background:#38bdf8"></span><span data-i="tab.phone"></span></button>
         <button class="tab" role="tab" id="t-other" aria-controls="p-other" aria-selected="false" tabindex="-1"><span class="dot" style="background:#a78bfa"></span><span data-i="tab.other"></span></button>
       </div>
@@ -454,6 +455,17 @@
           <li data-i="gpt.s5"></li>
         </ol>
         <div class="done"><span aria-hidden="true">🎉</span><div data-i="gpt.done"></div></div>
+      </div>
+
+      <div class="panel" role="tabpanel" id="p-grok" aria-labelledby="t-grok" hidden>
+        <p class="note" data-i="grok.note"></p>
+        <ol class="steps">
+          <li data-i="grok.s1"></li>
+          <li data-i="grok.s2"></li>
+          <li data-i="grok.s3"></li>
+          <li data-i="grok.s4"></li>
+        </ol>
+        <div class="done"><span aria-hidden="true">🎉</span><div data-i="grok.done"></div></div>
       </div>
 
       <div class="panel" role="tabpanel" id="p-phone" aria-labelledby="t-phone" hidden>
@@ -550,10 +562,10 @@
 {
   "pt": {
     "meta.title": "ohmigo · onde carregar o carro elétrico mais barato em Portugal",
-    "meta.desc": "Pergunta ao ChatGPT ou ao Claude onde é mais barato carregar o teu carro elétrico em Portugal. Grátis, sem registo.",
+    "meta.desc": "Pergunta ao ChatGPT, ao Claude ou ao Grok onde é mais barato carregar o teu carro elétrico em Portugal. Grátis, sem registo.",
     "hero.eyebrow": "⚡ Para quem conduz elétrico em Portugal",
     "hero.title": "Pergunta ao teu assistente <span class=\"hl\">onde é mais barato carregar.</span>",
-    "hero.lead": "O ohmigo ensina o ChatGPT e o Claude a saber os preços de todos os postos públicos de carregamento em Portugal, de todas as redes publicadas no Ponto de Acesso Nacional (PAN). Perguntas em português normal, ele faz as contas por ti.",
+    "hero.lead": "O ohmigo ensina o ChatGPT, o Claude e o Grok a saber os preços de todos os postos públicos de carregamento em Portugal, de todas as redes publicadas no Ponto de Acesso Nacional (PAN). Perguntas em português normal, ele faz as contas por ti.",
     "hero.cta": "Quero instalar ⚡",
     "hero.cta2": "Como funciona?",
     "hero.chip1": "✅ Grátis",
@@ -575,11 +587,11 @@
     "demo.fine": "Exemplo ilustrativo. Os nomes e preços acima são inventados.",
     "mcp.eyebrow": "Afinal, o que é um “MCP”?",
     "mcp.title": "É um superpoder para o teu assistente.",
-    "mcp.lead": "O ChatGPT e o Claude são muito espertos, mas não sabem quanto custa carregar <i>agora</i> naquele posto. Um MCP é uma ligação que lhes dá acesso a informação que não têm. O ohmigo é o MCP dos carregamentos.",
+    "mcp.lead": "O ChatGPT, o Claude e o Grok são muito espertos, mas não sabem quanto custa carregar <i>agora</i> naquele posto. Um MCP é uma ligação que lhes dá acesso a informação que não têm. O ohmigo é o MCP dos carregamentos.",
     "mcp.n1": "Tu",
     "mcp.n1s": "fazes a pergunta",
     "mcp.n2": "O teu assistente",
-    "mcp.n2s": "ChatGPT, Claude…",
+    "mcp.n2s": "ChatGPT, Claude, Grok…",
     "mcp.n3s": "faz as contas",
     "mcp.n4": "Os postos",
     "mcp.n4s": "preços e estado em tempo real",
@@ -616,10 +628,16 @@
     "gpt.s4": "Marca a caixa a dizer que confias no servidor.",
     "gpt.s5": "Clica em <span class=\"k\">Create as a plugin</span>. Numa conversa nova, confirma que o <b>ohmigo</b> está ativado.",
     "gpt.done": "Feito! Agora é só perguntar pelos carregamentos como perguntarias a um amigo.",
+    "grok.note": "No site <a href=\"https://grok.com\" target=\"_blank\" rel=\"noopener\">grok.com</a>. Funciona na <b>conta gratuita</b>. Os nomes dos menus mudam de vez em quando; se algo estiver diferente, procura “Connectors” ou “Conectores”.",
+    "grok.s1": "Abre <a href=\"https://grok.com/connectors\" target=\"_blank\" rel=\"noopener\">grok.com/connectors</a> (ou, nas definições, <span class=\"k\">Connectors</span>).",
+    "grok.s2": "Clica em <span class=\"k\">New Connector</span> e escolhe <span class=\"k\">Custom</span>.",
+    "grok.s3": "Nome: <b>ohmigo</b>. URL: <b>cola o endereço</b>. Não há autenticação.",
+    "grok.s4": "Guarda. Numa conversa nova, confirma que o <b>ohmigo</b> está ligado.",
+    "grok.done": "Já está! Pergunta ao Grok onde carregar mais barato.",
     "phone.note": "As apps de telemóvel ainda não deixam adicionar conectores novos. Mas há um truque fácil:",
-    "phone.s1": "Adiciona o ohmigo <b>uma vez</b> no computador, seguindo os passos do Claude ou do ChatGPT.",
+    "phone.s1": "Adiciona o ohmigo <b>uma vez</b> no computador, seguindo os passos do Claude, do ChatGPT ou do Grok.",
     "phone.s2": "Abre a app no telemóvel com <b>a mesma conta</b>. O ohmigo aparece lá sozinho.",
-    "phone.s3": "Não tens computador à mão? Abre o site (claude.ai ou chatgpt.com) no browser do telemóvel e segue os mesmos passos.",
+    "phone.s3": "Não tens computador à mão? Abre o site (claude.ai, chatgpt.com ou grok.com) no browser do telemóvel e segue os mesmos passos.",
     "phone.done": "Ideal para perguntar na estrada (com o carro parado, claro!).",
     "other.note": "Para quem usa outras ferramentas de IA. Qualquer app que aceite um servidor MCP por HTTP funciona, sem autenticação.",
     "other.s1": "<b>Claude Code</b>, no terminal:",
@@ -638,7 +656,7 @@
     "faq.eyebrow": "Dúvidas",
     "faq.title": "Perguntas frequentes",
     "faq.q1": "Quanto custa?",
-    "faq.a1": "<p>O ohmigo é <b>grátis</b>. Só precisas de uma conta no ChatGPT ou no Claude, e o ChatGPT só deixa adicionar conectores em alguns planos pagos (não na conta gratuita).</p>",
+    "faq.a1": "<p>O ohmigo é <b>grátis</b>. Só precisas de uma conta no ChatGPT, no Claude ou no Grok. <b>O Grok deixa adicionar o ohmigo na conta gratuita</b>; o ChatGPT só em alguns planos pagos.</p>",
     "faq.q2": "O ohmigo fica a saber os meus dados?",
     "faq.a2": "<p><b>Não.</b> Não há contas, não guarda nada e não sabe quem és. O teu assistente lembra-se do teu carro e dos teus cartões e envia-os em cada pergunta. O ohmigo faz as contas e esquece.</p>",
     "faq.q3": "Os preços são exatos?",
@@ -648,7 +666,7 @@
     "faq.q5": "Funciona em todos os postos?",
     "faq.a5": "<p>Em todos os postos públicos de Portugal publicados no <b>Ponto de Acesso Nacional (PAN)</b>, de todas as redes: os da MOBI.E, onde pagas com o teu cartão CEME, e os que estão fora dela (como Tesla ou Continente), onde pagas diretamente ao operador. Quando o operador não publica um preço completo, a estimativa aparece marcada com asterisco.</p>",
     "faq.q6": "Abri o endereço no browser e não aparece nada…",
-    "faq.a6": "<p>É normal! O endereço é para o assistente, não para pessoas. Tens de o colar nas definições do ChatGPT ou do Claude, como explicado <a href=\"#instalar\">acima</a>.</p>",
+    "faq.a6": "<p>É normal! O endereço é para o assistente, não para pessoas. Tens de o colar nas definições do ChatGPT, do Claude ou do Grok, como explicado <a href=\"#instalar\">acima</a>.</p>",
     "final.title": "Bora poupar nos carregamentos?",
     "final.lead": "Dois minutos agora, muitos euros poupados depois.",
     "final.cta": "Instalar o ohmigo ⚡",
@@ -663,10 +681,10 @@
   },
   "en": {
     "meta.title": "ohmigo · the cheapest place to charge your EV in Portugal",
-    "meta.desc": "Ask ChatGPT or Claude where it's cheapest to charge your EV in Portugal. Free, no sign-up.",
+    "meta.desc": "Ask ChatGPT, Claude or Grok where it's cheapest to charge your EV in Portugal. Free, no sign-up.",
     "hero.eyebrow": "⚡ For EV drivers in Portugal",
     "hero.title": "Ask your AI assistant <span class=\"hl\">where charging is cheapest.</span>",
-    "hero.lead": "ohmigo teaches ChatGPT and Claude the prices at every public charger in Portugal, on every network published on the National Access Point (NAP). You ask in plain words, it does the math for you.",
+    "hero.lead": "ohmigo teaches ChatGPT, Claude and Grok the prices at every public charger in Portugal, on every network published on the National Access Point (NAP). You ask in plain words, it does the math for you.",
     "hero.cta": "Install it ⚡",
     "hero.cta2": "How does it work?",
     "hero.chip1": "✅ Free",
@@ -688,11 +706,11 @@
     "demo.fine": "Illustrative example. The names and prices above are made up.",
     "mcp.eyebrow": "So what's an “MCP”?",
     "mcp.title": "It's a superpower for your assistant.",
-    "mcp.lead": "ChatGPT and Claude are smart, but they don't know what charging costs <i>right now</i> at that charger. An MCP is a connection that gives them information they don't have. ohmigo is the MCP for EV charging.",
+    "mcp.lead": "ChatGPT, Claude and Grok are smart, but they don't know what charging costs <i>right now</i> at that charger. An MCP is a connection that gives them information they don't have. ohmigo is the MCP for EV charging.",
     "mcp.n1": "You",
     "mcp.n1s": "ask the question",
     "mcp.n2": "Your assistant",
-    "mcp.n2s": "ChatGPT, Claude…",
+    "mcp.n2s": "ChatGPT, Claude, Grok…",
     "mcp.n3s": "does the math",
     "mcp.n4": "The chargers",
     "mcp.n4s": "live prices and status",
@@ -729,10 +747,16 @@
     "gpt.s4": "Tick the box saying you trust the server.",
     "gpt.s5": "Click <span class=\"k\">Create as a plugin</span>. In a new chat, check that <b>ohmigo</b> is turned on.",
     "gpt.done": "Done! Now just ask about charging like you'd ask a friend.",
+    "grok.note": "On <a href=\"https://grok.com\" target=\"_blank\" rel=\"noopener\">grok.com</a>. Works on the <b>free account</b>. Menu names change now and then; if something looks different, look for “Connectors”.",
+    "grok.s1": "Open <a href=\"https://grok.com/connectors\" target=\"_blank\" rel=\"noopener\">grok.com/connectors</a> (or <span class=\"k\">Connectors</span> in settings).",
+    "grok.s2": "Click <span class=\"k\">New Connector</span> and choose <span class=\"k\">Custom</span>.",
+    "grok.s3": "Name: <b>ohmigo</b>. URL: <b>paste the address</b>. No authentication.",
+    "grok.s4": "Save. In a new chat, check that <b>ohmigo</b> is on.",
+    "grok.done": "Done! Ask Grok where charging is cheapest.",
     "phone.note": "The phone apps don't let you add new connectors yet. But there's an easy trick:",
-    "phone.s1": "Add ohmigo <b>once</b> on a computer, following the Claude or ChatGPT steps.",
+    "phone.s1": "Add ohmigo <b>once</b> on a computer, following the Claude, ChatGPT or Grok steps.",
     "phone.s2": "Open the app on your phone with <b>the same account</b>. ohmigo shows up there by itself.",
-    "phone.s3": "No computer around? Open the website (claude.ai or chatgpt.com) in your phone's browser and follow the same steps.",
+    "phone.s3": "No computer around? Open the website (claude.ai, chatgpt.com or grok.com) in your phone's browser and follow the same steps.",
     "phone.done": "Perfect for asking on the road (with the car parked, of course!).",
     "other.note": "For people using other AI tools. Any app that accepts an MCP server over HTTP works, no authentication.",
     "other.s1": "<b>Claude Code</b>, in the terminal:",
@@ -751,7 +775,7 @@
     "faq.eyebrow": "Questions",
     "faq.title": "FAQ",
     "faq.q1": "How much does it cost?",
-    "faq.a1": "<p>ohmigo is <b>free</b>. You just need a ChatGPT or Claude account, and ChatGPT only lets you add connectors on some paid plans (not on the free account).</p>",
+    "faq.a1": "<p>ohmigo is <b>free</b>. You just need a ChatGPT, Claude or Grok account. <b>Grok lets you add ohmigo on the free account</b>; ChatGPT only on some paid plans.</p>",
     "faq.q2": "Does ohmigo learn anything about me?",
     "faq.a2": "<p><b>No.</b> There are no accounts, it stores nothing and doesn't know who you are. Your assistant remembers your car and cards and sends them with each question. ohmigo does the math and forgets.</p>",
     "faq.q3": "Are the prices exact?",
@@ -761,7 +785,7 @@
     "faq.q5": "Does it work at every charger?",
     "faq.a5": "<p>At every public charger in Portugal published on the <b>National Access Point (NAP)</b>, on every network: MOBI.E chargers, where you pay with your CEME card, and those outside it (like Tesla or Continente), where you pay the operator directly. When an operator doesn't publish a full price, the estimate is marked with an asterisk.</p>",
     "faq.q6": "I opened the address in my browser and nothing shows up…",
-    "faq.a6": "<p>That's normal! The address is for your assistant, not for people. Paste it into ChatGPT's or Claude's settings, as explained <a href=\"#instalar\">above</a>.</p>",
+    "faq.a6": "<p>That's normal! The address is for your assistant, not for people. Paste it into ChatGPT's, Claude's or Grok's settings, as explained <a href=\"#instalar\">above</a>.</p>",
     "final.title": "Ready to save on charging?",
     "final.lead": "Two minutes now, plenty of euros saved later.",
     "final.cta": "Install ohmigo ⚡",
