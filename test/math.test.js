@@ -102,7 +102,7 @@ test('applicable: voltage variant per socket, AC-only tariffs dropped on DC', ()
   assert.deepEqual(applicable(q, { level: 'BTE', dc: false }).map(t => t.id), ['a-bt-x']);
 });
 
-import { pickTariffs } from '../src/quote.js';
+import { eligible, pickTariffs } from '../src/quote.js';
 import { napPlan, parseStatus } from '../src/live.js';
 
 test('estimateSession: dc_10_80_minutes sets the DC average, capped by the charger', () => {
@@ -278,4 +278,16 @@ test('live: the TTL has jitter, within ±10 %', async () => {
   await live.ensure();
   const ttl = live.freshUntil - live.fetchedAt;
   assert.ok(ttl >= 90_000 && ttl <= 110_000, String(ttl));
+});
+
+test('eligible: audience tariffs only for that audience or when the user has them', () => {
+  const staff = { id: 'edp-bt-cartoedp-5', totalEur: 3, bundle: true, audience: 'edp-staff' };
+  const open = { id: 'edp-bt-cartoedp', totalEur: 5, bundle: false, audience: null };
+  assert.deepEqual(eligible([staff, open]).map(q => q.id), ['edp-bt-cartoedp']);
+  assert.deepEqual(eligible([staff, open], ['meo-staff']).map(q => q.id), ['edp-bt-cartoedp']);
+  // For an EDP employee the "condition" is met: it can headline.
+  const mine = eligible([staff, open], ['edp-staff']);
+  assert.deepEqual(mine.map(q => [q.id, q.bundle]), [['edp-bt-cartoedp-5', false], ['edp-bt-cartoedp', false]]);
+  // Passed in tariff_ids (either voltage): they have it.
+  assert.deepEqual(eligible([staff, open], [], ['edp-mt-cartoedp-5']).map(q => q.id), ['edp-bt-cartoedp-5', 'edp-bt-cartoedp']);
 });

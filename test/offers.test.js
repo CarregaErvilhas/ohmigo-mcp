@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { bandFor, parseTables, toOffers } from '../src/offers-parse.js';
-import { gaps, isStale, mergeOffers, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
+import { AUDIENCES, gaps, isStale, mergeOffers, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
 
 const HEAD = `<thead><tr><th rowspan="2">Operador - Plano</th><th rowspan="2">Postos</th><th colspan="2">AC</th><th colspan="6">DC</th></tr>
 <tr><th>&le;7.4</th><th>11..22</th><th>≤50</th><th>100</th><th>120</th><th>150</th><th>180</th><th>&gt;180</th></tr></thead>`;
@@ -153,4 +153,29 @@ test('nap-notes.json: every note is scoped and sourced', () => {
     assert.ok(n.scope?.operatorIds?.length || n.scope?.siteIds?.length, JSON.stringify(n.scope));
     assert.ok(n.why && /^https:\/\//.test(n.source) && /^\d{4}-\d{2}-\d{2}$/.test(n.checkedAt), n.why);
   }
+});
+
+test('audience offers: hidden unless the driver claims the group; ids exist', () => {
+  for (const o of OFFERS) if (o.audience) assert.ok(AUDIENCES[o.audience], `${o.id}: unknown audience ${o.audience}`);
+  for (const [id, a] of Object.entries(AUDIENCES)) assert.ok(a.en && a.pt, id);
+  const powerdot = { operatorId: 'HORZ' }, dc = { kw: 150, dc: true, regime: 'mobie' };
+  const ids = audiences => offersAt(powerdot, dc, audiences).map(x => x.offer.id);
+  assert.ok(!ids().includes('powerdot-uber-driver-powerdot'));
+  assert.ok(!ids(['edp-staff']).includes('powerdot-uber-driver-powerdot'));
+  const uber = offersAt(powerdot, dc, ['uber-driver']).find(x => x.offer.id === 'powerdot-uber-driver-powerdot');
+  assert.equal(uber.eurPerKwh, 0.41);
+  // The offers for everyone are still there.
+  assert.deepEqual(ids().filter(id => id !== 'powerdot-uber-driver-powerdot'), ids(['uber-driver']).filter(id => id !== 'powerdot-uber-driver-powerdot'));
+});
+
+test('per-session fee: in the total, said in the note; staff offer is half of Electroverse', async () => {
+  const { directOptionsForTest } = await import('../src/quote.js');
+  const powerdot = { operatorId: 'HORZ' }, dc = { kw: 150, dc: true, regime: 'mobie' };
+  const staff = offersAt(powerdot, dc, ['powerdot-staff']).find(x => x.offer.id === 'electroverse-powerdot-staff-powerdot');
+  const ev = offersAt(powerdot, dc).find(x => x.offer.id === 'electroverse-rede-mobi-e');
+  assert.equal(staff.eurPerKwh, ev.eurPerKwh / 2);
+  const [o] = directOptionsForTest([staff], { kwh: 38.71 }, 'pt', 'CONT');
+  assert.equal(o.total, 14.24); // 38,71 × 0,36 + 0,30
+  assert.equal(o.audience, 'powerdot-staff');
+  assert.match(o.note, /0,30 € por sessão/);
 });

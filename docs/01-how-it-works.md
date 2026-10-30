@@ -96,6 +96,7 @@ Follow one `find_cheapest_charging` call through the code:
 | `site/dados.html` | `/dados`: browse what `src/dump.js` returns. Public, `noindex`, cached by Cloudflare (Cache Rule on the zone, TTLs from the headers in `src/server.js`); Portuguese only |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
 | `offers/manual.json` | Hand-made corrections and additions to it |
+| `offers/audiences.json` | Groups with prices of their own (employees, ride-hailing drivers), hidden unless the driver claims one |
 | `offers/networks.json` | Which chargers each network label means (blog offers and CEME promotions) |
 | `scripts/call.mjs` | Dev helper: call a tool from the terminal |
 | `scripts/scrape-offers.mjs` | Weekly scrape of the blog (`.github/workflows/offers.yml`) |

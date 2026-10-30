@@ -103,6 +103,17 @@ Use `manual.json`:
   `provider`, `plan`, `network`, `scope`, `walkUp`, `subscription`, `fee`,
   `prices`, `source`, `checkedAt`.
 
+`"sessionEur"` (optional): a fixed amount per session, VAT included, added
+to the total (a connection fee). A subscription's `fee` is not added.
+
+An offer can also carry `"audience"`: an id from `offers/audiences.json`
+(`uber-driver`, `powerdot-staff`...) for a price only that group gets. It is
+hidden unless the driver says they belong to it (the tools' `audiences`
+argument), and the option shows the `audience` so the assistant says who
+it's for. CEME tariffs work the same way, with the `audience` that ceme-v2
+returns (EDP's employee tariff). A new group goes in `audiences.json` first;
+`npm test` fails on an offer naming one that isn't there.
+
 An override or `disable` whose `id` isn't in the scrape (a typo, or the blog
 renamed the slug) is skipped with a warning at boot, and `npm test` fails
 naming it.

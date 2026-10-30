@@ -22,7 +22,7 @@ import { expandMonthKwh, promos, tariffs } from './ceme.js';
 import { clusterPlaces, directionLabel, sameStation, serviceAreas, sideFor } from './direction.js';
 import { pickLang, translator } from './i18n.js';
 import { napPlan } from './live.js';
-import { napNote, offersAt } from './offers.js';
+import { AUDIENCES, forAudiences, napNote, offersAt } from './offers.js';
 import { describePlan } from './opc.js';
 import { byBest, quotePoint, rank, tariffKey } from './quote.js';
 import { logged } from './stats.js';
@@ -71,6 +71,8 @@ CEME promotions: some CEMEs give a discount only at one network (e.g. a CEME's e
 
 Monthly free kWh (promos with target KWH_GRATIS, e.g. a CEME giving its electricity clients the first kWh of each month free, on any charger): this server stores nothing, so YOU keep the count, per tariff and per calendar month (Portugal time). Keep a running log in your memory of the user's sessions: date, tariff_id, kWh. Add one when the user says they charged (ask for the kWh on the invoice/app if they know it; otherwise use the session.kwhBilled of the estimate they followed) and start again from zero on the 1st of each month. On every cost call, pass month_kwh: { tariff_id: kWh charged so far this month } for the tariffs that have such a promotion. With it, the option's total already uses the free kWh still left (freeKwhLeft), and applied is true. Without it, monthKwhKnown is false and the promotion is only a tip priced as if no free kWh were used yet: if you don't know the count, ask the user how many sessions and roughly how many kWh they've charged with that card this month, rather than guessing.
 Tariffs only for new sign-ups (newCustomersOnly: true on a tariff or an option, usually a dated campaign with until = its last day): someone who's already a client of that CEME can't get it. It is never the headline or "best" unless the user passed it in tariff_ids (then they have it). When it is cheaper, mention it as a tip ("if you're not a X client yet, signing up by <until> gets <price>"), never as the price.
+Prices for one group only (audience on a tariff or an option: a company's employees, ride-hailing drivers; the groups are listed in the audiences argument): they are hidden unless you pass audiences. Pass a group only when the driver told you they belong to it ("trabalho na EDP", "sou colaborador da Powerdot", "sou motorista Uber") or you remember they did; never infer it. When they say only "sou colaborador" or "I'm an employee", ask of which company. An option with audience is for that group only: say so ("price for EDP employees").
+
 Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract, not a new-sign-ups-only tariff). Lead with it, and point out when a subscription or another CEME would be cheaper. Every result carries all its ways to pay in "options", usually more than you show: always tell the user there are more (subscriptions, other CEMEs, apps) and offer to list them.
 
 Peak prices (peakPrice on an option, napPriceIsPeak in lookup_charger; today Tesla Superchargers): the operator's price changes during the day, but on the NAP it publishes one fixed value, the highest of the day, and there is no public source with the price at each hour. Always tell the driver, in plain words: the price shown is the most it can cost at that charger (congestion fees aside), it's usually much cheaper at night and off-peak, and only the operator's app shows the price for their hour. Never present it as the price they will pay, and when it decides a ranking, say a peak-priced charger may well be cheaper at their time.
@@ -93,6 +95,13 @@ QA MODE: this is a test server. Results include "timeline" and "debug". When you
 
 const Detail = {
   detail: z.boolean().optional().describe('Include the timeline: when the kWh are delivered and, for each CEME tariff shown, its period (vazio/fora de vazio), price and OMIE over the session (quarter-hours that look the same are merged into runs). Use when the user asks how the price was built. In a ranking, only the first results carry it.'),
+};
+
+// Prices only some people can get (offers/audiences.json). Never guessed:
+// only what the driver said about themselves.
+const Audience = {
+  audiences: z.array(z.enum(Object.keys(AUDIENCES))).max(10).optional()
+    .describe(`Groups the driver said they belong to, which unlock prices only they can get: ${Object.entries(AUDIENCES).map(([id, a]) => `${id} = ${a.en}`).join('; ')}. Only when the driver said so in this conversation or you remember they did; never guess it from their car, job or location. Omit otherwise.`),
 };
 
 const Lang = {
@@ -224,7 +233,7 @@ function placeError(ds, name, t) {
 // Everything the data says about one site, for lookup_charger. Sockets that
 // are the same (power, plug, fee) are grouped, with a count per live status:
 // a car park with 10 identical T2s reads as one line, not ten.
-function siteCard(h, live, t) {
+function siteCard(h, live, t, audiences = []) {
   const { site } = h;
   // Most NAP prices come without VAT; offers/nap-notes.json names the
   // operators that publish theirs with it (Tesla).
@@ -243,7 +252,7 @@ function siteCard(h, live, t) {
       adHoc: p.opc?.AD_HOC_PAYMENT ? describePlan(p.opc.AD_HOC_PAYMENT, t) : undefined,
       ...(vatIn ? { napPriceWithVat: napPrice } : { napPriceExVat: napPrice }),
       ...(peak && napPrice != null && { napPriceIsPeak: true }),
-      direct: offersAt(site, p).map(({ offer, eurPerKwh }) => ({ label: offer.label, eurPerKwh, walkUp: !!offer.walkUp || undefined, subscription: !!offer.subscription || undefined })),
+      direct: offersAt(site, p, audiences).map(({ offer, eurPerKwh }) => ({ label: offer.label, eurPerKwh, sessionEur: offer.sessionEur, audience: offer.audience, walkUp: !!offer.walkUp || undefined, subscription: !!offer.subscription || undefined })),
     };
     const key = JSON.stringify(card);
     if (!groups.has(key)) groups.set(key, { ...card, count: 0, status: {}, pointIds: [] });
@@ -403,9 +412,9 @@ export function createServer(getDataset, live) {
   server.registerTool('list_ceme_tariffs', {
     title: 'List CEME tariffs',
     description: 'Lists the CEME (EV charging electricity retailer) tariffs used on MOBI.E chargers, to resolve the card/app the user pays with to a tariff_id. Filter by name. Also lists the CEMEs\' current promotions at specific charging networks.',
-    inputSchema: z.object({ query: z.string().optional().describe('Text to match in the CEME or tariff name, e.g. "edp", "galp", "via verde"'), ...Lang }),
+    inputSchema: z.object({ query: z.string().optional().describe('Text to match in the CEME or tariff name, e.g. "edp", "galp", "via verde"'), ...Audience, ...Lang }),
     annotations: { readOnlyHint: true, openWorldHint: true },
-  }, async ({ query, lang: l }, ctx) => {
+  }, async ({ query, audiences, lang: l }, ctx) => {
     const t = translator(langOf({ lang: l }, ctx));
     // A ceme-v2 without /v1/promos still lists the tariffs.
     let all, current;
@@ -418,10 +427,11 @@ export function createServer(getDataset, live) {
       const key = tariffKey(t.id);
       const name = `${t.ceme_name ?? t.ceme} ${t.name}`;
       if (q && !name.toLowerCase().includes(q)) continue;
+      if (!forAudiences(t, audiences)) continue;
       // ceme-v2's valid_to is exclusive (the day the campaign is gone).
       const until = t.version?.valid_to ? new Date(Date.parse(t.version.valid_to) - 864e5).toISOString().slice(0, 10) : null;
-      if (!seen.has(key)) seen.set(key, { tariff_id: t.id, ceme: t.ceme_name ?? t.ceme, name: t.name, kind: t.kind, schedule: t.schedule, cycle: t.cycle, requiresOtherContract: !!t.bundle,
-        ...(t.new_customers && { newCustomersOnly: true }), ...(until && { until }) });
+      if (!seen.has(key)) seen.set(key, { tariff_id: t.id, ceme: t.ceme_name ?? t.ceme, name: t.name, kind: t.kind, schedule: t.schedule, cycle: t.cycle, requiresOtherContract: !!t.bundle && !t.audience,
+        ...(t.audience && { audience: t.audience }), ...(t.new_customers && { newCustomersOnly: true }), ...(until && { until }) });
     }
     const rows = [...seen.values()];
     // Promotions of the CEMEs that matched, as ceme-v2 publishes them (its
@@ -445,7 +455,7 @@ export function createServer(getDataset, live) {
       query: z.string().min(1).max(200).describe('What the user calls the charger, in their words: code, operator/brand, place, town, address'),
       lat: Where.lat, lon: Where.lon,
       radius_km: z.number().positive().max(300).optional().describe('With lat/lon: only sites this close'),
-      ...Towards, ...Filter, ...Lang,
+      ...Towards, ...Filter, ...Audience, ...Lang,
       limit: z.number().int().positive().max(20).default(5),
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -477,7 +487,7 @@ export function createServer(getDataset, live) {
     if (directionNeeded) notes.push(t('note.direction'));
     if (results[0].missing?.length) notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
     await withLive(live, ctx, t);
-    const cards = results.slice(0, a.limit).map(h => siteCard(h, live, t));
+    const cards = results.slice(0, a.limit).map(h => siteCard(h, live, t, a.audiences));
     if (results.slice(0, a.limit).some(h => napNote(h.site)?.timeOfUse)) notes.push(t('assume.napTimeOfUse'));
     return ok({
       ...meta(ds, live, lang), query: a.query, total: results.length,
@@ -521,7 +531,7 @@ export function createServer(getDataset, live) {
     title: 'Find cheapest charging',
     description: 'Ranks chargers near a location or along a route by the estimated total cost of the session (energy + operator fee + taxes), for the user\'s car and battery levels. Every charger lists all the ways to pay.',
     inputSchema: z.object({
-      ...Where, ...Filter, ...Car, ...Detail, ...Lang, max_minutes: maxMinutes,
+      ...Where, ...Filter, ...Car, ...Audience, ...Detail, ...Lang, max_minutes: maxMinutes,
       available_only: z.boolean().default(true).describe('Skip chargers the live feed reports as charging, out of order or blocked'),
       limit: z.number().int().positive().max(30).default(10),
     }),
@@ -538,7 +548,7 @@ export function createServer(getDataset, live) {
     if (!results.length) return err(t('err.noMatch'), 'noMatch');
     const { candidates, truncated } = rankCandidates(results, live, w.route != null);
     const ranked = await rank(candidates, car(a), {
-      at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang,
+      at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences,
       monthKwh: await monthKwh(a),
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
@@ -573,7 +583,7 @@ export function createServer(getDataset, live) {
     inputSchema: z.object({
       site: z.string().max(200).optional().describe('The charger: siteId from lookup_charger/find_chargers (e.g. "GLP-LRA-00156"), its code ("LRA-00156"), or the user\'s words if they name one site'),
       point_id: z.string().optional().describe('One socket, "SITE/POINT" as returned by the other tools, e.g. "GLP-LRA-00156/LRA-00156-02". Only when the user picked a socket; otherwise use site'),
-      ...Towards, ...Filter, ...Car, ...Detail, ...Lang,
+      ...Towards, ...Filter, ...Car, ...Audience, ...Detail, ...Lang,
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
     _meta: { ui: { resourceUri: VIEW_URI } },
@@ -585,7 +595,7 @@ export function createServer(getDataset, live) {
     const targets = pointsFor(ds, live, a, t);
     if (targets.error) return err(targets.error, targets.code);
     const { assumptions = [] } = targets;
-    const opts = { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, detail: !!a.detail, qa: QA, simCache: new Map(),
+    const opts = { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences, detail: !!a.detail, qa: QA, simCache: new Map(),
       monthKwh: await monthKwh(a) };
     // Quoting is cheap once the first one has called ceme-v2 (simCache), so
     // every kind is priced and the cheapest are kept.
