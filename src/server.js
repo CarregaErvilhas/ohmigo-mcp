@@ -20,6 +20,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { cemeHealth } from './ceme.js';
 import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
+import { chargers, dump } from './dump.js';
 import { createServer, QA } from './mcp.js';
 import { PAGES, SITEMAP, SITE_URL } from './site.js';
 import { statsSummary } from './stats.js';
@@ -83,6 +84,28 @@ const OG_IMAGE = readFileSync(new URL('../site/og.png', import.meta.url));
 // Privacy and support share one file; its script picks the page from the path.
 // Directories and assistants' review forms want a stable URL for each.
 const LEGAL = readFileSync(new URL('../site/legal.html', import.meta.url));
+// The data dump: what the tools know, for people (src/dump.js). Public, but
+// kept out of search engines (X-Robots-Tag, which also covers the JSON).
+// Meant to sit behind Cloudflare's cache: tariffs, offers and the dataset
+// change rarely, so the edge keeps a copy for 1 h (s-maxage) and may serve it
+// up to a day past that while it fetches a new one in the background
+// (stale-while-revalidate); browsers keep it 10 min. Cache-Tag lets one API
+// call purge all of it (Cloudflare strips the header before the browser).
+// Cloudflare only caches HTML/JSON when a Cache Rule makes /dados* eligible.
+const DADOS = readFileSync(new URL('../site/dados.html', import.meta.url));
+const DADOS_CACHE = {
+  'cache-control': 'public, max-age=600, s-maxage=3600, stale-while-revalidate=86400',
+  'cache-tag': 'ohmigo-dados',
+  'x-robots-tag': 'noindex, nofollow',
+  'x-content-type-options': 'nosniff',
+};
+// With ceme-v2 down the page goes out without tariffs: 1 min, so the edge
+// doesn't keep the hole for a day.
+const DADOS_PARTIAL = { ...DADOS_CACHE, 'cache-control': 'public, max-age=60, s-maxage=60' };
+const sendDados = (res, body, partial = false, type = 'application/json') => {
+  res.writeHead(200, { ...(partial ? DADOS_PARTIAL : DADOS_CACHE), 'content-type': type });
+  res.end(body);
+};
 const LEGAL_PATHS = new Set(['/privacidade', '/privacy', '/suporte', '/support']);
 const SITE_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
@@ -158,6 +181,20 @@ const httpServer = createHttp(async (req, res) => {
   if (LEGAL_PATHS.has(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, SITE_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : LEGAL);
+  }
+  if (url.pathname === '/dados' && (req.method === 'GET' || req.method === 'HEAD')) {
+    res.writeHead(200, { ...SITE_HEADERS, ...DADOS_CACHE });
+    return res.end(req.method === 'HEAD' ? undefined : DADOS);
+  }
+  // A broken dump page must not take the MCP server down with it.
+  if (url.pathname === '/dados.json' || url.pathname === '/dados/postos.json') {
+    try {
+      const body = url.pathname === '/dados.json' ? await dump(ds) : chargers(ds, url.searchParams.get('op') || '');
+      return sendDados(res, JSON.stringify(body), !!body.partial);
+    } catch (e) {
+      console.error('[ohmigo] dados:', e);
+      return send(res, 500, { error: 'dados unavailable' });
+    }
   }
   if (url.pathname === '/robots.txt') return send(res, 200, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
   if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }

@@ -43,7 +43,7 @@
 
 import { readFileSync } from 'node:fs';
 
-const NETWORKS = JSON.parse(readFileSync(new URL('../offers/networks.json', import.meta.url), 'utf8')).networks;
+export const NETWORKS = JSON.parse(readFileSync(new URL('../offers/networks.json', import.meta.url), 'utf8')).networks;
 
 const r2 = x => Math.round(x * 100) / 100;
 
