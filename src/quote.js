@@ -31,7 +31,8 @@
 //   headline  the CEME option shown first (the user's cheapest tariff, or the
 //             cheapest popular one that needs no other contract).
 //   best      the cheapest option ANYONE can pay right now: no subscription
-//             fee, no other contract. Chargers are ranked by it,
+//             fee, no other contract, not a tariff only for new sign-ups
+//             (a client the CEME already has can't get it). Chargers are ranked by it,
 //             so an IONITY whose own app beats every CEME ranks where it should.
 
 import { applicable, simulate } from './ceme.js';
@@ -64,7 +65,7 @@ export const DEFAULT_SHOWN = 3;
 // The same card in two cycles often has the same price: shown once.
 export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
   const ok = applicable(quotes, point);
-  const best = ok[0] || null;
+  const best = ok.find(t => !t.newCustomers) || null;
   if (tariffIds?.length) {
     const want = new Set(tariffIds.map(tariffKey));
     const options = ok.filter(t => want.has(tariffKey(t.id)));
@@ -76,7 +77,7 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
     const k = `${t.ceme}|${t.name}|${t.totalEur}`;
     return !seen.has(k) && seen.add(k);
   }).slice(0, shown);
-  const headline = options.find(t => !t.bundle) || ok.find(t => !t.bundle) || best;
+  const headline = options.find(t => !t.bundle && !t.newCustomers) || ok.find(t => !t.bundle && !t.newCustomers) || best;
   return { options, headline, best, missing: false };
 }
 
@@ -98,6 +99,9 @@ function cemeOption(t, { site, opc, vat }) {
     tariffId: t.id, ceme: t.ceme, name: t.name, tariffKind: t.kind, period: t.period,
     ...(t.kwhByPeriod && Object.keys(t.kwhByPeriod).length > 1 && { kwhByPeriod: t.kwhByPeriod }),
     requiresOtherContract: !!t.bundle, energyEur: w.energyEur,
+    // A tariff only for people who sign up now, often a dated campaign
+    // (`until`: its last day). Never the headline or `best` by default.
+    ...(t.newCustomers && { newCustomersOnly: true }), ...(t.valid_until && { until: t.valid_until }),
     ...(promos.length && { promos: promos.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }), ...(w.final && { opcIncluded: true }) }),
   };
 }
@@ -322,7 +326,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   // Without promotions this is pickTariffs' headline: every option pays the
   // same operator fee, so the energy order is the total order.
   const cheapest = list => list.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
-  const head = (tariffIds?.length ? cheapest(shownOpts) : cheapest(shownOpts.filter(o => !o.requiresOtherContract)))
+  const head = (tariffIds?.length ? cheapest(shownOpts) : cheapest(shownOpts.filter(o => !o.requiresOtherContract && !o.newCustomersOnly)))
     ?? cemeOption(ceme, ctx);
   // complete: false when the operator fee is unknown, so the total is only
   // the energy part. Rankings put these after the complete ones.
@@ -364,7 +368,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
 // The cheapest option open to anyone. A CEME option only counts when its
 // total is complete (operator fee known).
 function bestOption(options, total) {
-  const open = options.filter(o => !o.requiresOtherContract && !o.subscription
+  const open = options.filter(o => !o.requiresOtherContract && !o.subscription && !o.newCustomersOnly
     && (o.kind !== 'ceme' || total?.complete));
   return open.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
 }

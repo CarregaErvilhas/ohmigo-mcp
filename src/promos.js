@@ -1,7 +1,7 @@
 // CEME promotions, most of them on one charging network.
 //
 // Some CEMEs strike deals with a charger operator (OPC): LUZiGÁS takes
-// 0.12 €/kWh off its energy price at Powerdot chargers for new customers,
+// 0.12 €/kWh off its promotional tariff at Powerdot chargers for new sign-ups,
 // miio one takes 45 % off Powerdot's own fee, EDP charges UVE members one
 // all-in price on its own network. Others hold anywhere: GoldEnergy gives its
 // electricity clients the first 7 kWh of each month. These are CEME offers,
