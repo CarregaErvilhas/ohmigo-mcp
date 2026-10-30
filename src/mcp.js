@@ -70,7 +70,8 @@ CEME promotions: some CEMEs give a discount only at one network (e.g. a CEME's e
 - target FINAL is an all-in price (operator fee and VAT included) that the CEME charges at its network instead of energy + operator fee; the option carries opcIncluded. It replaces the usual sum even where that would be lower: say so if it costs more.
 
 Monthly free kWh (promos with target KWH_GRATIS, e.g. a CEME giving its electricity clients the first kWh of each month free, on any charger): this server stores nothing, so YOU keep the count, per tariff and per calendar month (Portugal time). Keep a running log in your memory of the user's sessions: date, tariff_id, kWh. Add one when the user says they charged (ask for the kWh on the invoice/app if they know it; otherwise use the session.kwhBilled of the estimate they followed) and start again from zero on the 1st of each month. On every cost call, pass month_kwh: { tariff_id: kWh charged so far this month } for the tariffs that have such a promotion. With it, the option's total already uses the free kWh still left (freeKwhLeft), and applied is true. Without it, monthKwhKnown is false and the promotion is only a tip priced as if no free kWh were used yet: if you don't know the count, ask the user how many sessions and roughly how many kWh they've charged with that card this month, rather than guessing.
-Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract). Lead with it, and point out when a subscription or another CEME would be cheaper. Every result carries all its ways to pay in "options", usually more than you show: always tell the user there are more (subscriptions, other CEMEs, apps) and offer to list them.
+Tariffs only for new sign-ups (newCustomersOnly: true on a tariff or an option, usually a dated campaign with until = its last day): someone who's already a client of that CEME can't get it. It is never the headline or "best" unless the user passed it in tariff_ids (then they have it). When it is cheaper, mention it as a tip ("if you're not a X client yet, signing up by <until> gets <price>"), never as the price.
+Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract, not a new-sign-ups-only tariff). Lead with it, and point out when a subscription or another CEME would be cheaper. Every result carries all its ways to pay in "options", usually more than you show: always tell the user there are more (subscriptions, other CEMEs, apps) and offer to list them.
 
 Peak prices (peakPrice on an option, napPriceIsPeak in lookup_charger; today Tesla Superchargers): the operator's price changes during the day, but on the NAP it publishes one fixed value, the highest of the day, and there is no public source with the price at each hour. Always tell the driver, in plain words: the price shown is the most it can cost at that charger (congestion fees aside), it's usually much cheaper at night and off-peak, and only the operator's app shows the price for their hour. Never present it as the price they will pay, and when it decides a ranking, say a peak-priced charger may well be cheaper at their time.
 
@@ -417,7 +418,10 @@ export function createServer(getDataset, live) {
       const key = tariffKey(t.id);
       const name = `${t.ceme_name ?? t.ceme} ${t.name}`;
       if (q && !name.toLowerCase().includes(q)) continue;
-      if (!seen.has(key)) seen.set(key, { tariff_id: t.id, ceme: t.ceme_name ?? t.ceme, name: t.name, kind: t.kind, schedule: t.schedule, cycle: t.cycle, requiresOtherContract: !!t.bundle });
+      // ceme-v2's valid_to is exclusive (the day the campaign is gone).
+      const until = t.version?.valid_to ? new Date(Date.parse(t.version.valid_to) - 864e5).toISOString().slice(0, 10) : null;
+      if (!seen.has(key)) seen.set(key, { tariff_id: t.id, ceme: t.ceme_name ?? t.ceme, name: t.name, kind: t.kind, schedule: t.schedule, cycle: t.cycle, requiresOtherContract: !!t.bundle,
+        ...(t.new_customers && { newCustomersOnly: true }), ...(until && { until }) });
     }
     const rows = [...seen.values()];
     // Promotions of the CEMEs that matched, as ceme-v2 publishes them (its
@@ -431,7 +435,7 @@ export function createServer(getDataset, live) {
       from: p.from, until: p.to, active: p.active, newCustomers: p.newCustomers, tariffIds: p.tariffs, url: p.url }));
     const shown = rows.slice(0, 60);
     return ok({ version: VERSION, count: rows.length, tariffs: shown, ...(promoRows.length && { promos: promoRows }) },
-      `${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}`).join('\n')}`);
+      `${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}${r.newCustomersOnly ? ' (new sign-ups only)' : ''}${r.until ? ` (until ${r.until})` : ''}`).join('\n')}`);
   });
 
   server.registerTool('lookup_charger', {

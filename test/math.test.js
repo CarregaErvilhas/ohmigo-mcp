@@ -150,6 +150,16 @@ test('pickTariffs: default is top 3 popular, headline skips ones needing another
   assert.deepEqual(pickTariffs(quotes, { level: 'BTN', dc: false }, null, 4).options.map(o => o.id), ['a-bt-x', 'c-bt-z', 'd-bt-w', 'e-bt-v']);
 });
 
+test('pickTariffs: a new-sign-ups-only tariff is never best or headline by default', () => {
+  const quotes = [q('l-bt-promo', 3, { newCustomers: true, popular: true }), q('b-bt-y', 5), q('c-bt-z', 6, { popular: true })];
+  const t = pickTariffs(quotes, { level: 'BTN', dc: false });
+  assert.equal(t.best.id, 'b-bt-y');
+  assert.equal(t.headline.id, 'c-bt-z');
+  // Passed by the user: they have it, so it can lead.
+  const mine = pickTariffs(quotes, { level: 'BTN', dc: false }, ['l-bt-promo', 'c-bt-z']);
+  assert.equal(mine.headline.id, 'l-bt-promo');
+});
+
 test('napPlan maps NAP policies to the MOBI.E plan shape', () => {
   assert.deepEqual(napPlan([
     { policy: 'pricePerDeliveryUnit', eur: 0.28 }, { policy: 'pricePerChargingTime', eur: 0.05 }, { policy: 'flatRate', eur: 0.11 },
