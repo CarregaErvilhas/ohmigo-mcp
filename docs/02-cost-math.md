@@ -70,7 +70,12 @@ What the driver gets:
   so ceme-v2 used the period's average). Quarters that look the same (same
   power, or same period, price and OMIE) are merged into runs with `from`,
   `to`, `quarters` and `kwh`, so a long AC session at one price is one line.
-  In `find_cheapest_charging` only the first few results carry it;
+  Each CEME option also gets `components`, the CEME's bill line by line as
+  ceme-v2 rounds it (`energyTar`, split into `energy` and `tar` when known,
+  `iec`, `activation` (EGME), `support`, `base`, `vatEur`, `total`); the
+  operator fee is in `opc.parts`. With a promotion in the total they describe
+  the tariff without it (`promoApplied`).
+  In `find_cheapest_charging` only the first few results carry both;
 - in QA mode (`OHMIGO_QA=1`, [06](06-run-and-deploy.md)): the timeline on
   every result, plus `debug` with the segments, the profile sent and what
   ceme-v2 said about it.

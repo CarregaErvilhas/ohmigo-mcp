@@ -75,7 +75,7 @@ Chargers are ranked by "best": the cheapest option anyone can use now (no subscr
 
 Peak prices (peakPrice on an option, napPriceIsPeak in lookup_charger; today Tesla Superchargers): the operator's price changes during the day, but on the NAP it publishes one fixed value, the highest of the day, and there is no public source with the price at each hour. Always tell the driver, in plain words: the price shown is the most it can cost at that charger (congestion fees aside), it's usually much cheaper at night and off-peak, and only the operator's app shows the price for their hour. Never present it as the price they will pay, and when it decides a ranking, say a peak-priced charger may well be cheaper at their time.
 
-Time of day matters: a session lasts minutes to hours, and the energy price can change while it runs (peak to off-peak "vazio" hours, the wholesale OMIE price every 15 minutes for indexed tariffs, even a clock change). The server prices the session quarter-hour by quarter-hour from its start (at, default now) to its estimated end; session.startLocal/endLocal give the window. A CEME option with kwhByPeriod crossed periods: mention it when it changes the picture (e.g. "starting 30 min later puts most of it in off-peak"). If the user asks how a price was built, or why it changes with the time, call again with detail: true and explain the timeline (when the kWh go in and, per tariff, each stretch's period, price and OMIE; quarters that look the same are merged into one run).
+Time of day matters: a session lasts minutes to hours, and the energy price can change while it runs (peak to off-peak "vazio" hours, the wholesale OMIE price every 15 minutes for indexed tariffs, even a clock change). The server prices the session quarter-hour by quarter-hour from its start (at, default now) to its estimated end; session.startLocal/endLocal give the window. A CEME option with kwhByPeriod crossed periods: mention it when it changes the picture (e.g. "starting 30 min later puts most of it in off-peak"). If the user asks how a price was built, or why it changes with the time, call again with detail: true and explain the timeline (when the kWh go in and, per tariff, each stretch's period, price and OMIE; quarters that look the same are merged into one run). Each CEME option then also has "components", the CEME's bill line by line (energy + network access, excise tax IEC, EGME activation fee, VAT); the operator fee is in "opc.parts".
 
 Charger status comes from the NAP's live feed; live.publishedAt says when it was published. The feed is a large file fetched on demand, so the first call after a few quiet minutes can take ~20-30 s. If live.fresh is false or live.publishedAt is null, say status may be stale or unknown. A charger can still be taken by the time they arrive. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
 
@@ -92,7 +92,7 @@ const QA_NOTE = `
 QA MODE: this is a test server. Results include "timeline" and "debug". When you answer, also show the session window, the timeline of the headline tariff and anything in "debug" that looks wrong, so the tester can check the math. Each charger comes with up to ${QA_SHOWN} tariffs by default: list them all, not just the top 3.`;
 
 const Detail = {
-  detail: z.boolean().optional().describe('Include the timeline: when the kWh are delivered and, for each CEME tariff shown, its period (vazio/fora de vazio), price and OMIE over the session (quarter-hours that look the same are merged into runs). Use when the user asks how the price was built. In a ranking, only the first results carry it.'),
+  detail: z.boolean().optional().describe('Include the timeline: when the kWh are delivered and, for each CEME tariff shown, its period (vazio/fora de vazio), price and OMIE over the session (quarter-hours that look the same are merged into runs), plus the bill of each CEME option line by line (components: energy+TAR, IEC, EGME activation, VAT). Use when the user asks how the price was built. In a ranking, only the first results carry it.'),
 };
 
 const Lang = {
@@ -553,7 +553,10 @@ export function createServer(getDataset, live) {
       q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm);
       // The timeline is for "how was this price built", a question about one
       // charger: ten of them were ~100 KB. The first few keep it.
-      if (i >= DETAIL_IN_RANKING) delete q.timeline;
+      if (i >= DETAIL_IN_RANKING) {
+        delete q.timeline;
+        for (const o of q.options) delete o.components;
+      }
     }
     const notes = [
       ...(cemeDown ? [t('note.noCeme')] : []),
