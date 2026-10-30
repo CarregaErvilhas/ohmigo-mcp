@@ -22,6 +22,7 @@ import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
 import { chargers, dump } from './dump.js';
 import { createServer, QA } from './mcp.js';
+import { PAGES, SITEMAP, SITE_URL } from './site.js';
 import { statsSummary } from './stats.js';
 import { VERSION } from './version.js';
 
@@ -77,8 +78,9 @@ function readJson(req) {
   });
 }
 
-// The landing page: one static file, read once at boot.
-const SITE = readFileSync(new URL('../site/index.html', import.meta.url));
+// The landing page, one copy per language rendered at boot (src/site.js),
+// and its link-preview image.
+const OG_IMAGE = readFileSync(new URL('../site/og.png', import.meta.url));
 // Privacy and support share one file; its script picks the page from the path.
 // Directories and assistants' review forms want a stable URL for each.
 const LEGAL = readFileSync(new URL('../site/legal.html', import.meta.url));
@@ -159,10 +161,23 @@ const httpServer = createHttp(async (req, res) => {
   // Health check for the hosting platform (and for you: it shows how fresh
   // the data is).
   if (url.pathname === '/healthz') return send(res, 200, health());
-  if (url.pathname === '/' && (req.method === 'GET' || req.method === 'HEAD')) {
+  const get = req.method === 'GET' || req.method === 'HEAD';
+  if ((url.pathname === '/' || url.pathname === '/en') && get) {
+    // Old links chose the language with ?lang=; each language has its own URL now.
+    const want = url.searchParams.get('lang');
+    if ((want === 'en' && url.pathname === '/') || (want === 'pt' && url.pathname === '/en')) {
+      url.searchParams.delete('lang');
+      res.writeHead(301, { location: (want === 'en' ? '/en' : '/') + url.search });
+      return res.end();
+    }
     res.writeHead(200, SITE_HEADERS);
-    return res.end(req.method === 'HEAD' ? undefined : SITE);
+    return res.end(req.method === 'HEAD' ? undefined : PAGES[url.pathname === '/en' ? 'en' : 'pt']);
   }
+  if (url.pathname === '/og.png' && get) {
+    res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' });
+    return res.end(req.method === 'HEAD' ? undefined : OG_IMAGE);
+  }
+  if (url.pathname === '/sitemap.xml') return send(res, 200, SITEMAP, 'application/xml; charset=utf-8');
   if (LEGAL_PATHS.has(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, SITE_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : LEGAL);
@@ -181,7 +196,7 @@ const httpServer = createHttp(async (req, res) => {
       return send(res, 500, { error: 'dados unavailable' });
     }
   }
-  if (url.pathname === '/robots.txt') return send(res, 200, 'User-agent: *\nAllow: /\nDisallow: /mcp\n', 'text/plain; charset=utf-8');
+  if (url.pathname === '/robots.txt') return send(res, 200, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
   if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
   if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
   // Someone pasted the MCP address into a browser. MCP clients never ask for

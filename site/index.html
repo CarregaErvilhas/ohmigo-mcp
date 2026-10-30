@@ -3,11 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ohmigo · o teu amigo dos carregamentos</title>
+<title>ohmigo · onde carregar o carro elétrico mais barato em Portugal</title>
 <meta name="description" content="Pergunta ao ChatGPT ou ao Claude onde é mais barato carregar o teu carro elétrico em Portugal. Grátis, sem registo.">
-<meta property="og:title" content="ohmigo · o teu amigo dos carregamentos">
-<meta property="og:description" content="Pergunta ao ChatGPT ou ao Claude onde é mais barato carregar o teu carro elétrico em Portugal.">
-<meta property="og:type" content="website">
+<!-- seo: src/site.js fills this per language (canonical, hreflang, Open Graph, JSON-LD) -->
 <meta name="theme-color" content="#16a34a">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='14' width='44' height='40' rx='14' fill='%2322c55e'/%3E%3Crect x='20' y='4' width='6' height='12' rx='3' fill='%23334155'/%3E%3Crect x='38' y='4' width='6' height='12' rx='3' fill='%23334155'/%3E%3Ccircle cx='24' cy='32' r='4' fill='%230f172a'/%3E%3Ccircle cx='40' cy='32' r='4' fill='%230f172a'/%3E%3Cpath d='M24 42q8 6 16 0' stroke='%230f172a' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
@@ -74,9 +72,9 @@
   .logo { display: flex; align-items: center; gap: 8px; font-weight: 900; font-size: 22px; color: var(--fg); text-decoration: none; }
   .logo svg { width: 34px; height: 34px; }
   .langs { display: flex; gap: 6px; }
-  .langs button { display: flex; align-items: center; gap: 6px; border: 2px solid transparent; background: var(--card); border-radius: 999px;
+  .langs a { text-decoration: none; color: inherit; display: flex; align-items: center; gap: 6px; border: 2px solid transparent; background: var(--card); border-radius: 999px;
     padding: 5px 10px 5px 6px; font: 700 14px var(--font); color: var(--fg); cursor: pointer; box-shadow: var(--shadow); }
-  .langs button[aria-pressed="true"] { border-color: var(--green); }
+  .langs a[aria-current="page"] { border-color: var(--green); }
   .langs svg { width: 24px; height: 24px; border-radius: 50%; display: block; }
 
   /* Buttons */
@@ -251,7 +249,7 @@
     .tabs { display: grid; grid-template-columns: 1fr 1fr; overflow: visible; }
     .tab { justify-content: center; }
     .langs .lbl { display: none; }
-    .langs button { padding: 5px; }
+    .langs a { padding: 5px; }
     .bubble-hi { right: 4%; }
   }
   @media (max-width: 420px) {
@@ -303,8 +301,8 @@
   <div class="wrap bar">
     <a class="logo" href="#top"><svg aria-hidden="true"><use href="#ohmi"/></svg>ohmigo</a>
     <div class="langs" role="group" aria-label="Language / Idioma">
-      <button type="button" data-lang="pt" aria-pressed="true" title="Português"><svg aria-hidden="true"><use href="#flag-pt"/></svg><span class="lbl">PT</span></button>
-      <button type="button" data-lang="en" aria-pressed="false" title="English"><svg aria-hidden="true"><use href="#flag-gb"/></svg><span class="lbl">EN</span></button>
+      <a href="/" data-lang="pt" hreflang="pt-PT" aria-current="page" title="Português"><svg aria-hidden="true"><use href="#flag-pt"/></svg><span class="lbl">PT</span></a>
+      <a href="/en" data-lang="en" hreflang="en" title="English"><svg aria-hidden="true"><use href="#flag-gb"/></svg><span class="lbl">EN</span></a>
     </div>
   </div>
 </header>
@@ -537,6 +535,7 @@
 <footer>
   <div class="wrap">
     <p data-i="foot.data"></p>
+    <p data-i="foot.more"></p>
     <p data-i="foot.code"></p>
     <p><a href="/privacidade" data-i="foot.privacy"></a> · <a href="/suporte" data-i="foot.support"></a></p>
   </div>
@@ -550,7 +549,7 @@
 <script type="application/json" id="strings">
 {
   "pt": {
-    "meta.title": "ohmigo · o teu amigo dos carregamentos",
+    "meta.title": "ohmigo · onde carregar o carro elétrico mais barato em Portugal",
     "meta.desc": "Pergunta ao ChatGPT ou ao Claude onde é mais barato carregar o teu carro elétrico em Portugal. Grátis, sem registo.",
     "hero.eyebrow": "⚡ Para quem conduz elétrico em Portugal",
     "hero.title": "Pergunta ao teu assistente <span class=\"hl\">onde é mais barato carregar.</span>",
@@ -654,6 +653,7 @@
     "final.lead": "Dois minutos agora, muitos euros poupados depois.",
     "final.cta": "Instalar o ohmigo ⚡",
     "foot.data": "Dados: Ponto de Acesso Nacional (PAN) e tarifário da MOBI.E, preços CEME de <a href=\"https://ceme.ocarroeletrico.com\">ceme.ocarroeletrico.com</a>, preços diretos dos operadores de <a href=\"https://custofinal.blogspot.com\" target=\"_blank\" rel=\"noopener\">Preços (finais) kWh Portugal</a> de Alexandre Moleiro, usados com autorização.",
+    "foot.more": "Também de O Carro Elétrico: <a href=\"https://ceme.ocarroeletrico.com\">comparador de tarifários CEME</a> · <a href=\"https://nap.ocarroeletrico.com\">mapa e análise dos postos de carregamento (NAP)</a> · <a href=\"https://ocarroeletrico.com\">ocarroeletrico.com</a>",
     "foot.code": "ohmigo é de código aberto: <a href=\"https://github.com/CarregaErvilhas/ohmigo-mcp\" target=\"_blank\" rel=\"noopener\">GitHub</a>. Todos os preços são estimativas.",
     "foot.privacy": "Privacidade",
     "foot.support": "Suporte",
@@ -662,7 +662,7 @@
     "toast.fail": "Não deu para copiar. Seleciona o texto e copia à mão."
   },
   "en": {
-    "meta.title": "ohmigo · your EV charging amigo",
+    "meta.title": "ohmigo · the cheapest place to charge your EV in Portugal",
     "meta.desc": "Ask ChatGPT or Claude where it's cheapest to charge your EV in Portugal. Free, no sign-up.",
     "hero.eyebrow": "⚡ For EV drivers in Portugal",
     "hero.title": "Ask your AI assistant <span class=\"hl\">where charging is cheapest.</span>",
@@ -766,6 +766,7 @@
     "final.lead": "Two minutes now, plenty of euros saved later.",
     "final.cta": "Install ohmigo ⚡",
     "foot.data": "Data: Portugal's National Access Point (NAP) and MOBI.E's tariff file, CEME prices from <a href=\"https://ceme.ocarroeletrico.com\">ceme.ocarroeletrico.com</a>, operators' direct prices from Alexandre Moleiro's <a href=\"https://custofinal.blogspot.com\" target=\"_blank\" rel=\"noopener\">Preços (finais) kWh Portugal</a>, used with permission.",
+    "foot.more": "Also from O Carro Elétrico: <a href=\"https://ceme.ocarroeletrico.com\">CEME tariff comparison</a> · <a href=\"https://nap.ocarroeletrico.com\">map and analysis of Portugal's chargers (NAP)</a> · <a href=\"https://ocarroeletrico.com\">ocarroeletrico.com</a>",
     "foot.code": "ohmigo is open source: <a href=\"https://github.com/CarregaErvilhas/ohmigo-mcp\" target=\"_blank\" rel=\"noopener\">GitHub</a>. All prices are estimates.",
     "foot.privacy": "Privacy",
     "foot.support": "Support",
@@ -778,36 +779,20 @@
 <script>
 (() => {
   const S = JSON.parse(document.getElementById('strings').textContent);
+  // The server renders each language at its own URL (/ and /en, see
+  // src/site.js), so search engines index both. A visitor who picked English
+  // before is sent there from /; nobody else is redirected (a crawler must
+  // see the page it asked for).
   const store = {
     get() { try { return localStorage.getItem('ohmigo.lang'); } catch { return null; } },
     set(v) { try { localStorage.setItem('ohmigo.lang', v); } catch {} },
   };
-  // Order: ?lang= in the link, then the visitor's earlier pick, then the
-  // browser's languages (any pt-* counts as pt), then English.
-  function detect() {
-    const q = new URLSearchParams(location.search).get('lang');
-    if (q === 'pt' || q === 'en') return q;
-    const saved = store.get();
-    if (saved === 'pt' || saved === 'en') return saved;
-    for (const l of navigator.languages || [navigator.language || '']) {
-      if (/^pt\b/i.test(l)) return 'pt';
-      if (/^en\b/i.test(l)) return 'en';
-    }
-    return 'en';
+  const lang = document.documentElement.lang === 'en' ? 'en' : 'pt';
+  if (lang === 'pt' && store.get() === 'en' && !new URLSearchParams(location.search).has('lang')) {
+    location.replace('/en' + location.search + location.hash);
   }
-  let lang;
-  function apply(next) {
-    lang = next;
-    const t = S[lang];
-    document.documentElement.lang = lang === 'pt' ? 'pt-PT' : 'en';
-    document.title = t['meta.title'];
-    document.querySelector('meta[name="description"]').content = t['meta.desc'];
-    for (const el of document.querySelectorAll('[data-i]')) el.innerHTML = t[el.dataset.i] ?? '';
-    for (const b of document.querySelectorAll('[data-lang]')) b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
-  }
-  apply(detect());
-  for (const b of document.querySelectorAll('[data-lang]')) {
-    b.addEventListener('click', () => { store.set(b.dataset.lang); apply(b.dataset.lang); });
+  for (const a of document.querySelectorAll('[data-lang]')) {
+    a.addEventListener('click', e => { store.set(a.dataset.lang); a.href = a.getAttribute('href') + location.hash; });
   }
 
   // Copy buttons: the URL box and the example questions.
