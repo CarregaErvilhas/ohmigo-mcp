@@ -86,10 +86,12 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/promos.js` | CEME promotions at one network: which hold at a charger, and what they do to the price |
 | `src/offers-parse.js` | Parses the custofinal blog's price tables |
 | `src/view.js` | Builds the inline results page with the MCP Apps bridge |
+| `src/dump.js` | The data behind the tools for people (`/dados`): CEME tariffs and promotions, direct offers, operators and their fees, per charger on demand |
 | `src/stats.js` | One log line per tool call, counters for `/healthz` |
 | `src/version.js` | The version, read from `package.json` |
 | `ui/results.html` | The inline results page |
 | `site/index.html` | The landing page at `/`: what ohmigo is and how to install it, in both languages |
+| `site/dados.html` | `/dados`: browse what `src/dump.js` returns. Public, `noindex`, cached by Cloudflare (Cache Rule on the zone, TTLs from the headers in `src/server.js`); Portuguese only |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
 | `offers/manual.json` | Hand-made corrections and additions to it |
 | `offers/networks.json` | Which chargers each network label means (blog offers and CEME promotions) |
