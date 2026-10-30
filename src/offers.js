@@ -65,6 +65,13 @@ for (const o of OFFERS) for (const id of o.scope.operatorIds || []) {
   byOperator.get(id).push(o);
 }
 
+// Prices only some people can get (offers/audiences.json): an offer or a
+// CEME tariff with an `audience` is hidden unless the driver said they
+// belong to it. Without this, an EDP employee's price would headline every
+// EDP charger for everyone.
+export const AUDIENCES = read('audiences.json').audiences;
+export const forAudiences = (x, audiences = []) => !x.audience || audiences.includes(x.audience);
+
 // Notes that the NAP's own price for some chargers is wrong (offers/nap-notes.json,
 // hand-made like manual.json). Outside MOBI.E the NAP's price is shown as the
 // operator's price unless a note here says otherwise; scope by operator id or
@@ -82,7 +89,8 @@ export function isStale(offer, now = new Date()) {
 // point's power band. MOBI.E-wide offers only apply to chargers on MOBI.E,
 // and a provider's row for this specific network replaces its MOBI.E-wide
 // row (the blog lists "Electroverse @ Rede Mobi.E" AND "Electroverse @ Ionity").
-export function offersAt(site, point) {
+// Offers for an audience the driver didn't claim are left out.
+export function offersAt(site, point, audiences = []) {
   const band = bandFor(point);
   if (!band) return [];
   const own = byOperator.get(site.operatorId) || [];
@@ -90,7 +98,7 @@ export function offersAt(site, point) {
   const wide = point.regime !== 'sem_ceme' ? mobieWide.filter(o => !ownLabels.has(o.label)) : [];
   return [...own, ...wide]
     .map(offer => ({ offer, eurPerKwh: offer.prices[band] ?? offer.prices.all ?? null }))
-    .filter(x => x.eurPerKwh != null);
+    .filter(x => x.eurPerKwh != null && forAudiences(x.offer, audiences));
 }
 
 // Does the operator of this site have its own walk-up price here? Then that

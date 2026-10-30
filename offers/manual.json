@@ -56,6 +56,33 @@
       "checkedAt": "2026-10-28"
     },
     {
+      "id": "powerdot-uber-driver-powerdot",
+      "add": true,
+      "label": "Powerdot - motoristas profissionais (Uber Driver)",
+      "provider": "Powerdot", "plan": "Uber Driver", "network": "Powerdot",
+      "scope": { "operatorIds": ["HORZ"] },
+      "walkUp": false, "subscription": false, "fee": null,
+      "audience": "uber-driver",
+      "prices": { "all": 0.41 },
+      "source": "https://adhoc.pwrdt.com/locations",
+      "checkedAt": "2026-10-30",
+      "why": "Powerdot's ad hoc page: 'Exclusive tariff of 0.41 €/kWh for Professional Drivers', signing in with the Uber Driver account; final with mainland VAT, any power."
+    },
+    {
+      "id": "electroverse-powerdot-staff-powerdot",
+      "add": true,
+      "label": "Electroverse - colaboradores Powerdot (50 %)",
+      "provider": "Electroverse", "plan": "Colaboradores Powerdot", "network": "Powerdot",
+      "scope": { "operatorIds": ["HORZ"] },
+      "walkUp": false, "subscription": false, "fee": null,
+      "audience": "powerdot-staff",
+      "prices": { "ac7": 0.205, "ac22": 0.21, "dc50": 0.3, "dc100": 0.36, "dc120": 0.36, "dc150": 0.36, "dc180": 0.395, "dcMax": 0.395 },
+      "sessionEur": 0.3,
+      "source": "https://custofinal.blogspot.com/2026/10/blog-post_14.html",
+      "checkedAt": "2026-10-30",
+      "why": "Powerdot employees pay half of Electroverse's price at Powerdot chargers. Only the 150 kW band was seen (0.36 €/kWh + 0.30 € connection fee, exactly half of electroverse-rede-mobi-e's 0.72); the other bands are half of that row too, not seen. The employee discount itself has no public page: the 150 kW price is from a Powerdot employee's Electroverse app at HRZ-AMD-00054 (screenshot, 30 Oct 2026); the source is the blog row it halves."
+    },
+    {
       "id": "tesla-subscricao-12-mes-tesla-supercharger",
       "disable": true,
       "source": "https://www.tesla.com/pt_PT/findus/list/superchargers/Portugal",

@@ -41,7 +41,7 @@ import { localOffset, localTime, REGION_TZ, sessionProfile } from './profile.js'
 import { translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
-import { isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
+import { forAudiences, isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, withPromos } from './promos.js';
 
 const r2 = x => Math.round(x * 100) / 100;
@@ -63,6 +63,17 @@ export const DEFAULT_SHOWN = 3;
 //     the cheapest one without conditions, so a price that needs another
 //     contract (home electricity client, club member...) is never "the" price.
 // The same card in two cycles often has the same price: shown once.
+// The tariffs this driver can have: those for everyone, those for an
+// audience they said they belong to, and any they passed in tariff_ids (they
+// have it). An audience tariff is "bundle" in ceme-v2 (being an employee is
+// the condition); for someone in that audience the condition is met, so it
+// can headline.
+export function eligible(quotes, audiences = [], tariffIds = []) {
+  const want = new Set((tariffIds || []).map(tariffKey));
+  return quotes.filter(q => forAudiences(q, audiences) || want.has(tariffKey(q.id)))
+    .map(q => q.audience ? { ...q, bundle: false } : q);
+}
+
 export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
   const ok = applicable(quotes, point);
   const best = ok.find(t => !t.newCustomers) || null;
@@ -98,7 +109,7 @@ function cemeOption(t, { site, opc, vat }) {
     ...(w.low !== w.high && { low: w.low }),
     tariffId: t.id, ceme: t.ceme, name: t.name, tariffKind: t.kind, period: t.period,
     ...(t.kwhByPeriod && Object.keys(t.kwhByPeriod).length > 1 && { kwhByPeriod: t.kwhByPeriod }),
-    requiresOtherContract: !!t.bundle, energyEur: w.energyEur,
+    requiresOtherContract: !!t.bundle, ...(t.audience && { audience: t.audience }), energyEur: w.energyEur,
     // A tariff only for people who sign up now, often a dated campaign
     // (`until`: its last day). Never the headline or `best` by default.
     ...(t.newCustomers && { newCustomersOnly: true }), ...(t.valid_until && { until: t.valid_until }),
@@ -168,22 +179,25 @@ function adhocOption(point, session, t, region) {
 
 // Direct offers at this point: kWh x the offer's price for the point's power
 // band. A subscription's fee is listed, not added, since one fee covers every
-// session in the month/year. These prices are final with mainland VAT (23 %);
+// session in the month/year; a per-session fee (sessionEur) is added. These prices are final with mainland VAT (23 %);
 // on the islands (lower VAT) nobody tells us whether they change, so we show
 // them as they are and say so.
 function directOptions(direct, session, t, region) {
   const island = region && region !== 'CONT';
   return direct.map(({ offer, eurPerKwh }) => ({
-    kind: 'direct', offerId: offer.id, label: offer.label, provider: offer.provider,
-    total: r2(eurPerKwh * session.kwh), eurPerKwh, walkUp: !!offer.walkUp,
+    kind: 'direct', offerId: offer.id, label: offer.label, provider: offer.provider, ...(offer.audience && { audience: offer.audience }),
+    total: r2(eurPerKwh * session.kwh + (offer.sessionEur || 0)), eurPerKwh, ...(offer.sessionEur && { sessionEur: offer.sessionEur }), walkUp: !!offer.walkUp,
     subscription: offer.subscription ? { ...(offer.fee || {}), text: offer.fee ? t('option.fee', offer.fee) : t('option.feeUnknown') } : null,
     note: t('option.direct.note', { source: offer.origin === 'custofinal' ? `${SOURCE.name} (${SOURCE.author}), ${SOURCE.blog}` : offer.source, checked: offer.checkedAt })
       + (offer.walkUp ? ` ${t('option.walkUp')}` : '')
+      + (offer.sessionEur ? ` ${t('option.sessionFee', { eur: offer.sessionEur })}` : '')
       + (isStale(offer) ? ` ${t('option.stale')}` : '')
       + (island ? ` ${t('option.islandVat')}` : ''),
     stale: isStale(offer), vatUnverified: island || undefined,
   })).sort((a, b) => a.total - b.total);
 }
+
+export const directOptionsForTest = (direct, session, lang, region) => directOptions(direct, session, translator(lang), region);
 
 // Quotes one point. `simCache` lets a caller ranking many points share the
 // ceme-v2 call: the billed kWh only differs between AC and DC (different
@@ -193,7 +207,7 @@ function directOptions(direct, session, t, region) {
 //           ceme-v2 and what came back).
 //   monthKwh: { ceme-v2 tariff id: kWh the user already charged with it this
 //           month }, for free-kWh promotions (see ceme.js expandMonthKwh).
-export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, detail = false, qa = false, monthKwh = null, simCache = new Map() } = {}) {
+export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, detail = false, qa = false, monthKwh = null, audiences = [], simCache = new Map() } = {}) {
   const t = translator(lang);
   const session = estimateSession(point, car, t);
   // The session starts at `at` (or now), to the minute so points share the
@@ -217,7 +231,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     assumptions: [...session.assumptions],
     options: [],
   };
-  const direct = offersAt(site, point);
+  const direct = offersAt(site, point, audiences);
 
   if (point.regime === 'sem_ceme') {
     // Outside MOBI.E: no CEME, the operator bills directly. The NAP has one
@@ -297,7 +311,8 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   base.assumptions.push(sim.profile
     ? t('assume.window', { from: base.session.startLocal, to: base.session.endLocal })
     : t('assume.startOnly', { from: base.session.startLocal }));
-  const picked = pickTariffs(sim.data, point, tariffIds, shown);
+  const quotes = eligible(sim.data, audiences, tariffIds);
+  const picked = pickTariffs(quotes, point, tariffIds, shown);
   const ceme = picked.headline;
   const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region)];
   if (!ceme) {
@@ -348,7 +363,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   // them at this network (new-customer ones included) are listed as tips.
   const applied = new Set(base.options.flatMap(o => o.promos || []));
   const shownIds = new Set(base.options.map(o => o.tariffId));
-  const tips = promoTips(applicable(sim.data, point), site, { opc, vat, applied, shown: shownIds }, t);
+  const tips = promoTips(applicable(quotes, point), site, { opc, vat, applied, shown: shownIds }, t);
   for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));
   if (tips.length) base.promos = tips;
   base.options.push(...extras);

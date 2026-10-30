@@ -1,0 +1,9 @@
+{
+  "about": "Prices only some people can get: a company's employees, drivers of a ride-hailing platform. A tariff (ceme-v2's `audience`) or a direct offer (manual.json's `audience`) carrying one of these ids is hidden unless the driver says they belong to it (the `audiences` argument of the tools). Each id: who it is, in en and pt, as the assistant reads it.",
+  "audiences": {
+    "edp-staff": { "en": "EDP employees", "pt": "colaboradores da EDP" },
+    "meo-staff": { "en": "MEO employees", "pt": "colaboradores da MEO" },
+    "powerdot-staff": { "en": "Powerdot employees", "pt": "colaboradores da Powerdot" },
+    "uber-driver": { "en": "professional ride-hailing drivers signed in with their Uber Driver account", "pt": "motoristas profissionais com conta Uber Driver" }
+  }
+}
