@@ -1,7 +1,14 @@
 {
   "about": "Hand-maintained corrections and additions to offers/custofinal.json (the scraped blog). An entry whose id exists there overrides the fields it lists; {\"id\": ..., \"disable\": true} removes it; {\"add\": true} adds a new offer (all fields required); an override or disable whose id is not in the scrape fails the tests. Every entry needs source and checkedAt, and the source host must be in sourceHosts (also for offers/nap-notes.json). Guide: docs/04-operator-offers.md.",
-  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com"],
+  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com", "atlante.energy"],
   "offers": [
+    {
+      "id": "atlante-app-myatlante-rede-mobi-e",
+      "cemeTariffs": ["atlante-myatlanteac", "atlante-myatlantebus"],
+      "source": "https://atlante.energy/pt-pt/tarifas-de-energia/",
+      "checkedAt": "2026-10-31",
+      "why": "On DC the myAtlante app charges this flat price instead of its CEME tariff (energy + operator fee). Atlante's page gives one app price, with no split between myAtlante and myAtlante Business."
+    },
     {
       "id": "ionity-tpa-ionity",
       "prices": { "dcMax": 0.63 },
