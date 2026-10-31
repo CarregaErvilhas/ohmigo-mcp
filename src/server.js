@@ -140,14 +140,15 @@ const send = (res, status, body, type = 'application/json') => {
 // CORS preflights. The server holds no user data and needs no cookies, so
 // any origin may call it, on the paths a client has a reason to read: /mcp,
 // the public JSON and images, and /.well-known, where MCP clients look for
-// OAuth metadata before connecting and need to be able to read the 404.
+// OAuth metadata before connecting (at the root or under /mcp) and need to be
+// able to read the 404.
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
   'access-control-allow-headers': 'content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id, authorization',
   'access-control-expose-headers': 'mcp-session-id, mcp-protocol-version',
 };
-const corsOpen = path => path === '/mcp' || path === '/og.png' || path === '/dados.json' || path === '/dados/postos.json'
+const corsOpen = path => path === '/mcp' || path.startsWith('/mcp/') || path === '/og.png' || path === '/dados.json' || path === '/dados/postos.json'
   || !!ICONS[path] || path.startsWith('/.well-known/');
 // Images go inside assistants' apps, some of which only load what says it may
 // be embedded elsewhere.
