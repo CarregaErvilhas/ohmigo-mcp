@@ -419,6 +419,27 @@ test('http: a body at the limit is still read', async () => {
   assert.equal(r.status, 200);
 });
 
+test('http: a JSON-RPC batch is refused with a JSON-RPC error, on any protocol version', async () => {
+  const one = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
+  for (const body of [[one, { ...one, id: 2 }], [one], []]) {
+    // Without the version header the SDK assumes the oldest protocol, which had batches.
+    for (const version of ['2025-06-18', '2025-03-26', undefined]) {
+      const r = await fetch(`${base}/mcp`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...(version && { 'mcp-protocol-version': version }) },
+        body: JSON.stringify(body),
+      });
+      assert.equal(r.status, 400, version);
+      assert.match(r.headers.get('content-type'), /application\/json/);
+      const d = await r.json();
+      assert.equal(d.jsonrpc, '2.0');
+      assert.equal(d.id, null);
+      assert.equal(d.error.code, -32600);
+      assert.match(d.error.message, /batch/i);
+    }
+  }
+});
+
 // Last: it stops the server.
 test('http: SIGTERM lets the process exit cleanly', async () => {
   server.kill('SIGTERM');

@@ -244,6 +244,12 @@ async function handle(req, res) {
     if (e.status === 413) res.setHeader('connection', 'close');
     return send(res, e.status || 400, { error: e.message });
   }
+  // A JSON array is a JSON-RPC batch: many tool calls in one request. The
+  // 2025-06-18 protocol removed them and no client of ours sends one, but the
+  // SDK still takes them from clients on older versions. Without this, one
+  // POST could ask for many answers, past what the body limit and the cost of
+  // a tool call assume.
+  if (Array.isArray(body)) return send(res, 400, { jsonrpc: '2.0', error: { code: -32600, message: 'Invalid Request: JSON-RPC batches are not supported' }, id: null });
   // QA mode logs every call, so a tester can see what the client actually sent.
   if (QA) console.log('[ohmigo] qa:', body?.method, body?.params?.name ?? '', JSON.stringify(body?.params?.arguments ?? {}));
   const server = createServer(() => ds, live);
