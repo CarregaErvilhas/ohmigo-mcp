@@ -22,11 +22,15 @@ assistant found out about the car:
    The charger's power is OpenStreetMap's where it differs from the NAP's
    ([05](05-dataset.md)), and the estimate says so in its assumptions.
 2. **10-80 % time**: 70 % of the battery charged in that many minutes gives
-   the car's real average speed below 80 %. Above 80 % we assume it drops.
+   the car's real average speed below 80 %, at the battery. The meter counts
+   the losses too, so that speed is scaled up to the meter's side, and a
+   session from 10 to 80 % on a fast enough charger takes the published time.
+   Above 80 % we assume it drops.
 3. **Nothing**: a share of the peak power below 80 % and a smaller share
    above. A rough guess.
 
-AC sessions are simpler: the power stays nearly flat until the end.
+AC sessions are simpler: the power stays nearly flat until the end, so we take
+a fixed share of the peak.
 
 Every guess goes into `assumptions`, in the user's language, so the assistant
 can say things like "this assumes 7 % losses and a 28-minute 10-80 % time".
@@ -168,17 +172,27 @@ ones that hold there. Each has a `target`:
 
 Then:
 - a promotion for **every customer** of the tariff goes into that option's
-  total (free kWh only with a count). The option carries `promos`, and an
-  assumption names the promotion. With a promotion in, another of the user's
-  tariffs can become the headline;
+  total (free kWh only with a count). Promotions on one tariff don't all
+  add up: two on the energy don't stack (the lowest total wins), two on the
+  operator fee neither (the biggest wins), and `FINAL` replaces the rest. The
+  option's `promos` and the assumptions name only the ones that took effect.
+  With a promotion in, another of the user's tariffs can become the headline;
 - a promotion for **new customers only** never changes a price: almost
   nobody who asks qualifies. It goes in the plug's `promos` list as a tip,
   with what this session would cost with it (`total`) and the `saving`.
 
 `promos` on the plug lists every promotion that holds here for any tariff
 that fits the socket and saves something, one row each, with `applied`
-saying whether it's already in a shown total (those are always listed, even
-when they cost more, so the user sees why). It's absent when there are none.
+saying whether it took effect in a shown total (those are always listed, even
+when they cost more, so the user sees why, as are free kWh run out on a shown
+tariff, with `applied: false`). An applied row's `total` is the option's price
+and its `saving` what that promotion alone takes off, so stacked rows add up.
+A promotion that doesn't add to what's already in its tariff's price (it lost,
+or a new-customer tip wouldn't stack with it) stays listed, unapplied, with
+that price as `total`, `saving: 0` and a note saying so. The list is absent
+when there are none. A `target` this code doesn't know is skipped, with one
+warning in the log per target and an assumption on each option whose total it
+could change.
 
 **`adhoc`** — bank card / QR at the charger: MOBI.E's `AD_HOC_PAYMENT` price
 × the region's VAT (MOBI.E publishes it without VAT, like the operator fee).
@@ -209,8 +223,10 @@ and that a bank card at the terminal pays the same (`walkUp`), which the
 label then says.
 Some of these chargers also have an `AD_HOC_PAYMENT` price in MOBI.E's file
 (HighGreenPower): it's the same walk-up price, so the label says you pay by
-bank card / QR, and when the NAP price is missing (live feed down) the
-`adhoc` option takes its place.
+bank card / QR, and when there's no NAP price per kWh (the live entry lists
+only time or flat fees, or nothing is known) the `adhoc` option takes its
+place. The dataset's price stands in when the live feed is down or its entry
+has no fees.
 
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the
@@ -242,5 +258,5 @@ Two summary fields:
 | Two values published for one fee | a price range |
 | Price outside MOBI.E | an assumption line: the NAP's price taken as the whole €/kWh, plus the region's VAT |
 | Direct offers from a price list | the source and the date it was checked; "may be out of date" after 90 days |
-| A CEME promotion in the price | an assumption naming it and its end date |
+| A CEME promotion in the price | an assumption naming it and its end date, if it has one |
 | Live status stale | `live.fresh: false`, said in the footer |

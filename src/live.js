@@ -9,11 +9,11 @@
 // for whoever asks next.
 //
 // Refreshes use If-None-Match (304 with no body when unchanged) and parse the
-// body as a stream, so the 38 MB never sit in memory as text. In practice the
-// feed is regenerated every minute or two, so a 304 is rare and almost every
-// refresh is a full download: that's why the TTL is 15 min, not 5 (~96
-// downloads a day per instance instead of 288). Results carry publishedAt, so
-// the assistant can say how old the status is.
+// body as a stream, so the 38 MB never sit in memory as text. The feed is
+// regenerated about every 5 minutes (ETag watched on 2026-10-31), so the TTL
+// matches it: a fresher status is what users ask about, and downloads only
+// happen while someone is asking (at most ~288 a day per instance). Results
+// carry publishedAt, so the assistant can say how old the status is.
 //
 // When the feed is down, failed refreshes back off (30 s, 1, 2, 5 min) instead
 // of starting another 38 MB download on every request.
@@ -21,7 +21,7 @@
 import { SaxesParser } from 'saxes';
 
 const URL_ = process.env.NAP_STATUS_URL || 'https://pgm.mobie.pt/integration/nap/evActualStatus';
-const TTL_MS = Number(process.env.LIVE_TTL_SECONDS || 900) * 1000;
+const TTL_MS = Number(process.env.LIVE_TTL_SECONDS || 300) * 1000;
 const WAIT_MS = Number(process.env.LIVE_WAIT_SECONDS || 25) * 1000;
 
 // Point ids are only unique within a site (some operators publish bare
@@ -93,6 +93,15 @@ export function napPlan(fees) {
     else if (f.policy === 'pricePerChargingTime') (plan.time ||= []).push({ eur: f.eur, from: 0, to: null });
   }
   return Object.keys(plan).length ? plan : null;
+}
+
+// The NAP's €/kWh for a socket outside MOBI.E (lp: its live entry, if any).
+// The live per-kWh fee wins. The static price from the dataset stands in only
+// when the live feed has no fees for the socket: when it has fees and none is
+// per kWh (a per-minute or flat price), the static one no longer describes it.
+export function napEurPerKwh(lp, staticPrice) {
+  if (!lp?.fees.length) return staticPrice;
+  return lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur;
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms).unref());

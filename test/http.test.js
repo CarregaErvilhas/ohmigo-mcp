@@ -11,7 +11,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { moreWays } from '../src/mcp.js';
+import { moreWays, socketKindKey } from '../src/mcp.js';
+import { renderView } from './view-harness.js';
 
 let ceme, cemeDown = false, cheapTip = false, server, base, serverLog = '';
 // Enough rows to pass list_ceme_tariffs' cut, under a name with an accent.
@@ -56,7 +57,7 @@ async function boot(dataset = 'test/fixtures/chargers.json') {
     env: {
       ...process.env, PORT: '0', HOST: '127.0.0.1', DATASET_PATH: dataset,
       CEME_API_URL: `http://127.0.0.1:${ceme.address().port}`, CEME_API_KEY: '',
-      NAP_STATUS_URL: 'http://127.0.0.1:9/live', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1',
+      NAP_STATUS_URL: 'http://127.0.0.1:9/live', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1', HEALTHZ_TOKEN: 'test-token',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -369,6 +370,16 @@ test('http: a site the NAP left nameless is its id prefix\'s operator everywhere
   assert.ok(!glp.notes.some(n => /inferred/.test(n)));
 });
 
+test('socketKindKey: sockets at sites with different hours stay apart, so a closing warning is not lost or invented', () => {
+  const point = { kw: 22, dc: false, connector: 'T2', regime: 'mobie' };
+  const site = (hours, osm) => ({ operatorId: 'X', hours, osm: osm && { openingHours: osm } });
+  const key = socketKindKey(site('Mo-Su 09:00-21:00'), point);
+  assert.equal(key, socketKindKey(site('Mo-Su 09:00-21:00'), point));
+  assert.notEqual(key, socketKindKey(site('24/7'), point));
+  assert.notEqual(key, socketKindKey(site(undefined, 'Mo-Su 09:00-21:00'), point), 'which source says it matters: the warning quotes it');
+  assert.notEqual(socketKindKey(site('24/7'), point), socketKindKey(site('24/7', 'Mo-Su 09:00-21:00'), point));
+});
+
 test('http: an inferred socket stays apart from its named sibling, so its assumption survives', async () => {
   const { results } = (await call('estimate_charging_cost', { site: 'CNT-9648PL0003', battery_kwh: 58, start_pct: 20, lang: 'en', at: '2026-11-02T12:00:00Z' })).structuredContent;
   const lent = results.filter(q => q.siteId === 'CNT-9648PL0003');
@@ -451,6 +462,18 @@ test('http: a socket with no published power or plug reads "?" in the summary li
   assert.match(found.content[0].text.split('\n\n')[0], /1× \? kW \?$/m);
   // Only the text: the data keeps what the dataset says.
   assert.equal(single.structuredContent.results[0].connector, 'nan');
+  // The view, which reads the data, says "?" too.
+  const [view] = renderView(single.structuredContent);
+  assert.match(view, /\? kW \?/);
+  assert.doesNotMatch(view, /kW nan/);
+});
+
+test('http: a driver in the view reads no note written for the assistant', async () => {
+  const none = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, tariff_ids: ['nope-bt-z'], lang: 'en' });
+  assert.match(none.structuredContent.results[0].note, /the user's tariffs/);
+  const [theirs] = renderView(none.structuredContent);
+  assert.match(theirs, /None of your tariffs/);
+  assert.doesNotMatch(theirs, /the user/);
 });
 
 test('http: with ceme-v2 down, the other ways to pay still come back, flagged', async () => {
@@ -461,6 +484,20 @@ test('http: with ceme-v2 down, the other ways to pay still come back, flagged', 
     assert.equal(r.structuredContent.cemeUnavailable, true);
     const mobie = r.structuredContent.results.filter(q => q.regime === 'mobie');
     assert.ok(mobie.every(q => q.cemeUnavailable && q.total === null));
+    // The view still marks the cheapest row, with the server's labels, and
+    // tells the driver to retry in its own words, not the assistant's orders.
+    assert.ok(r.structuredContent.results[0].best, 'the fixture has a best here');
+    const rows = renderView(r.structuredContent);
+    assert.match(rows[0], /^ best"/);
+    assert.match(rows.above, /class="banner"/);
+    const adhoc = r.structuredContent.results.flatMap(q => q.options).find(o => o.kind === 'adhoc');
+    assert.ok(rows.join('').includes(`<dt>${adhoc.label}</dt>`));
+    assert.match(rows.join(''), /Try again in a few minutes/);
+    assert.doesNotMatch(rows.join(''), /Say so/);
+    const pt = await call('find_cheapest_charging', { place: 'Leiria', ...car, lang: 'pt', at: new Date(Date.now() + 3600_000).toISOString() });
+    const ptRows = renderView(pt.structuredContent).join('');
+    assert.match(ptRows, /Tenta daqui a uns minutos/);
+    assert.doesNotMatch(ptRows, /Diz isso ao utilizador/);
   } finally { cemeDown = false; }
 });
 
@@ -493,7 +530,7 @@ test('http: the landing page is rendered in each language at its own URL, for cr
 });
 
 test('http: /healthz, robots.txt, favicon and 404', async () => {
-  const h = await (await fetch(`${base}/healthz`)).json();
+  const h = await (await fetch(`${base}/healthz`, { headers: { 'x-healthz-token': 'test-token' } })).json();
   assert.equal(h.ok, true);
   assert.ok(['ok', 'degraded'].includes(h.status));
   assert.ok(h.problems.some(p => p.startsWith('live:')), 'the fake feed is down');
