@@ -120,7 +120,7 @@ test('newestPost: by publication date, so editing an old post changes nothing', 
 });
 
 test('parseTables: a merged cell in a price row stops the scrape', () => {
-  const html = '<table class="evtable"><thead><tr><th>Operador</th><th>Rede</th><th>≤7.4</th></tr></thead><tbody><tr><td>A</td><td colspan="2">B</td></tr></tbody></table>';
+  const html = `<table class="evtable"><caption>Preços</caption>${HEAD}<tbody><tr><td>A</td><td colspan="2">B</td></tr></tbody></table>`;
   assert.throws(() => parseTables(html), /merged cells/);
 });
 
