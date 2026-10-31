@@ -42,7 +42,7 @@ the assistant can tell you.
 1. [Glossary](docs/00-glossary.md): the vocabulary
 2. [How it works](docs/01-how-it-works.md): the big picture and a request step by step
 3. [The cost math](docs/02-cost-math.md): energy, time, fees, ways to pay, ranking
-4. [Live status](docs/03-live-status.md): the 38 MB feed and how we tame it
+4. [Live status](docs/03-live-status.md): the huge feed and how we tame it
 5. [Direct offers](docs/04-operator-offers.md): walk-up, apps, subscriptions; the weekly scrape
 6. [The dataset](docs/05-dataset.md): where the charger data comes from
 7. [Run, connect, deploy](docs/06-run-and-deploy.md)

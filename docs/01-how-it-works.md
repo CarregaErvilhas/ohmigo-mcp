@@ -123,6 +123,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/offers.js` | Loads the direct offers, picks the ones for a charger; finds missing operators |
 | `src/promos.js` | CEME promotions at one network: which hold at a charger, and what they do to the price |
 | `src/offers-parse.js` | Parses the custofinal blog's price tables |
+| `src/text.js` | `fold`: text matching without accents or case |
 | `src/view.js` | Builds the inline results page with the MCP Apps bridge |
 | `src/dump.js` | The data behind the tools for people (`/dados`): CEME tariffs and promotions, direct offers, operators and their fees, per charger on demand |
 | `src/stats.js` | One log line per tool call, counters for `/healthz` |
@@ -220,11 +221,12 @@ add friction for people trying it in a chat app. If ohmigo ever stores
 something per user, that changes.
 
 **Why fetch live status on demand instead of polling?** Traffic is low, and a
-poller would download 38 MB every few minutes for nobody ([03](03-live-status.md)).
+poller would download the whole feed every few minutes for nobody ([03](03-live-status.md)).
 
-**Why one JSON file for the dataset, not a database?** ~9k sites fit in
-memory in a few MB, and a search is a few milliseconds of looping. A database
-would be one more service to run, for no gain.
+**Why one JSON file for the dataset, not a database?** The sites fit in
+memory, and filtering them for a search is a few milliseconds of looping (only
+grouping the hits into places buckets them, `mapSquares` in `src/direction.js`).
+A database would be one more service to run, for no gain.
 
 **Why does the assistant send `lang`?** Some of our text reaches the user
 almost word for word (assumptions, payment labels, the progress message, the

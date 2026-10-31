@@ -17,8 +17,8 @@
 //      labels: none decided wrong), and says so in an assumption telling the
 //      user to check the signs.
 
-import { haversineKm } from './geo.js';
-import { fold } from './lookup.js';
+import { haversineKm, rad } from './geo.js';
+import { fold } from './text.js';
 
 // Sites this close count as one place to the driver (a service area often has
 // one NAP site per charger). On a motorway the two sides can be closer than
@@ -75,13 +75,42 @@ const sameSpot = (a, b) => (!!a.address && fold(a.address) === fold(b.address ??
 export const sameStation = (a, b) => a.operatorId === b.operatorId && samePlace(a, b)
   && (haversineKm(a, b) <= URBAN_PLACE_KM || sameSpot(a, b) || onMotorway(a));
 
+// Things filed by map square, so a broad lookup (thousands of hits) compares
+// each site with its neighbours instead of with every place so far. Squares
+// are at least `km` wide on every side, so whatever is within `km` of a point
+// is in its square or one of the eight around it. A degree of longitude
+// shrinks towards the poles, so the width comes from the point furthest from
+// the equator (the data has stray coordinates well north of Portugal).
+const KM_PER_DEGREE = 110; // a bit under the real 111.2: squares err on wide
+function mapSquares(points, km) {
+  const north = points.reduce((m, p) => Math.abs(p.lat) > m ? Math.abs(p.lat) : m, 0);
+  const latDeg = km / KM_PER_DEGREE, lonDeg = latDeg / Math.max(Math.cos(rad(north)), 0.01);
+  const squares = new Map();
+  const y = p => Math.floor(p.lat / latDeg), x = p => Math.floor(p.lon / lonDeg);
+  let added = 0;
+  return {
+    add(p, item) {
+      const key = `${y(p)}/${x(p)}`;
+      if (!squares.has(key)) squares.set(key, []);
+      squares.get(key).push({ item, order: added++ });
+    },
+    // What's filed around p, oldest first: callers want the first that fits.
+    near(p) {
+      const out = [];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) out.push(...squares.get(`${y(p) + dy}/${x(p) + dx}`) ?? []);
+      return out.sort((a, b) => a.order - b.order).map(e => e.item);
+    },
+  };
+}
+
 // Groups hits ({ site, ... }) into places (samePlace as the place's first
 // site).
 export function clusterPlaces(hits) {
-  const places = [];
+  const places = [], firsts = mapSquares(hits.map(h => h.site), SAME_PLACE_KM);
   for (const h of hits) {
-    const place = places.find(pl => samePlace(pl[0].site, h.site));
-    if (place) place.push(h); else places.push([h]);
+    const place = firsts.near(h.site).find(pl => samePlace(pl[0].site, h.site));
+    if (place) place.push(h);
+    else { places.push([h]); firsts.add(h.site, places.at(-1)); }
   }
   return places;
 }
@@ -89,11 +118,12 @@ export function clusterPlaces(hits) {
 // Groups places into service areas: motorway places within PAIR_KM of each
 // other. A group with more than one place is a service area with sides.
 export function serviceAreas(places) {
-  const groups = [];
+  const groups = [], firsts = mapSquares(places.map(pl => pl[0].site), PAIR_KM);
   for (const pl of places) {
-    const g = onMotorway(pl[0].site)
-      && groups.find(g => onMotorway(g[0][0].site) && haversineKm(g[0][0].site, pl[0].site) <= PAIR_KM);
-    if (g) g.push(pl); else groups.push([pl]);
+    const [{ site }] = pl, motorway = onMotorway(site);
+    const g = motorway && firsts.near(site).find(g => haversineKm(g[0][0].site, site) <= PAIR_KM);
+    if (g) g.push(pl);
+    else { groups.push([pl]); if (motorway) firsts.add(site, groups.at(-1)); }
   }
   return groups;
 }
