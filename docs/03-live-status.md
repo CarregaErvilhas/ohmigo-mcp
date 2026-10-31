@@ -17,11 +17,12 @@ We've asked for a chunked version. Until then, we live with the whole file.
 **On demand, with a cache.** Nothing is downloaded until a user asks a
 question. Then:
 
-1. If our copy is **less than 15 minutes old** (`LIVE_TTL_SECONDS`, ±10 %
-   so instances drift apart), we use it, with no network at all. Why not
-   fresher: every refresh is a full 38 MB download (see below), so a 5-minute
-   TTL meant three times the traffic for a status that's best-effort anyway. Results carry
-   `live.publishedAt`, so the assistant can say how old the status is.
+1. If our copy is **less than 5 minutes old** (`LIVE_TTL_SECONDS`, ±10 %
+   so instances drift apart), we use it, with no network at all. 5 minutes
+   matches how often the NAP publishes. Every refresh is a full 38 MB
+   download (see below), but only while someone is asking: with no users,
+   there is no traffic. Results carry `live.publishedAt`, so the assistant
+   can say how old the status is.
 2. Otherwise we start **one** download. If ten users ask at the same moment,
    they all share it (`refresh()` hands back the one already running).
 3. If our copy is younger than **`LIVE_MAX_STALE_SECONDS`**, nobody waits for

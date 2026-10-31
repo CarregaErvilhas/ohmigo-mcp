@@ -90,7 +90,7 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `DATASET_PATH` | none | read the dataset from this file |
 | `DATASET_URL` | the Pages URL | read the dataset from this URL |
 | `DATASET_CHECK_HOURS` | `6` | how often to check for a new dataset |
-| `LIVE_TTL_SECONDS` | `900` | how long a live feed copy counts as fresh (±10 %) |
+| `LIVE_TTL_SECONDS` | `300` | how long a live feed copy counts as fresh (±10 %) |
 | `LIVE_WAIT_SECONDS` | `25` | how long a request with no usable copy waits for a live download |
 | `LIVE_MAX_STALE_SECONDS` | `3600` | how old a live feed copy can be and still answer at once while it refreshes in the background, flagged stale; past it, a request waits. `0` always waits |
 | `LIVE_WARMUP` | on | `0` skips the boot download |
