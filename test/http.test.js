@@ -519,6 +519,34 @@ test('http: the landing page is rendered in each language at its own URL, for cr
   assert.equal(og.headers.get('content-type'), 'image/png');
 });
 
+test('http: privacy and support, one rendered copy per URL', async () => {
+  for (const [path, lang, h1] of [['/privacidade', 'pt-PT', 'Privacidade'], ['/privacy', 'en', 'Privacy'], ['/suporte', 'pt-PT', 'Fala connosco'], ['/support', 'en', 'Get in touch']]) {
+    const r = await fetch(`${base}${path}`);
+    assert.equal(r.status, 200, path);
+    const html = await r.text();
+    assert.ok(html.includes(`<html lang="${lang}">`), path);
+    assert.ok(html.includes(`>${h1}</h1>`), path);
+    assert.ok(html.includes(`<link rel="canonical" href="https://ohmigo.ocarroeletrico.com${path}">`), path);
+    assert.match(r.headers.get('content-security-policy'), /script-src 'none'/, path);
+  }
+  // The landing page still runs its own script.
+  assert.match((await fetch(`${base}/`)).headers.get('content-security-policy'), /script-src 'unsafe-inline'/);
+  // A home link from these pages asks for the language it is already in.
+  assert.equal((await fetch(`${base}/?lang=pt`, { redirect: 'manual' })).status, 200);
+  assert.equal((await fetch(`${base}/en?lang=en`, { redirect: 'manual' })).status, 200);
+  // Old links chose the language with ?lang=, as the landing page's did.
+  const old = await fetch(`${base}/privacidade?lang=en&x=1`, { redirect: 'manual' });
+  assert.equal(old.status, 301);
+  assert.equal(old.headers.get('location'), '/privacy?x=1');
+  assert.equal((await fetch(`${base}/support?lang=en`, { redirect: 'manual' })).status, 200);
+  // Only pt and en name a language, not whatever every object inherits.
+  for (const want of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'xx', '']) {
+    const r = await fetch(`${base}/privacy?lang=${want}`, { redirect: 'manual' });
+    assert.equal(r.status, 200, want);
+  }
+  assert.equal((await fetch(`${base}/suporte/nope`)).status, 404);
+});
+
 test('http: /healthz, robots.txt, favicon and 404', async () => {
   const h = await (await fetch(`${base}/healthz`)).json();
   assert.equal(h.ok, true);

@@ -1,5 +1,5 @@
 // The process entry point: an HTTP server. POST /mcp is the MCP server;
-// GET / is a landing page for people (site/index.html).
+// GET / is a landing page for people (site/index.html, src/site.js).
 //
 // What happens on boot:
 //   1. load the charger dataset (data.js), from a local file in development or
@@ -22,7 +22,7 @@ import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
 import { chargers, dump } from './dump.js';
 import { createServer, QA } from './mcp.js';
-import { PAGES, SITEMAP, SITE_URL } from './site.js';
+import { LEGAL, LEGAL_PAGES, PAGES, SITEMAP, SITE_URL } from './site.js';
 import { statsSummary } from './stats.js';
 import { VERSION } from './version.js';
 
@@ -92,9 +92,6 @@ const ICONS = Object.fromEntries([
   ['/icon.svg', 'image/svg+xml'], ['/icon-512.png', 'image/png'],
   ['/apple-touch-icon.png', 'image/png'], ['/favicon.ico', 'image/x-icon'],
 ].map(([path, type]) => [path, { type, body: readFileSync(new URL(`../site${path}`, import.meta.url)) }]));
-// Privacy and support share one file; its script picks the page from the path.
-// Directories and assistants' review forms want a stable URL for each.
-const LEGAL = readFileSync(new URL('../site/legal.html', import.meta.url));
 // The data dump: what the tools know, for people (src/dump.js). Public, but
 // kept out of search engines (X-Robots-Tag, which also covers the JSON).
 // Meant to sit behind Cloudflare's cache: tariffs, offers and the dataset
@@ -117,13 +114,19 @@ const sendDados = (res, body, partial = false, type = 'application/json') => {
   res.writeHead(200, { ...(partial ? DADOS_PARTIAL : DADOS_CACHE), 'content-type': type });
   res.end(body);
 };
-const LEGAL_PATHS = new Set(['/privacidade', '/privacy', '/suporte', '/support']);
 const SITE_HEADERS = {
   'content-type': 'text/html; charset=utf-8',
   'cache-control': 'public, max-age=300',
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'strict-origin-when-cross-origin',
   'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+};
+// Privacy and support, also rendered at boot, one copy per URL (src/site.js).
+// Directories and assistants' review forms want a stable URL for each. These
+// pages send no script, so their policy doesn't allow one.
+const LEGAL_HEADERS = {
+  ...SITE_HEADERS,
+  'content-security-policy': SITE_HEADERS['content-security-policy'].replace("script-src 'unsafe-inline'", "script-src 'none'"),
 };
 
 const send = (res, status, body, type = 'application/json') => {
@@ -208,9 +211,18 @@ async function handle(req, res) {
     return res.end(req.method === 'HEAD' ? undefined : ICONS[url.pathname].body);
   }
   if (url.pathname === '/sitemap.xml') return send(res, 200, SITEMAP, 'application/xml; charset=utf-8');
-  if (LEGAL_PATHS.has(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
-    res.writeHead(200, SITE_HEADERS);
-    return res.end(req.method === 'HEAD' ? undefined : LEGAL);
+  if (LEGAL_PAGES[url.pathname] && get) {
+    // Old links chose the language with ?lang=, as on the landing page.
+    const { paths } = Object.values(LEGAL).find(p => Object.values(p.paths).includes(url.pathname));
+    const want = url.searchParams.get('lang');
+    const twin = Object.hasOwn(paths, want ?? '') ? paths[want] : null;
+    if (twin && twin !== url.pathname) {
+      url.searchParams.delete('lang');
+      res.writeHead(301, { location: twin + url.search });
+      return res.end();
+    }
+    res.writeHead(200, LEGAL_HEADERS);
+    return res.end(req.method === 'HEAD' ? undefined : LEGAL_PAGES[url.pathname]);
   }
   if (url.pathname === '/dados' && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, { ...SITE_HEADERS, ...DADOS_CACHE });
