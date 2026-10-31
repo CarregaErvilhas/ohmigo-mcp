@@ -403,7 +403,7 @@ function siteCard(h, live, t, audiences = [], notes = [], carVolts) {
 // A socket in a summary line, with the TAR (BT/MT) on MOBI.E. The NAP leaves
 // power and plug blank on some sockets: kw arrives as null and connector as
 // the text "nan".
-const socketLine = q => `${q.kw ?? '?'} kW${q.kwForCar != null ? ` (${q.kwForCar} kW for this car)` : q.kwAt400V != null ? ` (${q.kwAt400V} kW at 400 V)` : ''} ${q.connector === 'nan' ? '?' : q.connector ?? '?'}${q.tar ? `, ${q.tar}` : ''}`;
+const socketLine = (q, t) => `${q.kw ?? '?'} kW${q.kwForCar != null ? ` ${t('summary.kwForCar', { kw: q.kwForCar })}` : q.kwAt400V != null ? ` ${t('summary.kwAt400V', { kw: q.kwAt400V })}` : ''} ${q.connector === 'nan' ? '?' : q.connector ?? '?'}${q.tar ? `, ${q.tar}` : ''}`;
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
@@ -613,7 +613,7 @@ export function createServer(getDataset, live) {
     const shown = rows.slice(0, MAX_TARIFFS);
     const notes = rows.length > shown.length ? [t('note.tariffsCut', { n: shown.length, total: rows.length, narrowed: !!q })] : [];
     return ok({ version: VERSION, count: rows.length, ...(notes.length && { notes }), tariffs: shown, ...(promoRows.length && { promos: promoRows }) },
-      `${[...notes, ''].join('\n')}${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}${r.newCustomersOnly ? ' (new sign-ups only)' : ''}${r.until ? ` (until ${r.until})` : ''}`).join('\n')}`);
+      `${[...notes, ''].join('\n')}${t('summary.tariffs', { n: rows.length })}${promoRows.length ? `, ${t('summary.promotions', { n: promoRows.length })}` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ` ${t('summary.needsContract')}` : ''}${r.newCustomersOnly ? ` ${t('summary.newOnly')}` : ''}${r.until ? ` ${t('summary.until', { date: r.until })}` : ''}`).join('\n')}`);
   });
 
   server.registerTool('lookup_charger', {
@@ -669,7 +669,7 @@ export function createServer(getDataset, live) {
       sites: cards,
       // OpenStreetMap's licence (ODbL) asks for this wherever its data shows.
       credit: r.results.some(h => h.site.osm) ? t('credit.osm') : undefined,
-    }, [...new Set(notes), ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g)}`).join(', ')}`)].join('\n'));
+    }, [...new Set(notes), ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g, t)}`).join(', ')}`)].join('\n'));
   });
 
   server.registerTool('find_chargers', {
@@ -704,8 +704,8 @@ export function createServer(getDataset, live) {
     notes.push(...kwForCarNote(results.flatMap(r => r.points), a, t));
     const maxOf = (r, k) => Math.max(...r.points.map(p => p[k] ?? 0)) || '?';
     const forCar = r => Math.max(...r.points.map(p => kwForCar(p, a.car_voltage ?? COMMON_CAR_VOLTS)?.kw ?? p.kw ?? 0));
-    const forCarLabel = a.car_voltage ? 'for this car' : 'at 400 V';
-    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.direction ? ` [${r.direction}]` : ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${r.points.length} sockets, max ${maxOf(r, 'kw')} kW${forCar(r) < maxOf(r, 'kw') ? ` (${forCar(r)} kW ${forCarLabel})` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
+    const forCarText = r => t(a.car_voltage ? 'summary.kwForCar' : 'summary.kwAt400V', { kw: forCar(r) });
+    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.direction ? ` [${r.direction}]` : ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${t('summary.sockets', { n: r.points.length, kw: maxOf(r, 'kw') })}${forCar(r) < maxOf(r, 'kw') ? ` ${forCarText(r)}` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
     return ok({
       ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, wholeCountry: everywhere || undefined, total,
       ...(notes.length && { notes: [...new Set(notes)] }),
@@ -722,7 +722,7 @@ export function createServer(getDataset, live) {
           status: live.get(r.site.id, p.id)?.status ?? null, adHocPayment: !!p.opc?.AD_HOC_PAYMENT,
         })),
       })),
-    }, [...new Set(notes), `${total} sites:`, text].join('\n'));
+    }, [...new Set(notes), t('summary.sites', { n: total }), text].join('\n'));
   });
 
   server.registerTool('list_operators', {
@@ -752,7 +752,7 @@ export function createServer(getDataset, live) {
     const notes = [t('note.operators'), ...voltageNotes(ds, a, t),
       ...shown.filter(o => o.inferredSites).map(o => t('note.operatorsInferred', { operator: o.name, n: o.inferredSites }))];
     return ok({ ...meta(ds, live, lang), total: ops.length, notes, operators: shown },
-      [...notes, `${ops.length} operators:`, ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${o.sites} sites, ${o.points} sockets (${o.dcPoints} DC), max ${o.maxKw ?? '?'} kW`)].join('\n'));
+      [...notes, t('summary.operators', { n: ops.length }), ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${t('summary.operatorSize', { sites: o.sites, points: o.points, dc: o.dcPoints, kw: o.maxKw ?? '?' })}`)].join('\n'));
   });
 
   registerAppTool(server, 'find_cheapest_charging', {
@@ -818,7 +818,7 @@ export function createServer(getDataset, live) {
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // Summary lines on top of the JSON in the text (see ok).
-    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` (+${waysToPay(q) - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q)}) [${q.pointId}]`);
+    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` ${t('summary.moreWays', { n: waysToPay(q) - 1 })}` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : t('summary.noPrice')} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q, t)}) [${q.pointId}]`);
     return ok(data, [...notes, ...lines].join('\n'));
   });
 
@@ -852,7 +852,7 @@ export function createServer(getDataset, live) {
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
-    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
+    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : t('summary.noPrice')} · ${q.session.minutes} min · ${socketLine(q, t)} [${q.pointId}]`);
     const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []),
       ...kwForCarQuoteNote(results, a, t), ...moreWays(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
