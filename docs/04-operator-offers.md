@@ -47,20 +47,31 @@ Alexandre Moleiro, who lets us use it as long as we credit him. Prices are
 final with VAT, one column per power band (AC ≤7.4, AC 11-22, DC ≤50,
 100, 120, 150, 180, >180). We credit it in every price we show (the `note`
 names the source). The author publishes a **new post** for each update, so
-the scraper reads Blogger's feed and takes the newest post that has the price
-table, instead of a fixed URL.
+the scraper reads Blogger's feed and takes the most recently published post
+that has the price table, instead of a fixed URL. It goes by publication date,
+so an edit to an old post doesn't bring its old prices back.
 
 **The weekly job** (`.github/workflows/offers.yml`, Mondays, or by hand from
 the Actions tab):
 1. scrapes, then runs `npm test`;
 2. if `offers/custofinal.json` changed, opens a **pull request** with the
-   scrape log. Nothing reaches users until someone merges it;
-3. if the scrape fails (blog moved, layout changed, feed down), opens an
-   **issue**, and the old prices stay.
+   scrape log. Nothing reaches users until someone merges it. It opens even if
+   the tests failed: the body says so, and the required `test` check fails on
+   it, so it can't be merged until they're fixed;
+3. if the scrape fails (blog moved, layout changed, feed down), or the tests
+   fail with no offer change to show them on, opens an **issue**, and the old
+   prices stay.
 
 The parser is strict on purpose. An unknown column header, a table without a
-caption, or zero rows make it fail, rather than quietly publish prices in the
-wrong columns.
+caption, zero rows, or a price cell that isn't a number make it fail, rather
+than quietly publish prices in the wrong columns (an empty cell is fine: not
+offered at that power).
+
+On top of that, every row goes through a sanity check, `offerProblems()` in
+`src/offers-parse.js`, whose limits are the constants at the top of that file:
+prices within bounds, labels of a sane length and without control characters
+or angle brackets, an https source on the blog. A bad row fails the scrape.
+`npm test` runs the same check over everything in `offers/`.
 
 ## Matching offers to chargers: `offers/networks.json`
 
@@ -119,7 +130,9 @@ renamed the slug) is skipped with a warning at boot, and `npm test` fails
 naming it.
 
 Every entry needs a `source` (https) and the `checkedAt` date you read it.
-After 90 days, users are told the price may be out of date.
+The source's host must be in `sourceHosts` at the top of `manual.json`, or
+`npm test` fails: a new source is a line there too. After 90 days, users are
+told the price may be out of date.
 
 ## Notes on the NAP's own price: `offers/nap-notes.json`
 

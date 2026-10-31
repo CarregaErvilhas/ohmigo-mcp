@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { bandFor, parseTables, toOffers } from '../src/offers-parse.js';
+import { bandFor, BLOG_HOST, MAX_EUR_PER_KWH, MAX_LABEL_LENGTH, MIN_EUR_PER_KWH, newestPost, offerProblems, parseTables, toOffers } from '../src/offers-parse.js';
 import { AUDIENCES, gaps, isStale, mergeOffers, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
 
 const HEAD = `<thead><tr><th rowspan="2">Operador - Plano</th><th rowspan="2">Postos</th><th colspan="2">AC</th><th colspan="6">DC</th></tr>
@@ -20,6 +20,7 @@ const FIXTURE = `<p>intro</p>
 <tr><td>Acme - Plus 8€/mês</td><td>Acme</td><td></td><td></td><td>0,49</td><td>0,49</td><td>0,49</td><td>0,49</td><td>0,49</td><td>0,49</td></tr>
 </tbody></table>
 <table class="evtable evtable-scale"><tr><th>Preço kWh</th><td>0,30</td></tr></table>`;
+const POST = `https://${BLOG_HOST}/2026/10/post.html`;
 const NETS = { 'Rede Mobi.E': { scope: 'mobie' }, 'Alguns Mobi.E': { scope: 'unknown' }, Acme: { operatorIds: ['ACME'] } };
 
 test('parser: both tables, bands from the header, short rows, entities', () => {
@@ -34,8 +35,68 @@ test('parser: a layout change fails loudly', () => {
   assert.throws(() => parseTables('<p>no tables</p>'), /no price tables/);
 });
 
+test('parser: a price cell that is not a number fails loudly; an empty one is "not offered"', () => {
+  const withCell = cell => FIXTURE.replace('<td>0,41</td>', `<td>${cell}</td>`);
+  for (const cell of ['0,4l', 'n/d', '0,41 €', '-', '0x1', '1,2,3']) {
+    assert.throws(() => parseTables(withCell(cell)), /Roamy.*not a number/, cell);
+  }
+  for (const cell of ['', ' ', '&nbsp;']) assert.equal(parseTables(withCell(cell))[0].rows[1].prices.ac7, null, JSON.stringify(cell));
+});
+
+test('parser: a price outside the bounds fails loudly', () => {
+  const withPrice = price => FIXTURE.replace('<td>0,41</td>', `<td>${String(price).replace('.', ',')}</td>`);
+  for (const price of [MIN_EUR_PER_KWH, MAX_EUR_PER_KWH]) assert.equal(parseTables(withPrice(price))[0].rows[1].prices.ac7, price);
+  // 41 is 0,41 without its comma; 0,004 is a price in the wrong unit.
+  for (const price of [41, 0.004, 0]) assert.throws(() => parseTables(withPrice(price)), /Roamy.*out of bounds/, String(price));
+});
+
+test('parser: a bad label fails loudly, on rows that would be left out too', () => {
+  const withName = name => FIXTURE.replace('<td>Roamy</td>', `<td>${name}</td>`);
+  assert.throws(() => parseTables(withName('R'.repeat(MAX_LABEL_LENGTH + 1))), /too long/);
+  assert.equal(parseTables(withName('R'.repeat(MAX_LABEL_LENGTH)))[0].rows[1].name.length, MAX_LABEL_LENGTH);
+  // Real tags are stripped; these only appear once the entities are decoded.
+  assert.throws(() => parseTables(withName('&lt;script&gt;x')), /control characters or angle brackets/);
+  assert.throws(() => parseTables(withName('Ro&#27;amy')), /control characters or angle brackets/);
+  // "Newco" isn't in NETS, but its label still ends up in the PR.
+  assert.throws(() => parseTables(FIXTURE.replace('<td>Newco</td>', '<td>New&lt;co</td>')), /control characters or angle brackets/);
+});
+
+test('toOffers: the source must be https on the blog', () => {
+  const tables = parseTables(FIXTURE), at = url => toOffers(tables, NETS, { url, checkedAt: '2026-10-14', origin: 'custofinal' });
+  assert.equal(at(POST).offers[0].source, POST);
+  for (const url of [POST.replace('https:', 'http:'), 'https://evil.example/post', `https://${BLOG_HOST}.evil.example/`, `https://${BLOG_HOST}@evil.example/`, undefined]) {
+    assert.throws(() => at(url), /source/, String(url));
+  }
+});
+
+test('offerProblems: nothing on a good offer, each problem on a bad one', () => {
+  const good = { label: 'A - B', provider: 'A', plan: '', network: 'N', prices: { dc50: 0.5, ac7: null }, source: POST };
+  assert.deepEqual(offerProblems(good), []);
+  assert.equal(offerProblems({ ...good, prices: { dc50: '0.5' } }).length, 1, 'a string is not a price');
+  assert.equal(offerProblems({ ...good, prices: { dc50: NaN } }).length, 1);
+  assert.equal(offerProblems({ ...good, plan: 'x'.repeat(MAX_LABEL_LENGTH + 1) }).length, 1);
+  assert.equal(offerProblems({ ...good, source: 'https://example.com/' }).length, 1);
+  assert.deepEqual(offerProblems({ ...good, source: 'https://example.com/' }, ['example.com']), []);
+  // A manual.json override lists only the fields it changes.
+  assert.deepEqual(offerProblems({ id: 'a', prices: { dcMax: 0.63 } }), []);
+});
+
+test('newestPost: by publication date, so editing an old post changes nothing', () => {
+  const post = (id, published, updated, table = true) => ({ id, published: { $t: published }, updated: { $t: updated }, content: { $t: table ? '<table class="evtable">' : '<p>hi</p>' } });
+  const old = post('old', '2026-03-01T10:00:00.000-08:00', '2026-10-30T10:00:00.000-07:00');
+  const current = post('current', '2026-10-14T14:13:01.133-07:00', '2026-10-14T14:13:01.133-07:00');
+  const chat = post('chat', '2026-10-20T10:00:00.000-07:00', '2026-10-20T10:00:00.000-07:00', false);
+  assert.equal(newestPost([old, chat, current]).id, 'current');
+  assert.equal(newestPost([current, chat, old]).id, 'current');
+  // As instants, not as text: 23:30 at -08:00 is later than 00:30 next day at +01:00.
+  const late = post('late', '2026-10-14T23:30:00.000-08:00', '2026-10-14T23:30:00.000-08:00');
+  const early = post('early', '2026-10-15T00:30:00.000+01:00', '2026-10-15T00:30:00.000+01:00');
+  assert.equal(newestPost([early, late]).id, 'late');
+  assert.equal(newestPost([chat]), undefined);
+});
+
 test('toOffers: scope from networks.json, walk-up, fees, unmapped and unknown labels', () => {
-  const r = toOffers(parseTables(FIXTURE), NETS, { url: 'u', checkedAt: '2026-10-14', origin: 'custofinal' });
+  const r = toOffers(parseTables(FIXTURE), NETS, { url: POST, checkedAt: '2026-10-14', origin: 'custofinal' });
   const by = Object.fromEntries(r.offers.map(o => [o.id, o]));
   assert.deepEqual(Object.keys(by).sort(), ['acme-plus-8-mes-acme', 'acme-tpa-acme', 'roamy-rede-mobi-e']);
   assert.equal(by['acme-tpa-acme'].walkUp, true);
@@ -129,7 +190,6 @@ test('offers files are well-formed', () => {
     assert.ok(new Date(o.checkedAt) <= new Date(), `${o.id}: checkedAt in the future`);
     const prices = Object.values(o.prices).filter(v => v != null);
     assert.ok(prices.length, `${o.id}: at least one price`);
-    for (const v of prices) assert.ok(v > 0 && v < 3, `${o.id}: ${v} €/kWh looks wrong`);
     if (o.subscription && o.fee) assert.ok(o.fee.eur > 0 && ['month', 'year'].includes(o.fee.per), `${o.id}: fee`);
   }
   const manual = JSON.parse(readFileSync(new URL('../offers/manual.json', import.meta.url), 'utf8')).offers;
@@ -138,6 +198,25 @@ test('offers files are well-formed', () => {
   }
   const custofinal = JSON.parse(readFileSync(new URL('../offers/custofinal.json', import.meta.url), 'utf8'));
   assert.deepEqual(custofinal.unmapped, [], 'custofinal.json has unmapped networks: add them to offers/networks.json');
+});
+
+// The same check the parser runs on every scrape, over what's already in the
+// files: a hand edit to manual.json never goes through the parser.
+test('offers/*.json pass the sanity check', () => {
+  const file = name => JSON.parse(readFileSync(new URL(`../offers/${name}.json`, import.meta.url), 'utf8'));
+  const { source, offers, unmapped, skipped } = file('custofinal');
+  const { sourceHosts, offers: manual } = file('manual');
+  assert.ok(sourceHosts.includes(BLOG_HOST));
+  const clean = (what, problems) => assert.deepEqual(problems, [], what);
+
+  for (const o of offers) clean(`custofinal ${o.id}`, offerProblems(o));
+  clean('custofinal source', offerProblems({ source: source.post }));
+  for (const label of [...unmapped, ...skipped.flatMap(s => s.split(' @ '))]) clean(label, offerProblems({ label }));
+  for (const o of manual) clean(`manual ${o.id}`, offerProblems(o, sourceHosts));
+  for (const o of OFFERS) clean(`merged ${o.id}`, offerProblems(o, sourceHosts));
+  for (const n of file('nap-notes').notes) clean(n.why, offerProblems({ source: n.source }, sourceHosts));
+  for (const network of Object.keys(file('networks').networks)) clean(network, offerProblems({ network }));
+  for (const a of Object.values(file('audiences').audiences)) clean(a.en, [...offerProblems({ label: a.en }), ...offerProblems({ label: a.pt })]);
 });
 
 test('noteFor: a NAP-price note matches by operator or by site', () => {

@@ -10,6 +10,11 @@ name: Offers (weekly scrape)
 # not GITHUB_TOKEN: a PR opened by GITHUB_TOKEN never triggers workflows, so
 # the required `test` check would never run and the PR could not be merged.
 # Needs repo variable OFFERS_APP_CLIENT_ID and secret OFFERS_APP_PRIVATE_KEY.
+#
+# That token can write to the repo, so it doesn't exist while third-party code
+# runs: it's minted after `npm ci` and the tests, and it's never stored in
+# .git/config (checkout keeps no credentials). Dependencies are installed
+# without their install scripts for the same reason.
 
 on:
   schedule:
@@ -29,20 +34,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app
-        with:
-          client-id: ${{ vars.OFFERS_APP_CLIENT_ID }}
-          private-key: ${{ secrets.OFFERS_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ steps.app.outputs.token }}
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       # Exit 3 = scraped fine, but some networks aren't in offers/networks.json.
       # Still open the PR (those rows are left out) and say so in it.
       - name: Scrape
@@ -53,22 +51,55 @@ jobs:
           code=${PIPESTATUS[0]}
           echo "code=$code" >> "$GITHUB_OUTPUT"
           [ "$code" = 0 ] || [ "$code" = 3 ]
+      # A failure here doesn't stop the job: the PR is where it gets seen (a
+      # manual.json entry the new scrape orphaned, say). The required `test`
+      # check fails on that PR, so it can't be merged as it is.
       - name: Test
+        id: test
+        continue-on-error: true
         run: npm test
-      - name: Open pull request if the offers changed
+      - name: Commit the offers if they changed
+        id: commit
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TESTS: ${{ steps.test.outcome }}
         run: |
           if git diff --quiet -- offers/custofinal.json; then
-            echo "no changes"; exit 0
+            echo "no changes"
+            # No PR will show this one, so fail and let the notice below say it.
+            if [ "$TESTS" != success ]; then
+              echo "tests failed with no change to the offers"; exit 1
+            fi
+            exit 0
           fi
-          branch="offers/custofinal-$(date -u +%F)"
+          # The run id keeps a second run on the same day off the first's branch.
+          branch="offers/custofinal-$(date -u +%F)-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
           git add offers/custofinal.json
           git commit -m "offers: custofinal $(date -u +%F)"
-          git push -u origin "$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        if: steps.commit.outputs.branch != ''
+        with:
+          client-id: ${{ vars.OFFERS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.OFFERS_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Push and open the pull request
+        if: steps.commit.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ steps.commit.outputs.branch }}
+          SCRAPE_CODE: ${{ steps.scrape.outputs.code }}
+          TESTS: ${{ steps.test.outcome }}
+        run: |
+          # The token is in this one command's URL, not in the remote. No hooks:
+          # .git was within reach of everything that ran before this step.
+          git -c core.hooksPath=/dev/null push \
+            "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
           {
             echo "Weekly scrape of custofinal.blogspot.com."
             echo
@@ -76,19 +107,26 @@ jobs:
             cat scrape.log
             echo '```'
             echo
-            if [ "${{ steps.scrape.outputs.code }}" = 3 ]; then
+            if [ "$TESTS" != success ]; then
+              echo "**Tests failed** on this change ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)), and the required \`test\` check fails here too: fix them before merging."
+              echo
+            fi
+            if [ "$SCRAPE_CODE" = 3 ]; then
               echo "**Unmapped networks**: add them to \`offers/networks.json\` (operator ids from \`npm run offers:gaps\`), or those rows stay out."
               echo
             fi
             echo "Check the diff for prices that look wrong. Fixes go in \`offers/manual.json\`, never in this file."
           } > body.md
-          gh pr create --title "offers: custofinal $(date -u +%F)" --body-file body.md
-      # The blog moved, changed its layout, or the feed is down: tell someone,
-      # so stale prices don't go unnoticed for weeks.
+          gh pr create --head "$BRANCH" --title "offers: custofinal $(date -u +%F)" --body-file body.md
+      # The blog moved, changed its layout, the feed is down, or the App key
+      # expired: tell someone, so stale prices don't go unnoticed for weeks.
+      # GH_REPO because a job that failed before checkout has no git remote
+      # for gh to read the repo from.
       - name: Notify on failure
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh issue create --title "Offers scrape failed (run $GITHUB_RUN_ID)" \
             --body "The weekly scrape of custofinal.blogspot.com failed; offers/custofinal.json stays as it was. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

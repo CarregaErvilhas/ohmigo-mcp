@@ -18,8 +18,72 @@
 // writes offers/custofinal.json; src/offers.js loads it.
 //
 // The parser is strict on purpose: an unknown column header, a missing
-// caption or zero rows throw, so a change in the blog's layout fails the
-// weekly job loudly instead of quietly publishing wrong prices.
+// caption, zero rows, a price cell that isn't a number or a row that fails
+// offerProblems() throw, so a change in the blog's layout (or a typo in it)
+// fails the weekly job loudly instead of quietly publishing wrong prices.
+
+// Where every scraped offer must come from.
+export const BLOG_HOST = 'custofinal.blogspot.com';
+
+// What a final price can plausibly be, in €/kWh. Wide on purpose: this is not
+// a judgement on the market, it catches a lost decimal comma (41 for 0,41) or
+// a wrong unit. A person still reads every price change in the pull request.
+export const MIN_EUR_PER_KWH = 0.05;
+export const MAX_EUR_PER_KWH = 2;
+// Labels are shown to assistants and to people, so one that's suddenly a
+// paragraph isn't an operator name any more.
+export const MAX_LABEL_LENGTH = 100;
+
+// Control characters, or the brackets of a tag that survived decoding.
+const UNSAFE_TEXT = /[\p{Cc}<>]/u;
+
+// Everything wrong with an offer, as sentences (none = sane). Checks only the
+// fields it's given: the parser calls it with a bare row, and a manual.json
+// override lists just what it changes. `hosts`: where its source may be.
+export function offerProblems(offer, hosts = [BLOG_HOST]) {
+  const problems = [];
+  for (const field of ['label', 'provider', 'plan', 'network']) {
+    const text = offer[field];
+    if (text == null) continue;
+    if (typeof text !== 'string') problems.push(`${field} is not text`);
+    else if (text.length > MAX_LABEL_LENGTH) problems.push(`${field} is too long (${text.length}, at most ${MAX_LABEL_LENGTH})`);
+    else if (UNSAFE_TEXT.test(text)) problems.push(`${field} ${JSON.stringify(text)} has control characters or angle brackets`);
+  }
+  for (const [band, price] of Object.entries(offer.prices || {})) {
+    if (price === null) continue;
+    if (typeof price !== 'number' || !(price >= MIN_EUR_PER_KWH && price <= MAX_EUR_PER_KWH)) {
+      problems.push(`${band} price ${price} is out of bounds (${MIN_EUR_PER_KWH} to ${MAX_EUR_PER_KWH} €/kWh)`);
+    }
+  }
+  if ('source' in offer) {
+    const url = URL.parse(offer.source);
+    if (url?.protocol !== 'https:' || !hosts.includes(url.host)) problems.push(`source ${offer.source} is not https on ${hosts.join(' or ')}`);
+  }
+  return problems;
+}
+
+function assertSane(offer) {
+  const problems = offerProblems(offer);
+  if (problems.length) throw new Error(`offer ${JSON.stringify(offer.label)}: ${problems.join('; ')}`);
+}
+
+// The price post to read: the newest by publication date, of the posts with a
+// price table. Not by `updated`: an author fixing a typo in a months-old post
+// would make its old prices look like the latest ones.
+export function newestPost(entries) {
+  return entries
+    .filter(e => /class="[^"]*evtable/.test(e.content?.$t || ''))
+    .sort((a, b) => Date.parse(b.published.$t) - Date.parse(a.published.$t))[0];
+}
+
+// One price cell, "0,41" -> 0.41. Empty (or missing) means not offered at this
+// power; anything else that isn't a number is a table we can't read.
+function priceOf(cell = '', name) {
+  if (!cell) return null;
+  const v = cell.replace(',', '.');
+  if (!/^\d+(\.\d+)?$/.test(v)) throw new Error(`offer ${JSON.stringify(name)}: price "${cell}" is not a number`);
+  return Number(v);
+}
 
 // Header label -> band key. The bands are the blog's; see bandFor().
 export const BANDS = {
@@ -60,14 +124,14 @@ export function parseTables(html) {
     if (!rows.length) throw new Error(`table "${caption}": no rows`);
     out.push({
       caption, kind, bands,
-      rows: rows.map(([name, network, ...vals]) => ({
-        name, network,
+      rows: rows.map(([name, network, ...vals]) => {
         // Some rows stop early (no trailing empty cells): missing = not offered.
-        prices: Object.fromEntries(bands.map((k, i) => {
-          const v = (vals[i] || '').replace(',', '.');
-          return [k, v && Number.isFinite(Number(v)) ? Number(v) : null];
-        })),
-      })),
+        const prices = Object.fromEntries(bands.map((k, i) => [k, priceOf(vals[i], name)]));
+        // Checked here, not only in toOffers(): rows it leaves out still reach
+        // the pull request through `unmapped` and `skipped`.
+        assertSane({ label: name, network, prices });
+        return { name, network, prices };
+      }),
     });
   }
   if (!out.length) throw new Error('no price tables found');
@@ -103,7 +167,7 @@ export function toOffers(tables, networks, source) {
       if (where.scope === 'unknown') { skipped.push(`${r.name} @ ${r.network}`); continue; }
       const { provider, plan } = splitName(r.name);
       const fee = t.kind === 'subscription' ? feeOf(r.name) : null;
-      offers.push({
+      const offer = {
         id: slug(`${r.name} ${r.network}`),
         label: r.name, provider, plan, network: r.network,
         scope: where.scope === 'mobie' ? { mobie: true } : { operatorIds: where.operatorIds },
@@ -113,7 +177,9 @@ export function toOffers(tables, networks, source) {
         fee,
         prices: r.prices,
         source: source.url, checkedAt: source.checkedAt, origin: source.origin,
-      });
+      };
+      assertSane(offer);
+      offers.push(offer);
     }
   }
   return { offers, unmapped: [...unmapped], skipped };
