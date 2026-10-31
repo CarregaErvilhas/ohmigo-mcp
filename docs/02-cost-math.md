@@ -208,7 +208,7 @@ bank card / QR, and when the NAP price is missing (live feed down) the
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the
   cheapest popular one that needs no other contract);
-- **`best`**: the cheapest option anyone can use right now, meaning no
+- **`best`**: the cheapest option the user can use right now, meaning no
   subscription and no other contract. With `tariff_ids`, a tariff the user
   listed counts even with conditions (`listed`: they have it), and a cheaper
   CEME tariff they didn't list is never `best`: it stays in `options` as a tip
