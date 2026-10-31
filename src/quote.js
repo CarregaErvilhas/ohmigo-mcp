@@ -380,7 +380,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));
   if (tips.length) base.promos = tips;
   base.options.push(...extras);
-  base.best = bestOption(base.options, base.total);
+  base.best = bestOption(base.options, base.total, !!tariffIds?.length);
   base.omieSpotEurKwh = sim.omieSpot?.eurKwh ?? null;
   base.pricedAt = sim.at;
   if (want) {
@@ -394,11 +394,15 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
 }
 
 // The cheapest option open to anyone. A CEME option only counts when its
-// total is complete (operator fee known).
-function bestOption(options, total) {
-  const open = options.filter(o => !o.requiresOtherContract && !o.subscription && !o.newCustomersOnly
-    && (o.kind !== 'ceme' || total?.complete));
-  return open.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
+// total is complete (operator fee known). With the user's tariffs (hasTariffs)
+// the CEME options are theirs: they count even with conditions, since the
+// user has them, and a cheaper tariff they don't have (cheaperElsewhere) is a
+// tip: taking it means signing up to another CEME first.
+function bestOption(options, total, hasTariffs = false) {
+  const openToAnyone = o => !o.requiresOtherContract && !o.subscription && !o.newCustomersOnly;
+  const usable = options.filter(o => o.kind !== 'ceme' ? openToAnyone(o)
+    : total?.complete && (hasTariffs ? !o.cheaperElsewhere : openToAnyone(o)));
+  return usable.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
 }
 
 // Statuses where a car can plug in now. "unknown" stays in (a lot of the
