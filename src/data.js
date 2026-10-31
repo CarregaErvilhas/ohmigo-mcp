@@ -151,8 +151,9 @@ export class Dataset {
       return false;
     };
     // Some NAP cities carry their own comma ("Lagoa, Faro" and "Lagoa, Azores").
-    let hits = this.sites.filter(s => fold(s.city) === full);
-    if (!hits.length) hits = this.sites.filter(s => fold(s.city) === q);
+    // Cleaned on both sides: a city can end in punctuation too.
+    let hits = this.sites.filter(s => clean(s.city ?? '') === full);
+    if (!hits.length) hits = this.sites.filter(s => clean(s.city ?? '') === q);
     if (hits.length) return hits;
     hits = this.sites.filter(s => prefix(s.city ?? ''));
     if (!hits.length && q.length >= 4) {

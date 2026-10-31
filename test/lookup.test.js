@@ -102,6 +102,14 @@ test('resolvePlace: the town before a comma', () => {
   assert.equal(ds.resolvePlace(', '), null);
 });
 
+test('resolvePlace: a city that ends in punctuation still matches exactly', () => {
+  const two = new Dataset({ schema: 1, generatedAt: '2026-10-28T00:00:00Z', sites: [
+    site('X-MAD-1', 'MAD-1', 'Calheta (Madeira)', 'Rua A', 'Op', 'OPOP', 32.7, -17.1),
+    site('X-AZO-1', 'AZO-1', 'Calheta (Açores)', 'Rua B', 'Op', 'OPOP', 38.6, -28.0),
+  ] });
+  assert.equal(two.resolvePlace('Calheta (Madeira)').lat, 32.7);
+});
+
 test('resolvePlace: punctuation around the name is not part of it', () => {
   for (const name of ['Leiria.', 'Leiria!', '"Leiria"', 'Leiria?', 'leiria...']) assert.ok(ds.resolvePlace(name), name);
   assert.equal(ds.resolvePlace('...'), null);
