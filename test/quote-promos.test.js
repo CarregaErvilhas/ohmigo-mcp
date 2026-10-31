@@ -176,6 +176,108 @@ test('rank: MOBI.E and outside MOBI.E share one list, the price decides', async 
   assert.deepEqual(ranked.map(q => q.regime), ['sem_ceme', 'mobie']);
 });
 
+describe('only the promotions that moved a total are claimed', () => {
+  const ENERGY = { ...LUZ_PROMO, newCustomers: false, maxHours: undefined };
+  const SMALL = { ...ENERGY, id: 'energy-small', eurKwh: 0.05, totalEur: 7 };
+  const BIG = { ...ENERGY, id: 'energy-big', eurKwh: 0.1, totalEur: 6 };
+  const tariff = (promos, extra) => quote('t-bt-a', 'Tariff', 'A', 8, { promos, ...extra });
+  // Each test its own day: ceme.js caches by time and kWh.
+  const go = (data, day, opts = {}, p = point, operator = 'HORZ') => {
+    sim = { ...SIM, data };
+    return quotePoint({ site: site(operator), point: p }, car, { at: new Date(`2026-12-${day}T12:00:00Z`), lang: 'en', tariffIds: ['t-bt-a'], ...opts });
+  };
+  const claims = q => q.assumptions.filter(a => a.startsWith('includes the promotion'));
+  after(() => { sim = SIM; });
+
+  test('two energy promotions: the total, option.promos and the assumption name the lowest; the other stays a tip', async () => {
+    const q = await go([tariff([SMALL, BIG])], '01');
+    const fee = 1 + 0.2 * q.session.kwhBilled;
+    const o = q.options.find(x => x.tariffId === 't-bt-a');
+    assert.equal(o.total, r2(6 + fee * 1.23));
+    assert.deepEqual(o.promos, [BIG.id]);
+    assert.equal(claims(q).length, 1);
+    assert.match(claims(q)[0], /−0\.10 €\/kWh/);
+    assert.deepEqual(q.promos.map(p => [p.id, p.applied]), [[BIG.id, true], [SMALL.id, false]]);
+    assert.match(q.promos[1].note, /doesn't add to a better promotion/);
+  });
+
+  test('an all-in price overrides the rest: the others are tips, not claims', async () => {
+    const q = await go([tariff([MIIO_PROMO, BIG, { ...UVE_PROMO, network: 'Powerdot', totalEur: 1 }])], '02');
+    assert.equal(q.headline.total, 1);
+    assert.deepEqual(q.headline.promos, [UVE_PROMO.id]);
+    assert.equal(q.headline.opcDiscountPct, undefined);
+    assert.equal(claims(q).length, 1);
+    assert.equal(q.promos.find(p => p.id === UVE_PROMO.id).applied, true);
+    assert.equal(q.promos.find(p => p.id === BIG.id).applied, false);
+    assert.equal(q.promos.find(p => p.id === MIIO_PROMO.id).applied, false);
+  });
+
+  test('an energy and an OPC promotion stack: both claimed', async () => {
+    const q = await go([tariff([BIG, MIIO_PROMO])], '03');
+    assert.deepEqual(q.headline.promos, [BIG.id, MIIO_PROMO.id]);
+    assert.equal(claims(q).length, 2);
+  });
+
+  test('an OPC discount where the operator fee is unknown is not claimed', async () => {
+    const q = await go([tariff([MIIO_PROMO])], '04', {}, { ...point, opc: {} });
+    assert.equal(q.headline.promos, undefined);
+    assert.equal(q.headline.opcDiscountPct, undefined);
+    assert.equal(claims(q).length, 0);
+  });
+
+  test('free kWh all used: priced without them, not claimed, and the row says why', async () => {
+    const gold = { id: 'gold-7', network: null, target: 'KWH_GRATIS', freeKwh: 7, freeKwhLeft: 0, monthKwhKnown: true, totalEur: 8, newCustomers: false, from: '2026-10-29', to: '2026-12-31', url: 'https://example.pt', checked: '2026-10-29' };
+    const q = await go([tariff([gold])], '05');
+    assert.equal(q.headline.promos, undefined);
+    assert.equal(claims(q).length, 0);
+    const row = q.promos.find(p => p.id === gold.id);
+    assert.equal(row.applied, false);
+    assert.match(row.note, /0 of this month's 7 free kWh left/);
+  });
+
+  test('a promotion on their tariff and on the cheaper tip: the row and the assumption are about theirs', async () => {
+    const q = await go([quote('enable-bt-simples', 'Enable Mobility', 'Tarifa Simples', 0.05, { popular: false, promos: [MIIO_PROMO] }), tariff([MIIO_PROMO])], '06');
+    assert.equal(q.options.find(o => o.notYours).tariffId, 'enable-bt-simples');
+    const row = q.promos.find(p => p.id === MIIO_PROMO.id);
+    assert.deepEqual([row.tariffId, row.applied, row.ceme], ['t-bt-a', true, 'Tariff']);
+    assert.equal(claims(q).length, 1);
+    assert.match(claims(q)[0], /Tariff at Powerdot/);
+  });
+
+  test('a promotion beaten on their tariff but winning on the tip is claimed nowhere', async () => {
+    const onTip = { ...SMALL, totalEur: 0.01 };
+    const q = await go([quote('enable-bt-simples', 'Enable Mobility', 'Tarifa Simples', 0.05, { popular: false, promos: [onTip] }), tariff([SMALL, BIG])], '07');
+    assert.deepEqual(q.options.find(o => o.notYours).promos, [SMALL.id]);
+    assert.deepEqual(q.headline.promos, [BIG.id]);
+    assert.equal(q.promos.find(p => p.id === SMALL.id).applied, false);
+    assert.equal(claims(q).length, 1);
+  });
+
+  test('an open-ended promotion in a total: the assumption has no end date', async () => {
+    for (const [lang, day] of [['en', '08'], ['pt', '09']]) {
+      const q = await go([tariff([{ ...BIG, to: null }])], day, { lang });
+      const claim = q.assumptions.find(a => /promo/.test(a));
+      assert.ok(claim);
+      assert.doesNotMatch(claim, /null|until|\(até/);
+      assert.equal(q.promos[0].until, null);
+      assert.doesNotMatch(q.promos[0].note, /null|until|até/);
+    }
+  });
+
+  test('a target this code does not know takes out neither the tariff nor the quote', async t => {
+    const warn = t.mock.method(console, 'warn', () => {});
+    const odd = { ...MIIO_PROMO, id: 'odd', network: null, target: 'FUTURE_TARGET' };
+    const q = await go([tariff([odd]), quote('t-bt-b', 'Other', 'B', 50, { promos: [odd, MIIO_PROMO] })], '10', { tariffIds: undefined });
+    const fee = 1 + 0.2 * q.session.kwhBilled;
+    assert.equal(q.headline.tariffId, 't-bt-a');
+    assert.equal(q.headline.total, r2(8 + fee * 1.23));
+    assert.equal(q.headline.promos, undefined);
+    assert.deepEqual(q.options.find(o => o.tariffId === 't-bt-b').promos, [MIIO_PROMO.id]);
+    assert.ok(!q.promos.some(p => p.id === 'odd'));
+    assert.equal(warn.mock.calls.filter(c => c.arguments.join(' ').includes('FUTURE_TARGET')).length, 1);
+  });
+});
+
 describe('with tariff_ids, best is what the user can pay with', () => {
   before(() => { sim = HELD_SIM; });
   after(() => { sim = SIM; });

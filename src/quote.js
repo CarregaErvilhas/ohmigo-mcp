@@ -145,7 +145,7 @@ function cemeOption(t, { site, opc, vat, detail }) {
     // A tariff only for people who sign up now, often a dated campaign
     // (`until`: its last day). Never the headline or `best` by default.
     ...(t.newCustomers && { newCustomersOnly: true }), ...(t.valid_until && { until: t.valid_until }),
-    ...(promos.length && { promos: promos.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }), ...(w.final && { opcIncluded: true }) }),
+    ...(w.applied.length && { promos: w.applied.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }), ...(w.final && { opcIncluded: true }) }),
   };
 }
 
@@ -413,10 +413,15 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
       base.options.push(tariffIds?.length ? notYours(tip, t) : tip);
     }
   }
-  // Promotions: the ones already in a shown total get an assumption; all of
-  // them at this network (new-customer ones included) are listed as tips.
-  // A tip's promotion isn't in any price the user pays: its note discloses it.
-  const applied = new Set(base.options.filter(o => !o.notYours).flatMap(o => o.promos || []));
+  // Promotions: the ones that took effect in a shown total get an assumption;
+  // all of them at this network (new-customer ones, and those that lost to a
+  // better one, included) are listed as tips. A notYours option's promotion
+  // isn't in any price the user pays: its note discloses it. `applied` keeps
+  // the tariff too: one promotion can win on one tariff and lose on another.
+  const applied = new Map();
+  for (const o of base.options.filter(x => !x.notYours)) {
+    for (const id of o.promos || []) applied.set(id, (applied.get(id) ?? new Set()).add(o.tariffId));
+  }
   const shownIds = new Set(base.options.map(o => o.tariffId));
   const tips = promoTips(applicable(quotes, point), site, { opc, vat, applied, shown: shownIds }, t);
   for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));
