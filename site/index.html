@@ -53,11 +53,11 @@
   a { color: var(--green); }
   /* The browser's own ring is thin and easy to lose on the tinted sections. */
   :focus-visible { outline: 3px solid var(--green-ink); outline-offset: 2px; }
-  /* <main> takes focus only as the skip link's target; it isn't a control. */
-  main:focus { outline: none; }
   .skip { position: absolute; left: 12px; top: -80px; z-index: 30; background: var(--card); color: var(--fg); font-weight: 800;
     padding: 10px 18px; border-radius: 999px; box-shadow: var(--shadow); }
   .skip:focus { top: 8px; }
+  /* The skip link's target: without this it lands under the sticky header. */
+  #conteudo { scroll-margin-top: 76px; }
   b, strong { font-weight: 800; }
   .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
   section { padding: 72px 0; }
@@ -276,7 +276,7 @@
 </style>
 </head>
 <body>
-<a class="skip" href="#top" data-i="a11y.skip"></a>
+<a class="skip" href="#conteudo" data-i="a11y.skip"></a>
 
 <!-- The mascot, defined once and reused with <use>. A plug with a face. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -321,12 +321,12 @@
   </nav>
 </header>
 
-<main id="top" tabindex="-1">
+<main id="top">
   <section class="hero">
     <div class="wrap hero-grid">
       <div>
         <span class="eyebrow" data-i="hero.eyebrow"></span>
-        <h1 data-i="hero.title"></h1>
+        <h1 id="conteudo" tabindex="-1" data-i="hero.title"></h1>
         <p class="lead" data-i="hero.lead"></p>
         <div class="ctas">
           <a class="btn btn-main" href="#instalar" data-i="hero.cta"></a>
@@ -577,7 +577,7 @@
   "pt": {
     "meta.title": "ohmigo · onde carregar o carro elétrico mais barato em Portugal",
     "meta.desc": "Pergunta ao ChatGPT, ao Claude ou ao Grok onde é mais barato carregar o teu carro elétrico em Portugal. Grátis, sem registo.",
-    "meta.ogalt": "A mascote do ohmigo, uma ficha verde sorridente, ao lado do texto: ohmigo, onde é mais barato carregar o teu carro elétrico em Portugal.",
+    "meta.ogalt": "A mascote do ohmigo, uma ficha verde sorridente, ao lado do texto: ChatGPT · Claude · Grok, ohmigo, onde é mais barato carregar o teu carro elétrico em Portugal, ohmigo.ocarroeletrico.com.",
     "a11y.skip": "Saltar para o conteúdo",
     "a11y.nav": "Principal",
     "a11y.langs": "Idioma",
@@ -701,7 +701,7 @@
   "en": {
     "meta.title": "ohmigo · the cheapest place to charge your EV in Portugal",
     "meta.desc": "Ask ChatGPT, Claude or Grok where it's cheapest to charge your EV in Portugal. Free, no sign-up.",
-    "meta.ogalt": "ohmigo's mascot, a smiling green plug, next to the words: ohmigo, where it's cheapest to charge your EV in Portugal.",
+    "meta.ogalt": "ohmigo's mascot, a smiling green plug, next to the line ChatGPT · Claude · Grok, the name ohmigo, and a sentence in Portuguese on where charging an EV in Portugal is cheapest.",
     "a11y.skip": "Skip to content",
     "a11y.nav": "Main",
     "a11y.langs": "Language",
