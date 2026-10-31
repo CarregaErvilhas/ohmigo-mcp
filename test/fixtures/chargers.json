@@ -61,13 +61,29 @@
     "apps",
     "rfid"
    ],
+   "name": "Galp Marrazes",
+   "hours": "24/7",
+   "phone": "800222222",
+   "osm": {
+    "openingHours": "24/7",
+    "cards": true,
+    "payment": [
+     "app",
+     "cards"
+    ],
+    "manufacturer": "Efacec",
+    "capacity": 2
+   },
    "points": [
     {
      "id": "LRA-00156-01",
      "kw": 22,
+     "v": 400,
+     "a": 32,
      "connector": "T2",
      "dc": false,
      "phases": 1,
+     "cable": false,
      "level": "MT",
      "regime": "mobie",
      "opc": {
@@ -106,9 +122,12 @@
     {
      "id": "LRA-00156-02",
      "kw": 50,
+     "v": 920,
+     "a": 125,
      "connector": "CCS",
      "dc": true,
      "phases": null,
+     "cable": true,
      "level": "MT",
      "regime": "mobie",
      "opc": {
@@ -142,14 +161,20 @@
         }
        ]
       }
+     },
+     "osm": {
+      "v": 1000
      }
     },
     {
      "id": "LRA-00156-03",
      "kw": 50,
+     "v": 500,
+     "a": 125,
      "connector": "CHADEMO",
      "dc": true,
      "phases": null,
+     "cable": true,
      "level": "MT",
      "regime": "mobie",
      "opc": {
@@ -201,13 +226,18 @@
    "payment": [
     "apps"
    ],
+   "hours": "Mo-Su 09:00-21:00",
+   "locationDescription": "Parque Coberto - Piso -1",
    "points": [
     {
      "id": "9648PL0001.01",
      "kw": 22,
+     "v": 400,
+     "a": 32,
      "connector": "T2",
      "dc": false,
      "phases": 3,
+     "cable": false,
      "level": null,
      "regime": "sem_ceme",
      "napPrice": 0.37
@@ -215,9 +245,12 @@
     {
      "id": "9648PL0001.02",
      "kw": 22,
+     "v": 400,
+     "a": 32,
      "connector": "T2",
      "dc": false,
      "phases": 3,
+     "cable": false,
      "level": null,
      "regime": "sem_ceme",
      "napPrice": 0.37
@@ -236,25 +269,38 @@
    "operatorId": "CONT",
    "website": null,
    "payment": [
-    "apps"
+    "apps",
+    "creditCard"
    ],
+   "osm": {
+    "cards": true
+   },
    "points": [
     {
      "id": "9648PR0002.01",
      "kw": 120,
+     "v": 1000,
+     "a": 200,
      "connector": "CCS",
      "dc": true,
      "phases": null,
+     "cable": true,
      "level": null,
      "regime": "sem_ceme",
-     "napPrice": 0.37
+     "napPrice": 0.37,
+     "osm": {
+      "kw": 150
+     }
     },
     {
      "id": "9648PR0002.02",
      "kw": 50,
+     "v": 500,
+     "a": 125,
      "connector": "CHADEMO",
      "dc": true,
      "phases": null,
+     "cable": true,
      "level": null,
      "regime": "sem_ceme",
      "napPrice": 0.37
@@ -262,9 +308,12 @@
     {
      "id": "9648PR0002.03",
      "kw": 120,
+     "v": 1000,
+     "a": 200,
      "connector": "CCS",
      "dc": true,
      "phases": null,
+     "cable": true,
      "level": null,
      "regime": "sem_ceme",
      "napPrice": 0.37

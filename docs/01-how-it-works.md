@@ -72,8 +72,9 @@ Follow one `find_cheapest_charging` call through the code:
 | `src/server.js` | HTTP server, boot, health check, landing page, weekly dataset swap |
 | `src/mcp.js` | Tools, argument schemas, the instructions the assistant reads |
 | `src/i18n.js` | Every user-facing sentence, in English and Portuguese |
-| `src/data.js` | Loads the dataset; searches by distance and along a route; town names to coordinates |
+| `src/data.js` | Loads the dataset; searches by distance, along a route or the whole country; town names to coordinates; the operator list (`list_operators`) |
 | `src/geo.js` | Distances: haversine, distance to a route |
+| `src/hours.js` | Opening hours (NAP and OpenStreetMap, both in OSM syntax): is the site open at a given moment |
 | `src/lookup.js` | Finds a charger by what the user calls it: code, operator or brand, OSM name, town, address |
 | `src/direction.js` | Motorway service areas: which side the driver can reach, from where they're heading |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |

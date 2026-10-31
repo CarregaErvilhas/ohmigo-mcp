@@ -109,6 +109,18 @@ export const MESSAGES = {
     'assume.bothSides': ({ to }) => `both sides of the motorway service area are listed: the data can't tell which one serves driving towards ${to}; the signs will`,
     'credit.osm': () => '"osm" data © OpenStreetMap contributors (ODbL), openstreetmap.org/copyright',
     'note.partial': ({ words }) => `No charger matches every word; the best ones lack: ${words}. Don't present them as the charger the user meant without saying so.`,
+    'assume.voltage': () => 'Voltage is what OpenStreetMap mapped for the socket (read off the charger by the community) or, where it has none, what the operator declares on the NAP, where some DC sockets carry a placeholder (750 or 600 V) instead of the real value. Sockets with no known voltage are left out.',
+    'note.osmSockets': () => 'Where napKw, napVolts or napAmps appear, kw/volts/amps come from OpenStreetMap (read off the charger by the community), which is usually more accurate than what the operator declares on the NAP (the nap* value).',
+    'note.hoursDisagree': ({ site, nap, osm }) => `${site}: the opening hours disagree right now (NAP: ${nap}; OpenStreetMap: ${osm}); it counts as closed when either says so. Tell the user to check before going.`,
+    'note.cardDisagree': ({ site, napYes }) => napYes
+      ? `${site}: the NAP lists bank card payment, but OpenStreetMap says there's no card terminal; tell the user to check on site.`
+      : `${site}: OpenStreetMap says a bank card works here, but the NAP doesn't list it; tell the user to check on site.`,
+    'assume.osmKw': ({ kw, nap }) => `charger power ${fmt('en', kw, 1)} kW as mapped on OpenStreetMap (the NAP declares ${nap == null ? 'none' : `${fmt('en', nap, 1)} kW`})`,
+    'assume.closedAt': ({ hours }) => `by its opening hours (${hours}) this charger is closed when the session starts; check before going`,
+    'note.noVoltage': () => 'The charger data loaded now has no socket voltages yet, so min_voltage was ignored: these results are not filtered by voltage.',
+    'err.whereOrFilter': () => 'Give lat+lon, place or route, or, to search the whole country, at least one filter (query, region, min_kw, min_voltage, connectors, dc_only, card_payment, cable_attached, open_now).',
+    'note.nationwide': ({ shown, total }) => `No place given, so all of Portugal (or the region asked) was searched: ${total} sites match, most powerful first; showing ${shown}. For a full list, narrow with region or query, or raise limit.`,
+    'note.operators': () => 'Operators as the NAP publishes them (every public charger in Portugal, on MOBI.E and outside it), grouped by NAP operatorId. Not the DGEG registry: an operator registered with the DGEG but with no charger on the NAP is not here.',
   },
   pt: {
     'progress.live': () => 'A obter o estado dos postos em tempo real no PAN…',
@@ -198,6 +210,18 @@ export const MESSAGES = {
     'assume.bothSides': ({ to }) => `estão os dois lados da área de serviço: os dados não dizem qual serve quem vai para ${to}; as placas dizem`,
     'credit.osm': () => 'Dados "osm" © contribuidores do OpenStreetMap (ODbL), openstreetmap.org/copyright',
     'note.partial': ({ words }) => `Nenhum posto tem todas as palavras; aos melhores falta: ${words}. Não os apresentes como o posto que o utilizador queria sem o dizer.`,
+    'assume.voltage': () => 'A tensão é a que o OpenStreetMap tem para a tomada (lida no posto pela comunidade) ou, onde não tem, a que o operador declara no PAN, onde algumas tomadas DC têm um valor de reserva (750 ou 600 V) em vez do real. As tomadas sem tensão conhecida ficam de fora.',
+    'note.osmSockets': () => 'Onde aparecem napKw, napVolts ou napAmps, kw/volts/amps vêm do OpenStreetMap (lidos no posto pela comunidade), que costuma estar mais certo do que o que o operador declara no PAN (o valor nap*).',
+    'note.hoursDisagree': ({ site, nap, osm }) => `${site}: os horários não batem certo agora (PAN: ${nap}; OpenStreetMap: ${osm}); conta como fechado quando um deles o diz. Diz ao utilizador para confirmar antes de ir.`,
+    'note.cardDisagree': ({ site, napYes }) => napYes
+      ? `${site}: o PAN indica pagamento com cartão bancário, mas o OpenStreetMap diz que não há terminal; diz ao utilizador para confirmar no local.`
+      : `${site}: o OpenStreetMap diz que dá para pagar com cartão bancário, mas o PAN não o indica; diz ao utilizador para confirmar no local.`,
+    'assume.osmKw': ({ kw, nap }) => `potência do posto ${fmt('pt', kw, 1)} kW, como está no OpenStreetMap (o PAN declara ${nap == null ? 'nenhuma' : `${fmt('pt', nap, 1)} kW`})`,
+    'assume.closedAt': ({ hours }) => `pelo horário (${hours}), este posto está fechado à hora de início da sessão; confirma antes de ir`,
+    'note.noVoltage': () => 'Os dados de postos carregados agora ainda não têm a tensão das tomadas, por isso o min_voltage foi ignorado: estes resultados não estão filtrados por tensão.',
+    'err.whereOrFilter': () => 'Indica lat+lon, place ou route, ou, para pesquisar o país todo, pelo menos um filtro (query, region, min_kw, min_voltage, connectors, dc_only, card_payment, cable_attached, open_now).',
+    'note.nationwide': ({ shown, total }) => `Sem sítio indicado, pesquisou-se Portugal todo (ou a região pedida): ${total} locais servem, os mais potentes primeiro; a mostrar ${shown}. Para a lista completa, restringe com region ou query, ou aumenta o limit.`,
+    'note.operators': () => 'Operadores tal como o PAN os publica (todos os postos públicos em Portugal, na MOBI.E e fora dela), agrupados pelo operatorId do PAN. Não é o registo da DGEG: um operador registado na DGEG sem postos no PAN não aparece.',
   },
 };
 
