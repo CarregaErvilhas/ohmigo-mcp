@@ -161,9 +161,24 @@ function health() {
   };
 }
 
-const httpServer = createHttp(async (req, res) => {
+// The request target as a URL, or null when it doesn't parse. A target is a
+// path ("/mcp?x=1"), but a URL parser reads a leading "//" (or "/\\": in http
+// URLs a backslash counts as a slash) as "a host comes next". So those are
+// parsed again glued to the base, which leaves the whole thing as the path.
+function parseTarget(target) {
+  try {
+    const url = new URL(target, 'http://x');
+    return /^\/[/\\]/.test(target) ? new URL(`http://x${target}`) : url;
+  } catch { return null; }
+}
+
+async function handle(req, res) {
   for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
-  const url = new URL(req.url, 'http://x');
+  const url = parseTarget(req.url);
+  if (!url) {
+    console.warn('[ohmigo] bad request target:', JSON.stringify(req.url.slice(0, 200)));
+    return send(res, 400, 'bad request\n', 'text/plain; charset=utf-8');
+  }
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   // Health check for the hosting platform (and for you: it shows how fresh
   // the data is).
@@ -226,7 +241,7 @@ const httpServer = createHttp(async (req, res) => {
   // Responses go out as a stream (SSE), not one JSON blob, so a progress
   // message can reach the user while a tool waits for the live feed.
   const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  res.on('close', () => { transport.close(); server.close(); });
+  res.on('close', () => { closing(() => transport.close()); closing(() => server.close()); });
   try {
     await server.connect(transport);
     await transport.handleRequest(req, res, body);
@@ -234,6 +249,19 @@ const httpServer = createHttp(async (req, res) => {
     console.error('[ohmigo]', e);
     if (!res.headersSent) send(res, 500, { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null });
   }
+}
+
+// Node ends the process on a promise rejection nobody handles, so the two
+// things that run outside handle()'s own promise chain catch their own: the
+// handler as a whole, and the cleanup after the response has closed.
+const closing = close => Promise.resolve().then(close).catch(e => console.error('[ohmigo] close:', e));
+
+const httpServer = createHttp((req, res) => {
+  handle(req, res).catch(e => {
+    console.error('[ohmigo] request:', e);
+    if (res.headersSent) res.destroy();
+    else send(res, 500, 'internal error\n', 'text/plain; charset=utf-8');
+  });
 }).listen(PORT, HOST, () => console.log(`[ohmigo] ${VERSION} http://${HOST}:${httpServer.address().port}/mcp`));
 
 // A deploy sends SIGTERM to the old process: stop taking connections, let

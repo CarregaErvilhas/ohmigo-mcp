@@ -7,8 +7,9 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { connect } from 'node:net';
 
-let ceme, cemeDown = false, server, base;
+let ceme, cemeDown = false, server, base, serverLog = '';
 
 before(async () => {
   // Fake ceme-v2: one tariff, priced at 0.2 €/kWh.
@@ -42,6 +43,7 @@ before(async () => {
   });
   let out = '';
   server.stdout.on('data', c => { out += c; });
+  server.stderr.on('data', c => { serverLog += c; });
   base = await new Promise((resolve, reject) => {
     server.stdout.on('data', () => { const m = out.match(/http:\/\/(\S+?)\/mcp/); if (m) resolve(`http://${m[1]}`); });
     server.on('exit', code => reject(new Error(`server exited ${code}: ${out}`)));
@@ -61,6 +63,24 @@ async function call(name, args) {
 }
 
 const car = { battery_kwh: 58, start_pct: 20 };
+
+// fetch() cleans a URL up before sending it, so odd request targets need a
+// socket. Sends `head`, then `body` if any, and resolves with what came back
+// by the time the server closes the connection.
+function rawRequest(head, body = '') {
+  return new Promise((resolve, reject) => {
+    const { hostname, port } = new URL(base);
+    const socket = connect(Number(port), hostname);
+    let got = '';
+    socket.on('data', c => { got += c; });
+    // The server may close while we're still writing; what it sent still counts.
+    socket.on('error', e => { if (e.code !== 'EPIPE' && e.code !== 'ECONNRESET') reject(e); });
+    socket.on('close', () => resolve(got));
+    socket.setTimeout(5_000, () => socket.destroy());
+    socket.write(`${head}\r\n\r\n${body}`);
+  });
+}
+const get = target => rawRequest(`GET ${target} HTTP/1.1\r\nHost: x\r\nConnection: close`);
 
 test('http: every tool is read-only and talks to the outside world', async () => {
   const { tools } = await call('tools/list');
@@ -328,6 +348,23 @@ test('http: the view gets the bridge, the version and no raw coordinates', async
   assert.doesNotMatch(html, /__BRIDGE__|__VERSION__/);
   assert.doesNotMatch(html, /data-lat="\$\{q\.lat\}"/);
   assert.match(html, /renderError/);
+});
+
+test('http: a request target that does not parse gets a 400, is logged, and the server keeps answering', async () => {
+  for (const target of ['//', '//:', '/\\', 'http://[']) {
+    assert.match(await get(target), /^HTTP\/1\.1 400 /, target);
+    assert.match(serverLog, /bad request target/, target);
+    assert.equal((await fetch(`${base}/healthz`)).status, 200, target);
+  }
+});
+
+test('http: the path is the path: a target starting with two slashes names no host', async () => {
+  // Parsed against a base URL, these would read as host "evil" and path "/mcp".
+  for (const target of ['//evil/mcp', '/\\evil/mcp', '///evil/mcp', '//evil/healthz']) {
+    assert.match(await get(target), /^HTTP\/1\.1 404 /, target);
+  }
+  // A proxy's absolute form is still a normal request for its path.
+  assert.match(await get('http://example.com/healthz'), /^HTTP\/1\.1 200 /);
 });
 
 // Last: it stops the server.
