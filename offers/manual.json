@@ -4,10 +4,10 @@
   "offers": [
     {
       "id": "atlante-app-myatlante-rede-mobi-e",
-      "cemeTariffs": ["atlante-myatlanteac", "atlante-myatlantebus"],
+      "cemeTariffs": ["atlante-myatlanteac"],
       "source": "https://atlante.energy/pt-pt/tarifas-de-energia/",
       "checkedAt": "2026-10-31",
-      "why": "On DC the myAtlante app charges this flat price instead of its CEME tariff (energy + operator fee). Atlante's page gives one app price, with no split between myAtlante and myAtlante Business."
+      "why": "On DC the myAtlante app charges this flat price instead of its CEME tariff (energy + operator fee). myAtlante Business has its own DC price, not linked here until there's a public source for it."
     },
     {
       "id": "ionity-tpa-ionity",

@@ -45,8 +45,13 @@ test('DC: the myAtlante holder gets the app flat price as their total', async ()
 });
 
 test('DC: the link is per card, any voltage or cycle of the tariff id', async () => {
-  const q = await quotePoint({ site, point: dc }, car, { at, lang: 'en', tariffIds: ['atlante-bt-myatlantebus'] });
+  const q = await quotePoint({ site, point: dc }, car, { at, lang: 'en', tariffIds: ['atlante-bt-myatlanteac-2'] });
   assert.equal(q.options.find(o => o.offerId === APP).viaTariff, true);
+});
+
+test('DC: myAtlante Business is not tied to the app price (it has its own)', async () => {
+  const q = await quotePoint({ site, point: dc }, car, { at, lang: 'en', tariffIds: ['atlante-mt-myatlantebus'] });
+  assert.ok(!q.options.find(o => o.offerId === APP).viaTariff);
 });
 
 test('DC: a driver without myAtlante sees the app price as just another offer', async () => {
