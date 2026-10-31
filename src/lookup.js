@@ -24,8 +24,8 @@
 // try again with fewer.
 
 import { NETWORKS } from './promos.js';
+import { fold } from './text.js';
 
-export const fold = s => (s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
 const words = s => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
 
 // Words that say nothing about which charger, in both languages: articles

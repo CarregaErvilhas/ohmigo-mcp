@@ -18,7 +18,7 @@
 //      user to check the signs.
 
 import { haversineKm, rad } from './geo.js';
-import { fold } from './lookup.js';
+import { fold } from './text.js';
 
 // Sites this close count as one place to the driver (a service area often has
 // one NAP site per charger). On a motorway the two sides can be closer than

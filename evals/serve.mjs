@@ -10,9 +10,7 @@
 
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { DEFAULT_URL } from '../src/data.js';
-import { INSTRUCTIONS_MAX } from '../src/mcp.js';
+import { basename, join } from 'node:path';
 import { CACHE, EVALS, ROOT, RUNS, dated, linkModules, lisbonNow, mcp, readJson, rel } from './lib.mjs';
 
 const IDLE_MIN = 30;
@@ -41,17 +39,20 @@ function parseArgs(a) {
 
 function stop(run) {
   const dirs = run ? [run] : existsSync(RUNS) ? readdirSync(RUNS).map(d => join(RUNS, d)) : [];
+  if (!dirs.length) console.log('no runs to stop');
   for (const d of dirs) {
     const m = readJson(join(d, 'manifest.json'));
-    if (!m?.pid || !isServe(m.pid)) continue;
-    try { process.kill(m.pid, 'SIGTERM'); console.log(`stopped ${rel(d)} (pid ${m.pid})`); } catch { /* already gone */ }
+    if (!m?.pid) { console.log(`skipped ${rel(d)}: no pid in its manifest`); continue; }
+    if (!isServe(m.pid)) { console.log(`skipped ${rel(d)}: pid ${m.pid} isn't a serve.mjs (long gone, or the number was reused)`); continue; }
+    try { process.kill(m.pid, 'SIGTERM'); console.log(`stopped ${rel(d)} (pid ${m.pid})`); }
+    catch (e) { console.log(`skipped ${rel(d)}: pid ${m.pid} (${e.code})`); }
   }
 }
 
 // A manifest outlives its server and the system reuses pids, so an old run's
 // pid can belong to anything by now: only a serve.mjs gets the signal.
 function isServe(pid) {
-  try { return /(?:^|[\s/])evals\/serve\.mjs(?:\s|$)/.test(execFileSync('ps', ['-o', 'args=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })); }
+  try { return execFileSync('ps', ['-o', 'args=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/).some(a => basename(a) === 'serve.mjs'); }
   catch { return false; } // ps exits with an error when the pid is gone
 }
 
@@ -60,6 +61,9 @@ async function serve(o) {
   const all = JSON.parse(readFileSync(join(EVALS, 'cases.json'), 'utf8')).cases;
   const cases = o.cases ? all.filter(c => o.cases.includes(c.id)) : all;
   if (o.cases && cases.length !== o.cases.length) throw new Error(`unknown case in --cases: ${o.cases.filter(id => !all.some(c => c.id === id)).join(', ')}`);
+
+  // Here and not at the top: `stop` has to work when src/ doesn't load.
+  const [{ DEFAULT_URL }, { INSTRUCTIONS_MAX }] = await Promise.all([import('../src/data.js'), import('../src/mcp.js')]);
 
   mkdirSync(CACHE, { recursive: true });
   // One frozen copy of the public dataset, so runs compare on the same data.
@@ -92,14 +96,15 @@ async function serve(o) {
   // On every way out, a crash below included: the server lives only as long
   // as this process.
   process.on('exit', () => child.kill('SIGTERM'));
+  // A signal with no handler ends the process without that 'exit': the same
+  // for a closed terminal (SIGHUP). Set right here, so none slips in early.
+  const shutdown = () => process.exit(0);
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, shutdown);
   const url = await new Promise((resolve, reject) => {
     let out = '';
     child.stdout.on('data', c => { out += c; const m = out.match(/http:\/\/(\S+?)\/mcp/); if (m) resolve(`http://${m[1]}`); });
     child.on('exit', code => reject(new Error(`server exited ${code}: ${out}`)));
   });
-  const shutdown = () => process.exit(0);
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
 
   // What the assistant reads: the instructions (whole, cut like Claude Code
   // cuts them, or none, like a client that ignores them) and the tool list.

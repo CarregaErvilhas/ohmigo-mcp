@@ -16,6 +16,9 @@
 
 const fmt = (lang, n, digits = 4, min = 0) => Number(n).toLocaleString(lang === 'pt' ? 'pt-PT' : 'en', { minimumFractionDigits: min, maximumFractionDigits: Math.max(digits, min) });
 
+// A power as the summaries show it, or the "?" of a socket with none published.
+const kwPt = kw => typeof kw === 'number' ? fmt('pt', kw, 1) : kw;
+
 export const MESSAGES = {
   en: {
     // The NAP (National Access Point) is where Portugal's public chargers,
@@ -294,9 +297,9 @@ export const MESSAGES = {
     'summary.newOnly': () => '(só para novas adesões)',
     'summary.until': ({ date }) => `(até ${date})`,
     'summary.sites': ({ n }) => n === 1 ? '1 local:' : `${n} locais:`,
-    'summary.sockets': ({ n, kw }) => `${n === 1 ? '1 tomada' : `${n} tomadas`}, máx. ${kw} kW`,
+    'summary.sockets': ({ n, kw }) => `${n === 1 ? '1 tomada' : `${n} tomadas`}, máx. ${kwPt(kw)} kW`,
     'summary.operators': ({ n }) => n === 1 ? '1 operador:' : `${n} operadores:`,
-    'summary.operatorSize': ({ sites, points, dc, kw }) => `${sites === 1 ? '1 local' : `${sites} locais`}, ${points === 1 ? '1 tomada' : `${points} tomadas`} (${dc} DC), máx. ${kw} kW`,
+    'summary.operatorSize': ({ sites, points, dc, kw }) => `${sites === 1 ? '1 local' : `${sites} locais`}, ${points === 1 ? '1 tomada' : `${points} tomadas`} (${dc} DC), máx. ${kwPt(kw)} kW`,
     'summary.moreWays': ({ n }) => n === 1 ? '(+1 forma de pagar)' : `(+${n} formas de pagar)`,
     'summary.noPrice': () => 'n/d',
   },
