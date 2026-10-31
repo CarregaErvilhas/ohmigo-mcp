@@ -15,7 +15,7 @@
 // worked out by ceme-v2 in the region's time zone, so clock changes need no
 // special case here.
 
-const QUARTER_MS = 15 * 60_000;
+export const QUARTER_MS = 15 * 60_000;
 
 // The longest session laid out, in hours. Each quarter-hour is one slice in
 // memory and in the ceme-v2 call, so this bounds both. It's well past anything

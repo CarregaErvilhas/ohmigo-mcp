@@ -37,17 +37,21 @@
 //             they didn't list never does: that's a tip (notYours). Chargers
 //             are ranked by it, so an IONITY whose own app beats every CEME
 //             ranks where it should.
+//
+// `note` talks to the assistant. Where its wording only fits the assistant,
+// `driverNote` says the same to the driver, for ui/results.html, which the
+// driver reads with no assistant in between.
 
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
 import { cardPayment } from './data.js';
-import { siteOpen } from './hours.js';
+import { closesDuring, daysLater, siteOpen } from './hours.js';
 import { localOffset, localTime, MAX_SESSION_HOURS, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
-import { napPlan } from './live.js';
+import { napEurPerKwh, napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
 import { forAudiences, isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
-import { appliesToCustomers, promosHere, promoTips, withPromos } from './promos.js';
+import { appliesToCustomers, promosHere, promoTips, unpricedHere, withPromos } from './promos.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 const r4 = x => Math.round(x * 10_000) / 10_000;
@@ -145,7 +149,7 @@ function cemeOption(t, { site, opc, vat, detail }) {
     // A tariff only for people who sign up now, often a dated campaign
     // (`until`: its last day). Never the headline or `best` by default.
     ...(t.newCustomers && { newCustomersOnly: true }), ...(t.valid_until && { until: t.valid_until }),
-    ...(promos.length && { promos: promos.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }), ...(w.final && { opcIncluded: true }) }),
+    ...(w.applied.length && { promos: w.applied.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }), ...(w.final && { opcIncluded: true }) }),
   };
 }
 
@@ -284,7 +288,10 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (point.napKw !== undefined) base.assumptions.push(t('assume.osmKw', { kw: point.kw, nap: point.napKw }));
   if (site.operatorInferred) base.assumptions.push(t('assume.operatorInferred', { operator: site.operator }));
   const hours = siteOpen(site, start);
-  if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: [hours.nap, hours.osm].filter(Boolean).join(' / ') }));
+  const hoursText = [hours.nap, hours.osm].filter(Boolean).join(' / ');
+  if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: hoursText }));
+  const closes = hours.open ? closesDuring(site, start, end) : null;
+  if (closes) base.assumptions.push(t('assume.closesDuring', { hours: hoursText, at: localTime(closes, site.region), days: daysLater(start, closes, site.region), end: base.session.endLocal }));
   const direct = offersAt(site, point, audiences);
 
   if (point.regime === 'sem_ceme') {
@@ -300,7 +307,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // the same walk-up price (HighGreenPower: 0.28 in both): it says how to
     // pay (bank card / QR, no app or account) and stands in when the live
     // feed is down.
-    const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
+    const nap = napEurPerKwh(lp, point.napPrice);
     const vat = vatFor(base.region);
     const note = napNote(site);
     const wrong = note && !note.vatIncluded && !note.timeOfUse;
@@ -356,6 +363,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     base.total = null;
     base.cemeUnavailable = true;
     base.note = t('note.noCeme');
+    base.driverNote = t('note.noCeme.driver');
     base.options.push(...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region));
     base.options.sort((a, b) => a.total - b.total);
     base.best = bestOption(base.options, null);
@@ -372,6 +380,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (!ceme) {
     base.total = null;
     base.note = picked.missing ? t('note.noUserTariff') : t('note.noTariff');
+    if (picked.missing) base.driverNote = t('note.noUserTariff.driver');
     base.options.push(...extras);
     base.best = bestOption(base.options, null);
     return base;
@@ -415,14 +424,23 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
       base.options.push(tariffIds?.length ? notYours(tip, t) : tip);
     }
   }
-  // Promotions: the ones already in a shown total get an assumption; all of
-  // them at this network (new-customer ones included) are listed as tips.
-  // A tip's promotion isn't in any price the user pays: its note discloses it.
-  const applied = new Set(base.options.filter(o => !o.notYours).flatMap(o => o.promos || []));
+  // Promotions: the ones that took effect in a shown total get an assumption;
+  // all of them at this network (new-customer ones, and those that lost to a
+  // better one, included) are listed as tips. A notYours option's promotion
+  // isn't in any price the user pays: its note discloses it. `applied` keeps
+  // the tariff too: one promotion can win on one tariff and lose on another.
+  const applied = new Map();
+  for (const o of base.options.filter(x => !x.notYours)) {
+    for (const id of o.promos || []) applied.set(id, (applied.get(id) ?? new Set()).add(o.tariffId));
+  }
   const shownIds = new Set(base.options.map(o => o.tariffId));
   const tips = promoTips(applicable(quotes, point), site, { opc, vat, applied, shown: shownIds }, t);
   for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));
   if (tips.length) base.promos = tips;
+  // A promotion we can't price (promos.js) is a guess by omission: name it.
+  for (const q of quotes) {
+    if (shownIds.has(q.id) && unpricedHere(q, site)) base.assumptions.push(t('assume.promoUnknown', { tariff: `${q.ceme} · ${q.name}` }));
+  }
   base.options.push(...extras);
   base.best = bestOption(base.options, base.total);
   base.omieSpotEurKwh = sim.omieSpot?.eurKwh ?? null;
