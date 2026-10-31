@@ -59,6 +59,11 @@ const pct = (vat, t) => t.num(r4((vat - 1) * 100), 1);
 // user doesn't care which. Dropping the voltage gives the "same tariff" key.
 export const tariffKey = id => id.replace(/-(bt|mt)(?=-|$)/, '');
 
+// The same card in another billing cycle ("edp-bt-cartoedp-4", "-5"...) ends
+// in a number. A driver who names their card holds one cycle of it and may not
+// know which, so for "is this tariff theirs" all cycles of a card are one.
+const cardKey = id => tariffKey(id).replace(/-\d+$/, '');
+
 export const DEFAULT_SHOWN = 3;
 
 // Which CEME tariffs to price at this point, cheapest first.
@@ -74,8 +79,8 @@ export const DEFAULT_SHOWN = 3;
 // the condition); for someone in that audience the condition is met, so it
 // can headline.
 export function eligible(quotes, audiences = [], tariffIds = []) {
-  const want = new Set((tariffIds || []).map(tariffKey));
-  return quotes.filter(q => forAudiences(q, audiences) || want.has(tariffKey(q.id)))
+  const want = new Set((tariffIds || []).map(cardKey));
+  return quotes.filter(q => forAudiences(q, audiences) || want.has(cardKey(q.id)))
     .map(q => q.audience ? { ...q, bundle: false } : q);
 }
 
@@ -83,8 +88,8 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
   const ok = applicable(quotes, point);
   const best = ok.find(t => !t.newCustomers) || null;
   if (tariffIds?.length) {
-    const want = new Set(tariffIds.map(tariffKey));
-    const options = ok.filter(t => want.has(tariffKey(t.id)));
+    const want = new Set(tariffIds.map(cardKey));
+    const options = ok.filter(t => want.has(cardKey(t.id)));
     return { options, headline: options[0] || null, best, missing: !options.length };
   }
   const seen = new Set();
@@ -233,10 +238,9 @@ function directOptions(direct, session, t, region) {
 // conditions stay on the option but don't keep it from `best`.
 const listed = o => ({ ...o, listed: true });
 
-// A cheaper CEME tariff than any the user listed in tariff_ids, sometimes
-// another cycle of their own card. It stays visible and says so, but it's not
+// A cheaper CEME tariff than any the user listed in tariff_ids. It stays visible and says so, but it's not
 // a price they can pay today, so it's never `best` (bestOption).
-const notYours = (o, t) => ({ ...o, notYours: true, note: t('option.notYours') });
+const notYours = (o, t) => ({ ...o, notYours: true, note: t(o.requiresOtherContract ? 'option.notYours.contract' : 'option.notYours') });
 
 export const directOptionsForTest = (direct, session, lang, region) => directOptions(direct, session, translator(lang), region);
 

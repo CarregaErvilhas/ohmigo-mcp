@@ -195,6 +195,15 @@ describe('with tariff_ids, best is what the user can pay with', () => {
     assert.ok(tip.total < q.best.total);
   });
 
+  test('a tip that also needs another contract says so', async () => {
+    const q = await held({ tariffIds: ['edp-bt-cartoedp'] });
+    assert.match(q.options.find(o => o.tariffId === 'enable-bt-simples').note, /switch to it first\.$/);
+    sim = { ...HELD_SIM, data: HELD_SIM.data.map(d => d.id === 'enable-bt-simples' ? { ...d, bundle: true } : d) };
+    const c = await held({ tariffIds: ['edp-bt-cartoedp'], at: new Date('2026-11-25T12:00:00Z') });
+    sim = HELD_SIM;
+    assert.match(c.options.find(o => o.cheaperElsewhere).note, /and it needs another contract/);
+  });
+
   test('the tip says so in Portuguese too', async () => {
     const q = await held({ tariffIds: ['edp-bt-cartoedp'], lang: 'pt' });
     assert.match(q.options.find(o => o.cheaperElsewhere).note, /mudar para ele primeiro/);
