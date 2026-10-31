@@ -423,7 +423,9 @@ function pointsFor(ds, live, a, t) {
       if (named.length) points = named;
     }
     for (const point of points) {
-      const key = canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, h.site.operatorId]);
+      // operatorInferred: a socket on a lent site must not merge into a named
+      // sibling's, or its assumption goes with it.
+      const key = canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, h.site.operatorId, !!h.site.operatorInferred]);
       const cur = kinds.get(key);
       if (!cur || (!free(cur.site, cur.point) && free(h.site, point))) kinds.set(key, { site: h.site, point });
     }
@@ -566,7 +568,7 @@ export function createServer(getDataset, live) {
       sites: cards,
       // OpenStreetMap's licence (ODbL) asks for this wherever its data shows.
       credit: r.results.some(h => h.site.osm) ? t('credit.osm') : undefined,
-    }, [...notes, ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g)}`).join(', ')}`)].join('\n'));
+    }, [...new Set(notes), ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g)}`).join(', ')}`)].join('\n'));
   });
 
   server.registerTool('find_chargers', {

@@ -123,8 +123,9 @@ export const MESSAGES = {
       ? `${site}: the NAP lists bank card payment, but OpenStreetMap says there's no card terminal; tell the user to check on site.`
       : `${site}: OpenStreetMap says a bank card works here, but the NAP doesn't list it; tell the user to check on site.`,
     'assume.osmKw': ({ kw, nap }) => `charger power ${fmt('en', kw, 1)} kW as mapped on OpenStreetMap (the NAP declares ${nap == null ? 'none' : `${fmt('en', nap, 1)} kW`})`,
-    'assume.operatorInferred': ({ operator }) => `where the NAP names no operator (operatorInferred), ${operator} is inferred from the charger's id prefix, shared with that operator's named chargers; its offers are assumed to apply there`,
+    'assume.operatorInferred': ({ operator }) => `where the NAP names no operator (operatorInferred), ${operator} is inferred from the charger's id prefix, shared with that operator's named chargers; its prices, notes and promotions are assumed to apply there`,
     'operator.unnamed': () => 'No operator on the NAP',
+    'operator.inferredSites': ({ n }) => n === 1 ? '1 site with no operator on the NAP, attributed by its id prefix' : `${n} sites with no operator on the NAP, attributed by their id prefix`,
     'assume.closedAt': ({ hours }) => `by its opening hours (${hours}) this charger is closed when the session starts; check before going`,
     'note.noVoltage': () => 'The charger data loaded now has no socket voltages yet, so min_voltage was ignored: these results are not filtered by voltage.',
     'err.whereOrFilter': () => 'Give lat+lon, place or route, or, to search the whole country, at least one filter (query, region, min_kw, min_voltage, connectors, dc_only, card_payment: true, cable_attached, open_now).',
@@ -233,8 +234,9 @@ export const MESSAGES = {
       ? `${site}: o PAN indica pagamento com cartão bancário, mas o OpenStreetMap diz que não há terminal; diz ao utilizador para confirmar no local.`
       : `${site}: o OpenStreetMap diz que dá para pagar com cartão bancário, mas o PAN não o indica; diz ao utilizador para confirmar no local.`,
     'assume.osmKw': ({ kw, nap }) => `potência do posto ${fmt('pt', kw, 1)} kW, como está no OpenStreetMap (o PAN declara ${nap == null ? 'nenhuma' : `${fmt('pt', nap, 1)} kW`})`,
-    'assume.operatorInferred': ({ operator }) => `onde o PAN não diz o operador (operatorInferred), ${operator} é deduzido do prefixo do id do posto, igual ao dos postos com esse operador; assume-se que as suas ofertas se aplicam lá`,
+    'assume.operatorInferred': ({ operator }) => `onde o PAN não diz o operador (operatorInferred), ${operator} é deduzido do prefixo do id do posto, igual ao dos postos com esse operador; assume-se que os seus preços, notas e promoções se aplicam lá`,
     'operator.unnamed': () => 'Sem operador no PAN',
+    'operator.inferredSites': ({ n }) => n === 1 ? '1 local sem operador no PAN, atribuído pelo prefixo do id' : `${n} locais sem operador no PAN, atribuídos pelo prefixo do id`,
     'assume.closedAt': ({ hours }) => `pelo horário (${hours}), este posto está fechado à hora de início da sessão; confirma antes de ir`,
     'note.noVoltage': () => 'Os dados de postos carregados agora ainda não têm a tensão das tomadas, por isso o min_voltage foi ignorado: estes resultados não estão filtrados por tensão.',
     'err.whereOrFilter': () => 'Indica lat+lon, place ou route, ou, para pesquisar o país todo, pelo menos um filtro (query, region, min_kw, min_voltage, connectors, dc_only, card_payment: true, cable_attached, open_now).',

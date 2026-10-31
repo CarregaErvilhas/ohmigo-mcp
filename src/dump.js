@@ -8,10 +8,10 @@
 // dataset's plans in words (opc.js), direct offers are offers.js's OFFERS.
 
 import { simulate, promos } from './ceme.js';
-import { operatorKey } from './data.js';
 import { NAP_NOTES, OFFERS, SOURCE, isStale, offersAt } from './offers.js';
 import { describePlan } from './opc.js';
 import { translator } from './i18n.js';
+import { operatorKey } from './lookup.js';
 import { NETWORKS } from './promos.js';
 import { VERSION } from './version.js';
 
@@ -33,9 +33,11 @@ function operators(ds) {
   for (const s of ds.sites) {
     const key = operatorKey(s);
     const o = ops.get(key) ?? {
-      key, id: s.operatorId, name: s.operator ?? t('operator.unnamed'), website: s.website, sites: 0, inferred: 0, points: 0, dc: 0, maxKw: 0,
+      key, id: s.operatorId, name: null, website: null, sites: 0, inferred: 0, points: 0, dc: 0, maxKw: 0,
       regimes: {}, payment: new Set(), plans: new Map(), adhoc: new Map(), napPrices: [],
     };
+    o.name ||= s.operator;
+    o.website ||= s.website;
     o.sites++;
     if (s.operatorInferred) o.inferred++;
     for (const m of s.payment || []) o.payment.add(m);
@@ -53,7 +55,8 @@ function operators(ds) {
   }
   const top = m => [...m].sort((a, b) => b[1] - a[1]).map(([desc, n]) => ({ desc, n }));
   return [...ops.values()].map(o => ({
-    ...o, payment: [...o.payment], plans: top(o.plans), adhoc: top(o.adhoc),
+    ...o, name: o.name ?? t('operator.unnamed'), inferredNote: o.inferred ? t('operator.inferredSites', { n: o.inferred }) : null,
+    payment: [...o.payment], plans: top(o.plans), adhoc: top(o.adhoc),
     napPrice: o.napPrices.length ? { min: Math.min(...o.napPrices), max: Math.max(...o.napPrices) } : null,
     napPrices: undefined,
     offers: OFFERS.filter(x => x.scope.operatorIds?.includes(o.id)).map(x => x.id),

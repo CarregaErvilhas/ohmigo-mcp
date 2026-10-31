@@ -403,6 +403,51 @@
      "napPrice": 0.4
     }
    ]
+  },
+  {
+   "id": "CNT-9648PL0003",
+   "code": "9648PL0003",
+   "lat": 39.733234,
+   "lon": -8.797733,
+   "region": "CONT",
+   "city": "Leiria",
+   "address": "R. Vale de Lobos 37",
+   "operator": null,
+   "operatorId": null,
+   "website": null,
+   "payment": [
+    "apps"
+   ],
+   "hours": "Mo-Su 09:00-21:00",
+   "locationDescription": "Parque Coberto - Piso -1",
+   "points": [
+    {
+     "id": "9648PL0003.01",
+     "kw": 22,
+     "v": 400,
+     "a": 32,
+     "connector": "T2",
+     "dc": false,
+     "phases": 3,
+     "cable": false,
+     "level": null,
+     "regime": "sem_ceme",
+     "napPrice": 0.37
+    },
+    {
+     "id": "9648PL0003.02",
+     "kw": 22,
+     "v": 400,
+     "a": 32,
+     "connector": "T2",
+     "dc": false,
+     "phases": 3,
+     "cable": false,
+     "level": null,
+     "regime": "sem_ceme",
+     "napPrice": 0.37
+    }
+   ]
   }
  ]
 }

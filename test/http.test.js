@@ -108,7 +108,7 @@ test('http: find_cheapest_charging ranks MOBI.E and the networks outside it', as
   const r = await call('find_cheapest_charging', { place: 'Leiria', ...car });
   const d = r.structuredContent;
   assert.equal(d.kind, 'ranking');
-  assert.equal(d.quoted, 3);
+  assert.equal(d.quoted, 4);
   assert.equal(d.truncated, undefined);
   assert.ok(d.results.some(q => q.regime === 'sem_ceme') && d.results.some(q => q.regime === 'mobie'));
   assert.ok(JSON.stringify(r).length < 30_000);
@@ -152,8 +152,9 @@ test('http: find_chargers searches the whole country only when a filter keeps th
 
 test('http: list_operators groups the NAP operators and narrows by filter and name', async () => {
   const all = (await call('list_operators', {})).structuredContent;
-  // By size, then by name: Modelo Continente ahead of Galp now.
-  assert.deepEqual(all.operators.map(o => [o.operatorId, o.sites]), [['CONT', 3], ['GLPP', 2], [undefined, 1], ['EDPC', 1]]);
+  // By size, then by name; EDPC is the EDP-FAR socket-poor site (components
+  // tests), the nameless row is ZZZ-FAR's "no operator anywhere" site.
+  assert.deepEqual(all.operators.map(o => [o.operatorId, o.sites]), [['CONT', 4], ['GLPP', 2], [undefined, 1], ['EDPC', 1]]);
   assert.equal(all.operators[0].maxVoltage, 1000);
   assert.ok(all.notes.length >= 1);
   // OpenStreetMap's 1000 V replaces the NAP's 920 V on Galp's CCS.
@@ -258,7 +259,7 @@ test('http: /dados is public, cacheable, unindexed, and has nothing that depends
   assert.ok(d.offers.list.length > 0);
 
   const postos = await (await fetch(`${base}/dados/postos.json?op=CONT`)).json();
-  assert.deepEqual(postos.map(s => s.id).sort(), ['CNT-0001PL0002', 'CNT-9648PL0001', 'CNT-9648PR0002']);
+  assert.deepEqual(postos.map(s => s.id).sort(), ['CNT-0001PL0002', 'CNT-9648PL0001', 'CNT-9648PL0003', 'CNT-9648PR0002']);
 });
 
 test('http: a site the NAP left nameless is its id prefix\'s operator everywhere, and says so', async () => {
@@ -283,10 +284,25 @@ test('http: a site the NAP left nameless is its id prefix\'s operator everywhere
   assert.ok(found.notes.some(n => /inferred/.test(n)));
 
   const ops = (await call('list_operators', { query: 'continente', lang: 'en' })).structuredContent;
-  assert.deepEqual(ops.operators.map(o => [o.operatorId, o.sites, o.inferredSites]), [['CONT', 3, 1]]);
+  assert.deepEqual(ops.operators.map(o => [o.operatorId, o.sites, o.inferredSites]), [['CONT', 4, 2]]);
   assert.ok(ops.notes.some(n => /inferred/.test(n)));
   const glp = (await call('list_operators', { query: 'galp', lang: 'en' })).structuredContent;
   assert.ok(!glp.notes.some(n => /inferred/.test(n)));
+});
+
+test('http: an inferred socket stays apart from its named sibling, so its assumption survives', async () => {
+  const { results } = (await call('estimate_charging_cost', { site: 'CNT-9648PL0003', battery_kwh: 58, start_pct: 20, lang: 'en', at: '2026-11-02T12:00:00Z' })).structuredContent;
+  const lent = results.filter(q => q.siteId === 'CNT-9648PL0003');
+  assert.ok(lent.length >= 1);
+  assert.ok(lent.every(q => q.assumptions.some(a => /inferred/.test(a))));
+  assert.ok(results.some(q => q.siteId === 'CNT-9648PL0001' && !q.operatorInferred));
+});
+
+test('http: lookup_charger says each note once in its text', async () => {
+  const r = await call('lookup_charger', { query: 'Continente', limit: 10, lang: 'en' });
+  assert.ok(r.structuredContent.sites.filter(s => s.operatorInferred).length >= 2);
+  const summary = r.content[0].text.split('\n\n')[0];
+  assert.equal(summary.split('\n').filter(l => /inferred/.test(l)).length, 1);
 });
 
 test('http: a site with nobody to lend it an operator stays nameless, and /dados still lists it', async () => {
@@ -298,7 +314,11 @@ test('http: a site with nobody to lend it an operator stays nameless, and /dados
   const row = operators.find(o => !o.id);
   assert.equal(row.sites, 1);
   assert.ok(row.name);
-  assert.equal(operators.find(o => o.id === 'CONT').inferred, 1);
+  const cont = operators.find(o => o.id === 'CONT');
+  assert.equal(cont.inferred, 2);
+  assert.equal(cont.inferredNote, '2 locais sem operador no PAN, atribuídos pelo prefixo do id');
+  // The nameless first site of a group doesn't leave the row nameless.
+  assert.equal(cont.name, 'Modelo Continente Hipermercados, S.A.');
   const postos = await (await fetch(`${base}/dados/postos.json?op=${encodeURIComponent(row.key)}`)).json();
   assert.deepEqual(postos.map(s => s.id), ['ZZZ-FAR-00001']);
   // No key, no chargers: not every nameless site by accident.

@@ -37,6 +37,30 @@ test('a nameless site takes the operator of its id prefix, marked as inferred', 
   assert.equal(ds.siteById.get('CNT-9648PL0001').operatorInferred, undefined);
 });
 
+test('two named operators without ids sharing a prefix lend nothing', () => {
+  const lent = new Dataset({ sites: [
+    site('NON-1', '1', 'A', '', 'One', null, 40, -8), site('NON-2', '2', 'A', '', 'Two', null, 40, -8),
+    site('NON-3', '3', 'A', '', null, null, 40, -8),
+  ] }).siteById;
+  assert.equal(lent.get('NON-3').operator, null);
+});
+
+test('a prefix lends its most common spelling, and the lent name does not vote', () => {
+  const data = new Dataset({ sites: [
+    site('SPL-1', '1', 'A', '', 'Usual', 'SPL', 40, -8), site('SPL-2', '2', 'A', '', 'Usual', 'SPL', 40, -8),
+    site('SPL-3', '3', 'A', '', 'Rare', 'SPL', 40, -8), site('SPL-4', '4', 'A', '', 'Usual', 'SPL', 40, -8, { region: 'MAD' }),
+    site('SPL-5', '5', 'A', '', null, null, 40, -8), site('SPL-6', '6', 'A', '', null, null, 40, -8),
+    site('SPL-7', '7', 'A', '', null, null, 40, -8), site('LON-1', '8', 'A', '', null, null, 40, -8, { region: 'AZO' }),
+    site('SPL-8', '9', 'A', '', null, null, 40, -8, { region: 'AZO' }),
+  ] });
+  assert.equal(data.siteById.get('SPL-5').operator, 'Usual');
+  const [op] = data.operators().filter(o => o.operatorId === 'SPL');
+  assert.equal(op.name, 'Usual');
+  assert.deepEqual(op.otherNames, ['Rare']);
+  // Where a filter leaves only inferred sites, the lent name still names it.
+  assert.deepEqual(data.operators({ region: 'AZO' }).map(o => o.name).sort(), ['?', 'Usual']);
+});
+
 test('an id prefix lends only what is safe to lend', () => {
   const lent = new Dataset({ sites: [
     site('MIX-1', '1', 'A', '', 'One', 'ONE', 40, -8), site('MIX-2', '2', 'A', '', 'Two', 'TWO', 40, -8),

@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
-import { fold, Index, lendOperators } from './lookup.js';
+import { fold, Index, lendOperators, operatorKey } from './lookup.js';
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 // The dataset format this code understands. nap-dashboard bumps SCHEMA in
@@ -45,10 +45,6 @@ const localFile = () => {
   const p = fileURLToPath(new URL('../data/chargers.json', import.meta.url));
   return existsSync(p) ? p : null;
 };
-
-// What tells one operator from another: the NAP's operatorId, or the name for
-// sites without one (all the sites with neither fall under one key).
-export const operatorKey = s => s.operatorId || `name:${s.operator || '?'}`;
 
 export class Dataset {
   constructor(raw) {
@@ -269,7 +265,11 @@ export class Dataset {
       const key = operatorKey(s);
       let o = by.get(key);
       if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, inferredSites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {} });
-      o.names.set(s.operator ?? '?', (o.names.get(s.operator ?? '?') || 0) + 1);
+      // A lent name isn't a spelling the NAP published, so it doesn't vote; it
+      // only names an operator whose sites here are all inferred (a region
+      // or filter can leave just those).
+      if (s.operatorInferred) o.lentName ??= s.operator;
+      else o.names.set(s.operator ?? '?', (o.names.get(s.operator ?? '?') || 0) + 1);
       if (s.website) o.websites.add(s.website);
       o.sites++;
       if (s.operatorInferred) o.inferredSites++;
@@ -285,7 +285,7 @@ export class Dataset {
     return [...by.values()].map(o => {
       const names = [...o.names].sort((x, y) => y[1] - x[1]).map(([n]) => n);
       return {
-        operatorId: o.operatorId, name: names[0], otherNames: names.length > 1 ? names.slice(1) : undefined,
+        operatorId: o.operatorId, name: names[0] ?? o.lentName, otherNames: names.length > 1 ? names.slice(1) : undefined,
         website: [...o.websites][0], sites: o.sites, inferredSites: o.inferredSites || undefined, points: o.points, dcPoints: o.dcPoints,
         maxKw: o.maxKw || undefined, maxVoltage: o.maxV || undefined, regions: o.regions, regimes: o.regimes,
       };

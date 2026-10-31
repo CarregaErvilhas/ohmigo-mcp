@@ -191,7 +191,7 @@ function operadores(f) {
       <td class="num">${o.sites}</td><td class="num">${o.points}</td><td class="num">${o.dc}</td><td class="num">${o.maxKw}</td>
       <td>${reg(o)}</td><td>${plans(o.plans)}</td><td>${plans(o.adhoc, 2)}</td>
       <td class="num">${o.napPrice ? (o.napPrice.min === o.napPrice.max ? eur(o.napPrice.min) : `${eur(o.napPrice.min)}–${eur(o.napPrice.max)}`) : ''}</td>
-      <td>${o.offers.map(x => tag(x, 'ok')).join('')}${o.note ? tag('nota NAP', 'warn') : ''}${o.inferred ? tag(`${o.inferred} locais sem operador no NAP, atribuídos pelo prefixo do id`, 'warn') : ''}</td>
+      <td>${o.offers.map(x => tag(x, 'ok')).join('')}${o.note ? tag('nota NAP', 'warn') : ''}${o.inferredNote ? tag(o.inferredNote, 'warn') : ''}</td>
       <td><button class="lnk" data-op="${esc(o.key)}">${opOpen.has(o.key) ? 'fechar' : 'postos'}</button></td>
     </tr>${opOpen.has(o.key) ? `<tr class="sub"><td colspan="11">${postos(opOpen.get(o.key))}</td></tr>` : ''}`).join('')}
   </table>`;
