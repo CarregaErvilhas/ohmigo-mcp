@@ -74,6 +74,9 @@ function operators(ds) {
 // Memoized per dataset for 5 min (ceme.js's own cache TTL): the CDN is the
 // main cache, this one is for requests that reach the origin directly.
 let memo = null; // { ds, at, value }
+// The server calls this when a new dataset replaces the old one, so the memo
+// doesn't keep the old one alive until the next request here.
+export const forgetDump = () => { memo = null; };
 export function dump(ds) {
   if (memo && memo.ds === ds && Date.now() - memo.at < 5 * 60_000) return memo.value;
   // A result with a ceme-v2 error isn't kept: the next request tries again.
@@ -82,11 +85,12 @@ export function dump(ds) {
   return value;
 }
 
+// ceme-v2's error can quote its response body, and this JSON is public: the
+// detail goes to the log and the page gets one word.
+const cemeFailed = e => { console.error('[ohmigo] dados: ceme-v2:', e.message); return { error: 'unavailable' }; };
+
 async function build(ds) {
-  const [sim, pr] = await Promise.all([
-    simulate({ kwh: 20 }).catch(e => ({ error: e.message })),
-    promos().catch(e => ({ error: e.message })),
-  ]);
+  const [sim, pr] = await Promise.all([simulate({ kwh: 20 }).catch(cemeFailed), promos().catch(cemeFailed)]);
   const regimes = {};
   for (const s of ds.sites) for (const p of s.points) regimes[p.regime] = (regimes[p.regime] || 0) + 1;
   return {
@@ -112,8 +116,26 @@ async function build(ds) {
 
 // Every charger of one operator (its `key`), socket by socket, with the direct offers
 // that apply there (the same offersAt the cost tools use).
+//
+// Memoized per operator and dataset, like dump(): the sites are grouped once,
+// so only operators that exist get an entry, whatever `key` a request sends,
+// and each is built the first time someone opens it. Nothing here depends on
+// the hour. The WeakMap drops all of it when a new dataset replaces this one.
+const byDataset = new WeakMap(); // dataset -> Map(operator key -> { sites, rows })
 export function chargers(ds, key) {
-  return ds.sites.filter(s => operatorKey(s) === key).map(s => ({
+  let ops = byDataset.get(ds);
+  if (!ops) {
+    ops = new Map();
+    for (const s of ds.sites) {
+      const k = operatorKey(s);
+      if (ops.has(k)) ops.get(k).sites.push(s);
+      else ops.set(k, { sites: [s] });
+    }
+    byDataset.set(ds, ops);
+  }
+  const op = ops.get(key);
+  if (!op) return [];
+  return op.rows ??= op.sites.map(s => ({
     id: s.id, code: s.code, city: s.city, address: s.address, region: s.region, payment: s.payment,
     name: s.osm?.name ?? null,
     points: s.points.map(p => ({
