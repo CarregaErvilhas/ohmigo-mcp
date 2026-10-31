@@ -52,7 +52,10 @@ function stop(run) {
 // A manifest outlives its server and the system reuses pids, so an old run's
 // pid can belong to anything by now: only a serve.mjs gets the signal.
 function isServe(pid) {
-  try { return execFileSync('ps', ['-o', 'args=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/).some(a => basename(a) === 'serve.mjs'); }
+  try {
+    const [cmd, ...args] = execFileSync('ps', ['-o', 'args=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split(/\s+/);
+    return /(^|\/)node$/.test(cmd) && args.some(a => /(^|\/)serve\.mjs$/.test(a));
+  }
   catch { return false; } // ps exits with an error when the pid is gone
 }
 
