@@ -18,6 +18,9 @@ const PRINT_MAX = 20_000;
 
 const [dirArg, tool, json] = process.argv.slice(2);
 if (!dirArg || !tool) { console.error('usage: node evals/call.mjs <case dir> <tool> \'<json arguments>\''); process.exit(2); }
+// It ends up in a file name below, so it can't be allowed to walk out of the
+// case directory.
+if (!/^[a-z_]+$/.test(tool)) { console.error(`${tool} isn't a tool name`); process.exit(2); }
 const dir = caseDir(dirArg);
 const { url } = readJson(join(dirname(dir), 'manifest.json'));
 

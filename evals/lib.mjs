@@ -2,7 +2,7 @@
 // the matchers the cases use to describe what a good answer does.
 // How the evals work: evals/README.md.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,6 +26,16 @@ export function caseDir(arg) {
   if (!dir.startsWith(RUNS + sep)) throw new Error(`${arg} is not a case directory under evals/runs`);
   if (!existsSync(join(dir, 'brief.md'))) throw new Error(`${arg} has no brief.md`);
   return dir;
+}
+
+// A --ref worktree shares this checkout's node_modules.
+export function linkModules(dir) {
+  const link = join(dir, 'node_modules');
+  if (existsSync(link)) return;
+  // Not there, or a link to a checkout that's gone: existsSync can't tell, and
+  // symlinkSync fails on the second.
+  rmSync(link, { force: true });
+  symlinkSync(join(ROOT, 'node_modules'), link);
 }
 
 // One JSON-RPC request to the server, the way an MCP client sends it. The
@@ -94,11 +104,12 @@ export function checkCase(expect = {}, calls, answer) {
   return out;
 }
 
-// Judge answers: "yes" and "n/a" pass, "no" fails.
+// Judge answers: "yes" and "n/a" pass, anything else fails ("no, it omits...").
+// No answer yet is null.
 export function checkJudge(questions = [], verdicts) {
   return questions.map((q, i) => {
-    const v = String(verdicts?.[String(i + 1)] ?? '').toLowerCase();
-    return { check: `judge: ${q}`, pass: v ? v !== 'no' : null, ...(v && { got: v }) };
+    const v = String(verdicts?.[String(i + 1)] ?? '').trim().toLowerCase();
+    return { check: `judge: ${q}`, pass: v ? v === 'yes' || v === 'n/a' : null, ...(v && { got: v }) };
   });
 }
 
