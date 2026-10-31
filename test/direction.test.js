@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Dataset } from '../src/data.js';
-import { clusterPlaces, directionLabel, samePlace, sameStation, serviceAreas, sideFor } from '../src/direction.js';
+import { clusterPlaces, directionLabel, onMotorway, samePlace, sameStation, serviceAreas, sideFor } from '../src/direction.js';
 
 // Every pair of motorway sites the data labels with the direction it serves
 // (NAP addresses, OSM names), as of the 2026-10-28 dataset: [the side for
@@ -93,6 +93,38 @@ test('direction: a route keeps only the side it drives past', () => {
   assert.deepEqual(ds.search({ route: [...down].reverse(), corridorKm: 2 }).results.map(r => r.site.id), ['IOY-ADV-00018']);
   // Near a point (no direction), both stay.
   assert.equal(ds.search({ near: sites[0], radiusKm: 1 }).results.length, 2);
+});
+
+test('onMotorway: a road number in any spelling, not a door number', () => {
+  for (const address of ['A1 km 100', 'A 1 km 100', 'A 1', '(A 22)', '(acesso A 22)', 'Estrada Nacional 125 junto à A 22', '(A22)KM62', 'CEPSA A 22, VIA DO INFANTE SAGRES', 'IC 19 - Alto do Forte', 'Variante de Beja IP8-EN260'])
+    assert.equal(onMotorway({ address }), true, address);
+  for (const address of ['Rua de Campolide, 31 a 31 C', 'Rua das Portas Verdes 40 a 48', 'Avenida DAS LARANJEIRAS A 2', 'R. do Sol A 3', 'Zona Industrial, Lote 40 A 48',
+    'PRAÇA 25', 'OLIVENÇA 20', 'AV DA LIBERDADE A 2', 'Praceta A 3', 'Lote 12, A 14', 'Bloco A 1 km 3', 'Largo da Feira A 2', 'Casa A 5', 'A-1'])
+    assert.equal(onMotorway({ address }), false, address);
+  assert.equal(onMotorway({ address: 'Rua do Posto', osm: { name: 'Cepsa (A 22)' } }), true, 'the OSM name can say it');
+});
+
+test('directionLabel: S/N is sem número off a motorway, a direction on one', () => {
+  for (const address of ['CAMPO DOS MARTIRES DA PATRIA S/N', 'Campo Mártires da Pátria, s/n', 'R. Senra de Baixo S-N 1'])
+    assert.equal(directionLabel({ address }), null, address);
+  assert.equal(directionLabel({ address: 'A2 - KM 31,2 (S/N)' }), 'S/N');
+  assert.equal(directionLabel({ address: 'Posto Galp - EN 235 KM 13,400 (E-O)' }), 'E-O', 'only S/N looks like a door');
+  assert.equal(directionLabel({ address: 'E.N. 1 km 3 (N/S)' }), 'N/S');
+  assert.equal(directionLabel({ address: 'Pombal', osm: { name: 'Galp A1 S-N' } }), 'S-N', 'an OSM name has no door numbers');
+  assert.equal(directionLabel({ address: null, osm: { name: 'Área de Serviço de Pombal A1 S-N' } }), 'S-N');
+  assert.equal(directionLabel({ address: 'Rua Direita S/N', osm: { name: 'Posto A1' } }), null, 'the address is the one with the door number');
+  assert.equal(directionLabel({ address: 'Área de Serviço de Almodôvar, A2', osm: { name: 'IONITY Almodovar S-N' } }), 'S-N', 'a motorway address: the OSM name can say it');
+  assert.equal(directionLabel({ address: 'A1 s/n' }), null, 'lowercase is always sem número');
+  assert.equal(directionLabel({ address: 'A1 km 843 sentido Sul-Norte' }), 'sentido Sul-Norte');
+  assert.equal(directionLabel({ address: '(A2) KM 148 (SENTIDO N/S)' }), 'SENTIDO N/S');
+  assert.equal(directionLabel({ address: 'Rua da Paz S/N (Sentido Norte/Sul)' }), 'Sentido Norte/Sul', 'the word says it anywhere');
+});
+
+test('samePlace: sem número is not a direction', () => {
+  // Two operators, 84 m apart, on opposite sides of the same square.
+  const emel = { id: 'EML-LSB-01180', operatorId: 'EMEL', lat: 38.721886, lon: -9.1403, address: 'CAMPO DOS MARTIRES DA PATRIA S/N' };
+  const epark = { id: 'EPK-LSB-01489', operatorId: 'EPKS', lat: 38.721153, lon: -9.14052, address: 'Campo Mártires da Pátria, s/n' };
+  assert.equal(samePlace(emel, epark), false);
 });
 
 test('samePlace: in town, two operators at different addresses are two places', () => {
