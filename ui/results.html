@@ -179,7 +179,7 @@
     const at = lv.publishedAt ? new Date(lv.publishedAt).toLocaleTimeString(lang === 'pt' ? 'pt-PT' : 'en', { hour: '2-digit', minute: '2-digit' }) : null;
     const hasDirect = rows.some(q => (q.options || []).some(o => o.kind === 'direct'));
     document.getElementById('foot').textContent = (rows.some(q => q.unlistedCheaper) ? s.unlistedAsk + ' ' : '')
-      + s.foot(at, !lv.fresh, (data.dataAsOf || '').slice(0, 10))
+      + s.foot(at, !lv.fresh || !!lv.outdated, (data.dataAsOf || '').slice(0, 10))
       + (hasDirect ? ' ' + s.credit : '');
   }
 

@@ -3,10 +3,14 @@
 // The feed is one ~38 MB XML file with no gzip and no byte ranges (13-20 s to
 // download). It's fetched on demand: a request that finds the copy older than
 // the TTL triggers one refresh, every concurrent request shares it, and the
-// next users within the TTL get it for free. A request waits for the refresh
-// only up to a budget; past that it answers with the previous copy (flagged
-// stale), or without status if there's none yet, and the refresh carries on
-// for whoever asks next.
+// next users within the TTL get it for free. A copy past the TTL is still
+// good enough for a while (LIVE_MAX_STALE_SECONDS): the request answers with
+// it at once, flagged stale, and the refresh runs behind it. Only with no copy,
+// or one older than that, does a request wait, and only up to a budget; past
+// that it answers with what there is, and the refresh carries on for whoever
+// asks next. So a status can be that old, or older while the feed is down, and
+// the result says so (fresh: false, and a note with its age, see outdated in
+// info()).
 //
 // Refreshes use If-None-Match (304 with no body when unchanged) and parse the
 // body as a stream, so the 38 MB never sit in memory as text. The feed is
@@ -23,6 +27,9 @@ import { SaxesParser } from 'saxes';
 const URL_ = process.env.NAP_STATUS_URL || 'https://pgm.mobie.pt/integration/nap/evActualStatus';
 const TTL_MS = Number(process.env.LIVE_TTL_SECONDS || 300) * 1000;
 const WAIT_MS = Number(process.env.LIVE_WAIT_SECONDS || 25) * 1000;
+const MAX_STALE_MS = Number(process.env.LIVE_MAX_STALE_SECONDS || 3600) * 1000;
+// The NAP regenerates the feed about every 5 minutes.
+const PUBLISH_MS = 6 * 60_000;
 
 // Point ids are only unique within a site (some operators publish bare
 // numbers that repeat), so entries are keyed "SITE/POINT".
@@ -115,9 +122,10 @@ const BACKOFF_MS = [30_000, 60_000, 120_000, 300_000];
 const retryable = e => /unclosed|unexpected end|ECONNRESET|terminated|socket/i.test(`${e.message} ${e.cause?.code ?? ''}`);
 
 export class LiveStatus {
-  constructor({ ttlMs = TTL_MS, waitMs = WAIT_MS, fetchImpl = fetch } = {}) {
+  constructor({ ttlMs = TTL_MS, waitMs = WAIT_MS, maxStaleMs = MAX_STALE_MS, fetchImpl = fetch } = {}) {
     this.ttlMs = ttlMs;
     this.waitMs = waitMs;
+    this.maxStaleMs = maxStaleMs;
     this.fetch = fetchImpl;
     this.points = new Map();
     this.publicationTime = null;
@@ -135,14 +143,20 @@ export class LiveStatus {
 
   fresh() { return this.fetchedAt != null && Date.now() < this.freshUntil; }
 
-  // Makes sure the copy is within the TTL, waiting up to the budget for a
-  // refresh. `onWait` runs once when the caller is going to wait, so the tool
+  // Past the TTL, but still worth answering with rather than making someone
+  // wait for a 38 MB download.
+  usable() { return this.fetchedAt != null && Date.now() - this.fetchedAt < this.maxStaleMs; }
+
+  // Makes sure a refresh is on its way when the copy is past the TTL. With a
+  // usable copy the caller goes on at once; otherwise it waits up to the
+  // budget. `onWait` runs once when the caller is going to wait, so the tool
   // can tell the user why.
   async ensure({ onWait } = {}) {
     if (this.fresh()) return;
     // Backing off after a failure: answer with what we have, right away.
     if (!this.running && Date.now() < this.retryAt) return;
     const refresh = this.refresh();
+    if (this.usable()) return;
     onWait?.();
     await Promise.race([refresh, sleep(this.waitMs)]);
   }
@@ -197,9 +211,34 @@ export class LiveStatus {
     this.freshUntil = this.fetchedAt + jitter(this.ttlMs);
   }
 
+  // The copy and its flags as of now, for one request. A background refresh
+  // can land while the request is pricing (ceme-v2 takes a moment), and an
+  // answer built on the old copy must not come out labelled fresh.
+  snapshot() {
+    const { points } = this, info = this.info();
+    return { get: (siteId, pointId) => points.get(pointKey(siteId, pointId)) || null, info: () => info };
+  }
+
+  // How old the data itself is. publicationTime, not fetchedAt: a 304 moves
+  // fetchedAt on, and a publisher that has stalled keeps answering 304 with
+  // the same old file. fetchedAt only stands in if the time doesn't parse.
+  ageMs() {
+    if (this.fetchedAt == null) return null;
+    // Never less than since we fetched it: a clock ahead of ours can't make it new.
+    const published = Date.parse(this.publicationTime);
+    return Date.now() - (published < this.fetchedAt ? published : this.fetchedAt);
+  }
+
   info() {
+    const ageMs = this.ageMs();
     return {
       publishedAt: this.publicationTime,
+      ageMs,
+      // Worth telling the user. Goes beyond !fresh for that stalled publisher:
+      // the copy is fresh, what it says isn't.
+      // Past the TTL with its jitter plus one publish cycle: a fresh copy can
+      // carry that much age on top, so a normal one doesn't read as a stall.
+      outdated: ageMs != null && (!this.fresh() || ageMs > this.ttlMs * 1.1 + PUBLISH_MS),
       checkedAt: this.fetchedAt && new Date(this.fetchedAt).toISOString(),
       fresh: this.fresh(),
       refreshing: !!this.running,
