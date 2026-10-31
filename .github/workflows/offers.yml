@@ -6,6 +6,13 @@ name: Offers (weekly scrape)
 # A person merges it: every price change gets a look before it reaches users.
 # (The blog changes every few weeks; most Mondays this does nothing.)
 #
+# Three jobs, so the App key and third-party code never share a runner:
+#   scrape   runs the scraper, the tests and our dependencies, with no secrets
+#            and a read-only token. Hands over its results as an artifact.
+#   publish  on a fresh runner: no npm, nothing from the repo is run. Takes
+#            only offers/custofinal.json from the artifact and opens the PR.
+#   notify   opens an issue if either failed, saying which.
+#
 # The branch is pushed and the PR opened with a short-lived GitHub App token,
 # not GITHUB_TOKEN: a PR opened by GITHUB_TOKEN never triggers workflows, so
 # the required `test` check would never run and the PR could not be merged.
@@ -16,9 +23,7 @@ on:
     - cron: "0 7 * * 1"
   workflow_dispatch:
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
 
 concurrency:
   group: offers
@@ -28,21 +33,16 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app
-        with:
-          client-id: ${{ vars.OFFERS_APP_CLIENT_ID }}
-          private-key: ${{ secrets.OFFERS_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ steps.app.outputs.token }}
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       # Exit 3 = scraped fine, but some networks aren't in offers/networks.json.
       # Still open the PR (those rows are left out) and say so in it.
       - name: Scrape
@@ -53,42 +53,161 @@ jobs:
           code=${PIPESTATUS[0]}
           echo "code=$code" >> "$GITHUB_OUTPUT"
           [ "$code" = 0 ] || [ "$code" = 3 ]
+      # A failure here doesn't stop the job: the PR is where it gets seen (a
+      # manual.json entry the new scrape orphaned, say). The required `test`
+      # check fails on that PR, so it can't be merged as it is.
       - name: Test
+        id: test
+        continue-on-error: true
         run: npm test
-      - name: Open pull request if the offers changed
+      - name: Gather the results
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SCRAPE_CODE: ${{ steps.scrape.outputs.code }}
+          TESTS: ${{ steps.test.outcome }}
         run: |
+          mkdir handover
+          cp offers/custofinal.json scrape.log handover/
+          printf '%s' "$SCRAPE_CODE" > handover/scrape-code
+          printf '%s' "$TESTS" > handover/tests
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scrape-results
+          path: handover/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: scrape
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      tests-no-change: ${{ steps.compare.outputs.tests-no-change }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Outside the checkout: nothing in the artifact lands in the repo unless
+      # a step below copies it there.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: scrape-results
+          path: ${{ runner.temp }}/scrape
+      # The artifact comes from a job that ran third-party code, so it's data:
+      # the outcomes are validated before anything uses them, and only
+      # custofinal.json is copied in, where a person reviews it in the PR.
+      - name: Compare and commit
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          handover="$RUNNER_TEMP/scrape"
+          code=$(head -c 8 "$handover/scrape-code")
+          tests=$(head -c 8 "$handover/tests")
+          case "$code" in 0|3) ;; *) echo "unexpected scrape code"; exit 1 ;; esac
+          case "$tests" in success|failure) ;; *) echo "unexpected test outcome"; exit 1 ;; esac
+          jq -e '.offers | length > 0' "$handover/custofinal.json" > /dev/null
+          cp "$handover/custofinal.json" offers/custofinal.json
+
           if git diff --quiet -- offers/custofinal.json; then
-            echo "no changes"; exit 0
+            echo "no changes"
+            # No PR will show this one, so fail and let the notice say it.
+            if [ "$tests" != success ]; then
+              echo "tests-no-change=true" >> "$GITHUB_OUTPUT"
+              echo "tests failed with no change to the offers"; exit 1
+            fi
+            exit 0
           fi
-          branch="offers/custofinal-$(date -u +%F)"
+
+          # Named after the content: the same prices always get the same branch,
+          # so a re-run, or a Monday with the last PR still open, adds nothing.
+          branch="offers/custofinal-$(sha256sum offers/custofinal.json | cut -c1-12)"
+          open=$(gh pr list --head "$branch" --state open --json number --jq length)
+          if [ "$open" != 0 ]; then
+            echo "an open PR already has this content: $branch"; exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
           git add offers/custofinal.json
           git commit -m "offers: custofinal $(date -u +%F)"
-          git push -u origin "$branch"
+          {
+            echo "branch=$branch"
+            echo "scrape-code=$code"
+            echo "tests=$tests"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        if: steps.compare.outputs.branch != ''
+        with:
+          client-id: ${{ vars.OFFERS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.OFFERS_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Push and open the pull request
+        if: steps.compare.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ steps.compare.outputs.branch }}
+          SCRAPE_CODE: ${{ steps.compare.outputs.scrape-code }}
+          TESTS: ${{ steps.compare.outputs.tests }}
+        run: |
+          # The token is in this one command's URL, not in the remote. Forced
+          # because the branch may be left over from a closed PR or a failed
+          # run; it's named after these same prices.
+          git push --force \
+            "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
           {
             echo "Weekly scrape of custofinal.blogspot.com."
             echo
             echo '```'
-            cat scrape.log
+            # Capped, and without backticks, so it can't break out of the block.
+            head -c 20000 "$RUNNER_TEMP/scrape/scrape.log" | tr -d '`'
             echo '```'
             echo
-            if [ "${{ steps.scrape.outputs.code }}" = 3 ]; then
-              echo "**Unmapped networks**: add them to \`offers/networks.json\` (operator ids from \`npm run offers:gaps\`), or those rows stay out."
+            if [ "$TESTS" != success ]; then
+              echo "**Tests failed** on this change ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)), and the required \`test\` check fails here too: fix them before merging."
+              echo
+            fi
+            if [ "$SCRAPE_CODE" = 3 ]; then
+              echo "**Unmapped networks**: add them to \`offers/networks.json\` (operator ids from \`npm run offers:gaps\`), then run the scrape again. \`npm test\` fails on any unmapped network, so this PR can't be merged as it is."
               echo
             fi
             echo "Check the diff for prices that look wrong. Fixes go in \`offers/manual.json\`, never in this file."
           } > body.md
-          gh pr create --title "offers: custofinal $(date -u +%F)" --body-file body.md
-      # The blog moved, changed its layout, or the feed is down: tell someone,
-      # so stale prices don't go unnoticed for weeks.
-      - name: Notify on failure
-        if: failure()
+          gh pr create --head "$BRANCH" --title "offers: custofinal $(date -u +%F)" --body-file body.md
+
+  # Stale prices shouldn't go unnoticed for weeks. GH_REPO because this job has
+  # no checkout for gh to read the repo from.
+  notify:
+    needs: [scrape, publish]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open an issue saying what failed
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SCRAPE_RESULT: ${{ needs.scrape.result }}
+          TESTS_NO_CHANGE: ${{ needs.publish.outputs.tests-no-change }}
         run: |
-          gh issue create --title "Offers scrape failed (run $GITHUB_RUN_ID)" \
-            --body "The weekly scrape of custofinal.blogspot.com failed; offers/custofinal.json stays as it was. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "$SCRAPE_RESULT" != success ]; then
+            step="scrape"
+            what="The scrape of custofinal.blogspot.com failed (blog moved, layout changed, a row that fails the sanity check, feed down...)."
+          elif [ "$TESTS_NO_CHANGE" = true ]; then
+            step="tests"
+            what="The tests failed, and the offers didn't change, so there's no pull request to show it on."
+          else
+            step="publish"
+            what="The scrape worked, but its pull request couldn't be opened (the App key may have expired). The scraped file is in the run's artifact."
+          fi
+          gh issue create --title "Offers job failed at: $step (run $GITHUB_RUN_ID)" \
+            --body "$what offers/custofinal.json stays as it was. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
