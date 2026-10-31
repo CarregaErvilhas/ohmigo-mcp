@@ -68,6 +68,21 @@ test('http: every tool is read-only and talks to the outside world', async () =>
   for (const t of tools) assert.deepEqual(t.annotations, { readOnlyHint: true, openWorldHint: true }, t.name);
 });
 
+// The tool list is in the assistant's context in every conversation, used or
+// not. Raising this is a decision, not a fix: first trim descriptions or merge
+// tools (src/mcp.js says where guidance belongs). Six tools; list_operators
+// and the socket filters (voltage, card, cable, hours) took it from 18 000.
+const TOOLS_MAX_CHARS = 20_500;
+
+test('http: the tool list stays small, and every tool says what it is for so tool search finds it', async () => {
+  const { tools } = await call('tools/list');
+  const n = JSON.stringify(tools).length;
+  assert.ok(n <= TOOLS_MAX_CHARS, `tools/list is ${n} characters, budget ${TOOLS_MAX_CHARS}`);
+  // Clients that load tools on demand match the user's request against names
+  // and descriptions: each one names the domain in its own words.
+  for (const t of tools) assert.match(t.description, /\bEV\b.*\bPortugal\b|\bPortugal\b.*\bEV\b/s, t.name);
+});
+
 test('http: estimate_charging_cost answers with structuredContent, and the text carries it too for text-only clients', async () => {
   const r = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car });
   assert.equal(r.isError, undefined);
@@ -79,6 +94,12 @@ test('http: estimate_charging_cost answers with structuredContent, and the text 
   const json = JSON.parse(text.slice(text.indexOf('\n\n{') + 2));
   assert.deepEqual(json, r.structuredContent);
   assert.ok(json.results[0].options.length > 1);
+  assert.ok(json.notes.some(n => /more ways to pay/.test(n)), 'says there are more ways to pay');
+  // The NAP lists no card method here but OpenStreetMap tags a terminal: a
+  // yes from either counts, and the option says the sources disagree.
+  const adhoc = json.results.flatMap(q => q.options).find(o => o.kind === 'adhoc');
+  assert.match(adhoc.label, /bank card at the charger/i);
+  assert.match(adhoc.note, /disagree/);
 });
 
 test('http: find_cheapest_charging ranks MOBI.E and the networks outside it', async () => {

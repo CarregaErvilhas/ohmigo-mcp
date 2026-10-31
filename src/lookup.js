@@ -30,13 +30,16 @@ const words = s => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
 
 // Words that say nothing about which charger, in both languages: articles
 // and prepositions, "charger", and the kind of place ("the Galp service area
-// on the A1": the NAP's address says "(A1) KM 166,7", not "service area").
+// on the A1": the NAP's address says "(A1) KM 166,7", not "service area";
+// "o Centro Colombo": the NAP says "CC Colombo", and "comercial" would match
+// the operator "EDP Comercial").
 const FILLER = new Set(`
   a o as os de do da dos das e em no na nos nas ao aos perto junto pe
   posto postos carregador carregadores carregamento estacao ponto tomada
   area servico servicos bomba bombas gasolineira supermercado hipermercado loja estacionamento
+  centro comercial cc
   the of in at on near by and charger chargers charging station point
-  service services petrol gas supermarket shop
+  service services petrol gas supermarket shop shopping mall centre
 `.trim().split(/\s+/));
 
 // "LRA-00156", "lra 156", "GLP-LRA-00156-02" -> { key: "LRA-156", socket: 2 }.

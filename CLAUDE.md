@@ -17,6 +17,7 @@ npm start                                 # http://127.0.0.1:3002/mcp
 node scripts/call.mjs <tool> '<json>'     # call a tool against the local server
 npm run offers:scrape -- --check          # parse the newest custofinal post, write nothing
 npm run offers:gaps                       # operators with direct-payment signals and no offer
+node evals/serve.mjs                      # behaviour evals with a model: use the ohmigo-evals skill (evals/README.md)
 ```
 
 ## Rules
@@ -40,6 +41,12 @@ npm run offers:gaps                       # operators with direct-payment signal
 - **The dataset is built in nap-dashboard** (`scripts/ohmigo_dataset.py`
   there), not here. Format changes go there first, with a `SCHEMA` bump if
   incompatible (`src/data.js` refuses unknown schemas).
+- **Guidance for the assistant goes in the narrowest place.** `INSTRUCTIONS`
+  only for what spans tools (it has a budget, `test/mcp.test.js`); one tool's
+  rules in its description or `.describe()`; one answer's in the result's
+  notes. See "What the assistant reads" in `docs/01-how-it-works.md`. After
+  changing any of it, run the evals (`ohmigo-evals` skill) and compare with
+  `main`; a new rule gets a case in `evals/cases.json`.
 - **Docs must not rot.** Don't copy prices, counts or thresholds into docs;
   point to the file that owns them. Docs describe what the code does now, for
   a newcomer, in the second person.
