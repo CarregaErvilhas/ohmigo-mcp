@@ -241,10 +241,15 @@ function adhocOption(point, session, t, region, site) {
 // session in the month/year; a per-session fee (sessionEur) is added. These prices are final with mainland VAT (23 %);
 // on the islands (lower VAT) nobody tells us whether they change, so we show
 // them as they are and say so.
-function directOptions(direct, session, t, region) {
+// `mine`: the card keys of the user's tariff_ids. An offer whose
+// `cemeTariffs` (manual.json) names one of them is how that tariff is billed
+// here, so it's the user's own price: listed, like their CEME tariffs
+// (myAtlante's app has a flat price on DC, where its CEME tariff doesn't apply).
+function directOptions(direct, session, t, region, mine = new Set()) {
   const island = region && region !== 'CONT';
   return direct.map(({ offer, eurPerKwh }) => ({
     kind: 'direct', offerId: offer.id, label: offer.label, provider: offer.provider, ...(offer.audience && { audience: offer.audience }),
+    ...(offer.cemeTariffs?.some(k => mine.has(k)) && { listed: true, viaTariff: true }),
     total: r2(eurPerKwh * session.kwh + (offer.sessionEur || 0)), eurPerKwh, ...(offer.sessionEur && { sessionEur: offer.sessionEur }), walkUp: !!offer.walkUp,
     subscription: offer.subscription ? { ...(offer.fee || {}), text: offer.fee ? t('option.fee', offer.fee) : t('option.feeUnknown') } : null,
     note: t('option.direct.note', { source: offer.origin === 'custofinal' ? `${SOURCE.name} (${SOURCE.author}), ${SOURCE.blog}` : offer.source, checked: offer.checkedAt })
@@ -310,7 +315,11 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: hoursText }));
   const closes = hours.open ? closesDuring(site, start, end) : null;
   if (closes) base.assumptions.push(t('assume.closesDuring', { hours: hoursText, at: localTime(closes, site.region), days: daysLater(start, closes, site.region), end: base.session.endLocal }));
-  const direct = offersAt(site, point, audiences);
+  // An offer only a CEME tariff's holders get (manual.json `holdersOnly`, e.g.
+  // myAtlante Business's DC price) is left out for everyone else.
+  const mine = new Set((tariffIds || []).map(cardKey));
+  const direct = offersAt(site, point, audiences)
+    .filter(x => !x.offer.holdersOnly || x.offer.cemeTariffs?.some(k => mine.has(k)));
 
   if (point.regime === 'sem_ceme') {
     // Outside MOBI.E: no CEME, the operator bills directly. The NAP has one
@@ -394,11 +403,19 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   const quotes = eligible(sim.data, audiences, tariffIds);
   const picked = pickTariffs(quotes, point, tariffIds, shown);
   const ceme = picked.headline;
-  const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region)];
+  const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region, mine)];
   if (!ceme) {
-    base.total = null;
-    base.note = picked.missing ? t('note.noUserTariff') : t('note.noTariff');
-    if (picked.missing) base.driverNote = t('note.noUserTariff.driver');
+    // None of the user's CEME tariffs prices this socket, but one of them may
+    // bill it as a direct offer: then that's their total.
+    const own = cheapest(extras.filter(o => o.viaTariff));
+    base.total = own ? { eur: own.total, low: own.total, high: own.total, complete: true } : null;
+    if (own) {
+      base.note = t('note.userTariffDirect', { label: own.label });
+      base.driverNote = t('note.userTariffDirect.driver', { label: own.label });
+    } else {
+      base.note = picked.missing ? t('note.noUserTariff') : t('note.noTariff');
+      if (picked.missing) base.driverNote = t('note.noUserTariff.driver');
+    }
     base.options.push(...extras);
     base.best = bestOption(base.options, null);
     return base;
