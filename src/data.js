@@ -25,7 +25,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { cleanSite } from './clean.js';
+import { cleanSite, reportLine } from './clean.js';
 import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
@@ -53,7 +53,8 @@ export class Dataset {
     this.generatedAt = raw.generatedAt;
     this.sites = raw.sites;
     // First: everything below, and every tool, reads the limited text.
-    this.sites.forEach(cleanSite);
+    this.cleaned = {};
+    for (const s of this.sites) cleanSite(s, this.cleaned);
     lendOperators(this.sites);
     this.siteById = new Map();
     this.pointById = new Map();
@@ -119,7 +120,9 @@ export class Dataset {
     const schema = raw.schema ?? 1;
     if (schema !== SCHEMA) throw new Error(`dataset schema ${schema}, this server reads ${SCHEMA}`);
     if (!Array.isArray(raw.sites) || !raw.sites.length) throw new Error('dataset has no sites');
-    return new Dataset(raw);
+    const ds = new Dataset(raw);
+    console.log(reportLine(ds.cleaned));
+    return ds;
   }
 
   // Centre of the sites in a municipality/city, for "near Leiria" without

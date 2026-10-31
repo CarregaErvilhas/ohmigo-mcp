@@ -9,28 +9,35 @@
 //
 // Dataset's constructor calls cleanSite before anything reads the site, so the
 // search index, every tool and the sentences in assumptions and notes all see
-// the same limited text.
+// the same limited text. Whatever it cuts or drops is counted, and Dataset.check
+// logs the counts in one line: a real value hitting a limit shows up there.
 
 // Comfortably above the longest real values, so that a cut means something is
 // wrong: docs/05-dataset.md has what each field holds.
 const NAME_MAX = 120;
 const PLACE_MAX = 200;
-const HOURS_MAX = 100;
+const HOURS_MAX = 300; // a weekly schedule with two ranges a day is ~200
 const TAG_MAX = 30; // OSM tag values: "customers", "unlimited", "-1"
 const PHONE_MAX = 50; // two numbers: OSM lists them with a ';'
 const EMAIL_MAX = 100;
 const WEBSITE_MAX = 200;
 const CAPACITY_MAX = 200; // cars charging at once
 
-// Control and format characters (\p{Cc}, \p{Cf}) can't be seen: they hide
-// words from a reader (zero-width spaces, right-to-left overrides) or start
-// new lines. Whitespace ones become spaces, the others go.
+// Whitespace, listed: what counts as a space is not left to \s, which turns
+// U+FEFF (an invisible format character) into one and skips NEL (U+0085).
+const SPACES = /[\t\n\v\f\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+/g;
+// What can't be seen: \p{C} is control and format characters, private-use and
+// unassigned code points and lone surrogates. They hide words from a reader
+// (zero-width spaces, right-to-left overrides). Variation selectors too, bar
+// U+FE0F, the one that turns a symbol into its emoji.
+const INVISIBLE = /[[\p{C}\p{Variation_Selector}]--\uFE0F]/gv;
+
 // A cut ends on a word when one ends near it, and shows with "…". The "…" also
 // keeps opening hours honest: parseHours can't read it, so hours that were cut
 // read as unknown, not as a week with its last days missing.
 export function cleanText(value, max) {
   if (typeof value !== 'string') return undefined;
-  const text = value.replace(/(?!\s)[\p{Cc}\p{Cf}]/gu, '').replace(/\s+/g, ' ').trim();
+  const text = value.replace(SPACES, ' ').replace(INVISIBLE, '').replace(/ +/g, ' ').trim();
   if (text.length <= max) return text || undefined;
   const cut = text.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, ''); // not half an emoji
   const space = cut.lastIndexOf(' ');
@@ -59,10 +66,18 @@ function website(value) {
   return (protocol === 'http:' || protocol === 'https:') && !username && !password ? s : undefined;
 }
 
+// The NAP's short codes ("GLPP", "MT") and the regimes nap-dashboard assigns.
+// No cap here: something else isn't a longer code, it isn't a code.
+const shaped = test => v => typeof v === 'string' && test(v) ? v : undefined;
+const operatorId = shaped(v => /^[A-Z0-9]{1,10}$/.test(v));
+const gridLevel = shaped(v => /^[A-Z]{2,3}$/.test(v));
+const REGIMES = new Set(['mobie', 'mobie_sem_tarifa', 'sem_ceme']);
+const regime = shaped(v => REGIMES.has(v));
+
 const NAP_FIELDS = {
   name: text(NAME_MAX), operator: text(NAME_MAX), city: text(NAME_MAX),
   address: text(PLACE_MAX), locationDescription: text(PLACE_MAX),
-  hours: text(HOURS_MAX), phone, website,
+  hours: text(HOURS_MAX), phone, website, operatorId,
 };
 
 // What the code reads or a driver acts on. Anything else OSM has (a `note`, a
@@ -79,13 +94,15 @@ const OSM_FIELDS = {
   capacity: v => Number.isInteger(v) && v > 0 && v <= CAPACITY_MAX ? v : undefined,
 };
 
-function pick(fields, from) {
-  const out = {};
-  for (const [k, clean] of Object.entries(fields)) {
-    const v = clean(from[k]);
-    if (v !== undefined) out[k] = v;
-  }
-  return out;
+const count = (report, what) => { report[what] = (report[what] ?? 0) + 1; };
+
+// A field through its check: the value to keep, or undefined, and the count.
+function checked(clean, value, field, report) {
+  if (value == null) return value;
+  const v = clean(value);
+  if (v === undefined) count(report, `dropped ${field}`);
+  else if (typeof v === 'string' && v.endsWith('…') && !value.trimEnd().endsWith('…')) count(report, `cut ${field}`);
+  return v;
 }
 
 // What an OSM number on a socket has to be for data.js to believe it over the
@@ -94,10 +111,10 @@ function pick(fields, from) {
 // demand it be close:
 //   max    no public socket goes past this. Also tells a NAP value that can't
 //          be right (300 000 V, in the wrong unit): nothing to compare with.
-//   ratio  how far from a believable NAP value OSM can be. kW declarations
-//          are close to the plate. V and A are often placeholders (500 A on a
-//          25 kW socket whose plate says 63), so they get more room.
-const OSM_NUMBERS = { kw: { max: 1000, ratio: 5 }, v: { max: 1500, ratio: 10 }, a: { max: 1500, ratio: 10 } };
+//   ratio  how far from a believable NAP value OSM can be. It stops garbage,
+//          not corrections, so it's wide: a NAP 3.7 on a 22 kW socket, 50 on a
+//          350 kW one or 500 A on a 25 kW one are what OSM is there to fix.
+const OSM_NUMBERS = { kw: { max: 1000, ratio: 20 }, v: { max: 1500, ratio: 10 }, a: { max: 1500, ratio: 10 } };
 
 function saneOsmNumber(key, value, nap) {
   const { max, ratio } = OSM_NUMBERS[key];
@@ -106,27 +123,48 @@ function saneOsmNumber(key, value, nap) {
   return !sane(nap) || Math.max(value / nap, nap / value) <= ratio;
 }
 
-function cleanPoint(p) {
+function cleanPoint(p, report) {
+  // A blank level is how the NAP's blanks already arrive; the quote says so.
+  if (p.level != null) p.level = checked(gridLevel, p.level, 'point.level', report) ?? null;
+  if (p.regime != null) {
+    p.regime = checked(regime, p.regime, 'point.regime', report);
+    if (p.regime === undefined) delete p.regime;
+  }
   if (p.osm == null) return;
   const osm = {};
-  for (const k of Object.keys(OSM_NUMBERS)) if (saneOsmNumber(k, p.osm[k], p[k])) osm[k] = p.osm[k];
+  for (const k of Object.keys(OSM_NUMBERS)) {
+    if (p.osm[k] == null) continue;
+    if (saneOsmNumber(k, p.osm[k], p[k])) osm[k] = p.osm[k];
+    else count(report, `ignored point.osm.${k}`);
+  }
   if (Object.keys(osm).length) p.osm = osm;
   else delete p.osm;
 }
 
-export function cleanSite(s) {
+// `report` collects what was cut, dropped or ignored: { "cut address": 2 }.
+export function cleanSite(s, report = {}) {
   for (const [k, clean] of Object.entries(NAP_FIELDS)) {
     if (s[k] == null) continue; // the NAP left it blank: still blank
-    const v = clean(s[k]);
+    const v = checked(clean, s[k], k, report);
     if (v === undefined) delete s[k];
     else s[k] = v;
   }
   // The NAP's own vocabulary (apps, rfid, creditCard...): words, not sentences.
-  if (Array.isArray(s.payment)) s.payment = s.payment.filter(m => typeof m === 'string' && /^\w{1,30}$/.test(m));
+  s.payment = Array.isArray(s.payment) ? s.payment.filter(m => typeof m === 'string' && /^\w{1,30}$/.test(m)) : [];
   if (s.osm != null) {
-    const osm = pick(OSM_FIELDS, s.osm);
+    const osm = {};
+    for (const [k, clean] of Object.entries(OSM_FIELDS)) {
+      const v = checked(clean, s.osm[k], `osm.${k}`, report);
+      if (v != null) osm[k] = v;
+    }
     if (Object.keys(osm).length) s.osm = osm;
     else delete s.osm;
   }
-  s.points.forEach(cleanPoint);
+  for (const p of s.points) cleanPoint(p, report);
+}
+
+// One line for the log: which limits the data hit, most hit first.
+export function reportLine(report) {
+  const rows = Object.entries(report).sort((a, b) => b[1] - a[1]).map(([what, n]) => `${what} ${n}`);
+  return `[ohmigo] third-party limits: ${rows.join(', ') || 'nothing cut, dropped or ignored'}`;
 }

@@ -28,6 +28,10 @@ const WAIT_MS = Number(process.env.LIVE_WAIT_SECONDS || 25) * 1000;
 // numbers that repeat), so entries are keyed "SITE/POINT".
 export const pointKey = (siteId, pointId) => `${siteId}/${pointId}`;
 
+// What the feed says about a socket (docs/03-live-status.md has what each
+// means). It goes into answers as it is, so anything else reads as unknown.
+const STATUSES = new Set(['available', 'charging', 'unknown', 'outOfOrder', 'inoperative', 'blocked', 'planned']);
+
 // Parses the feed from an async iterable of byte chunks.
 export async function parseStatus(chunks) {
   const points = new Map();
@@ -54,7 +58,7 @@ export async function parseStatus(chunks) {
     const v = text.trim();
     switch (n.local) {
       case 'publicationTime': if (stack.length === 1) publicationTime = v; break;
-      case 'status': if (point) point.status = v; break;
+      case 'status': if (point) point.status = STATUSES.has(v) ? v : 'unknown'; break;
       case 'pricingPolicy': policy = v; break;
       case 'minimumDeliveryFee': fee = Number(v); break;
       case 'energyPricingPolicy':

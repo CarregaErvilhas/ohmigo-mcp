@@ -138,8 +138,11 @@ When a file loads, `cleanSite` (`src/clean.js`) runs before anything reads it:
 free text loses control and format characters and gets a length cap, phones,
 emails and websites that don't fit their shape are removed (the field is
 absent), and every tool, sentence and search sees the result. `npm test`
-holds this in `test/third-party.test.js`. The limits sit well above real values:
-if real text starts being cut, raise them there.
+holds this in `test/third-party.test.js`.
+
+The limits sit well above real values. Each load logs one line with what they
+hit (`[ohmigo] third-party limits: cut address 2, ignored point.osm.kw 1`): if
+those are real values, raise the limit in `src/clean.js`.
 
 ## Building it locally
 

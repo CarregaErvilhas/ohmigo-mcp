@@ -82,3 +82,5 @@ form.
 | `outOfOrder`, `inoperative` | broken | no |
 | `blocked` | blocked | no |
 | `planned` | not built yet | no |
+
+Any other value in the feed reads as `unknown` (`src/live.js`).
