@@ -358,6 +358,30 @@
       }
     },
     {
+      "id": "list-domestic-socket",
+      "why": "A domestic socket isn't in the data as Schuko: filter by the blue CEE socket and say it isn't a Schuko, never answer that none exist.",
+      "message": "Só tenho o carregador de tomada doméstica do carro. Onde o posso ligar em Mealhada?",
+      "requires": [
+        {
+          "site": "ECI-MLD-00020"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_chargers",
+            "args": {
+              "connectors": "iec60309x2single16"
+            },
+            "ok": true
+          }
+        ],
+        "judge": [
+          "Does the reply list sockets in Mealhada and make clear they are CEE (blue, industrial/camping) sockets rather than ordinary household Schuko sockets?"
+        ]
+      }
+    },
+    {
       "id": "lidl-operator",
       "why": "The NAP says Galp, OpenStreetMap says Lidl: say who operates it, and credit OpenStreetMap when its data is used.",
       "message": "Quanto custa carregar no Lidl de Coimbra? Tenho um Peugeot e-208 com bateria de 50 kWh e estou com 20%.",

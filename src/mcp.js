@@ -169,13 +169,13 @@ function placeLine(pl) {
 }
 
 const Filter = {
-  min_kw: z.number().positive().optional().describe('Minimum charger power, kW'),
-  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'SCHUKO'])).optional().describe('Acceptable plug types'),
+  min_kw: z.number().positive().optional().describe('Minimum power, kW'),
+  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'iec60309x2single16'])).optional().describe('Plug types. Domestic plug: filter iec60309x2single16 (blue CEE, needs adapter; no Schuko)'),
   dc_only: z.boolean().optional().describe('Only DC (fast) chargers'),
-  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum socket voltage, V (e.g. 800 for an 800 V car)'),
-  card_payment: z.boolean().optional().describe('Only chargers where a bank card works at the charger itself (terminal or contactless)'),
-  cable_attached: z.boolean().optional().describe('true: only sockets with a fixed cable; false: only those where the user brings one'),
-  open_now: z.boolean().optional().describe('Leave out chargers closed now (or at `at`) by their opening hours'),
+  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum voltage, V (e.g. 800 for an 800 V car)'),
+  card_payment: z.boolean().optional().describe('Only where a bank card works at the charger (terminal or contactless)'),
+  cable_attached: z.boolean().optional().describe('true: fixed cable only; false: only where the user brings one'),
+  open_now: z.boolean().optional().describe('Leave out chargers closed now (or at `at`)'),
 };
 
 // The Filter arguments, as Dataset.pointFilter takes them.
