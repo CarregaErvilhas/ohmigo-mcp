@@ -109,8 +109,11 @@ export function estimateSession(point, car, t = translator('en')) {
     let below, above;
     if (car.dc10to80Minutes) {
       // 10 -> 80 % is 70 % of the battery: that energy over the published
-      // time is the car's real average power on a fast enough charger.
-      const carAvg = car.batteryKwh * 0.7 / (car.dc10to80Minutes / 60);
+      // time is the car's real average power on a fast enough charger, at the
+      // battery. The split below works in billed kWh and the charger's limit
+      // is at the meter too, so this goes up by the losses to the meter's
+      // side: billed kWh / this power gives back the published time.
+      const carAvg = car.batteryKwh * 0.7 / (car.dc10to80Minutes / 60) / eff;
       below = Math.min(carAvg, chargerKw * DEFAULTS.chargerShare);
       above = Math.min(carAvg * DEFAULTS.dcShareAbove80 / DEFAULTS.dcShareBelow80, chargerKw * DEFAULTS.chargerShare);
       assumptions.push(t('assume.dc1080', { below: Math.round(below), mins: car.dc10to80Minutes, capped: below < carAvg, above: Math.round(above) }));
@@ -127,6 +130,7 @@ export function estimateSession(point, car, t = translator('en')) {
   } else {
     minutes = kwh / (peak * DEFAULTS.acShare) * 60;
     segments.push({ minutes, kwh });
+    assumptions.push(t('assume.acAverage', { share: Math.round(DEFAULTS.acShare * 100), peak: t.num(peak, 1) }));
   }
   if (!(toBattery > 0)) { minutes = 0; segments.length = 0; }
   return {

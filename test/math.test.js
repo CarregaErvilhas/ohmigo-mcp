@@ -5,6 +5,7 @@ import { estimateSession, batteryKwhNeeded } from '../src/charging.js';
 import { haversineKm, routeDistance } from '../src/geo.js';
 import { tariffKey } from '../src/quote.js';
 import { applicable } from '../src/ceme.js';
+import { translator } from '../src/i18n.js';
 
 const close = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
 
@@ -103,15 +104,25 @@ test('applicable: voltage variant per socket, AC-only tariffs dropped on DC', ()
 });
 
 import { eligible, pickTariffs } from '../src/quote.js';
-import { napPlan, parseStatus } from '../src/live.js';
+import { napEurPerKwh, napPlan, parseStatus } from '../src/live.js';
 
 test('estimateSession: dc_10_80_minutes sets the DC average, capped by the charger', () => {
-  // 70 % of 60 kWh in 30 min = 84 kW average.
+  // 70 % of 60 kWh in 30 min = 84 kW at the battery: on a fast enough charger
+  // the session takes the published time, while the meter bills the losses too.
   const fast = estimateSession({ kw: 150, dc: true }, { batteryKwh: 60, startPct: 10, targetPct: 80, dc10to80Minutes: 30 });
-  close(fast.minutes, (42 / 0.93) / 84 * 60, 1e-9);
+  close(fast.minutes, 30, 1e-9);
+  close(fast.kwh, 42 / 0.93, 1e-9);
+  assert.ok(fast.assumptions.some(a => a.includes('DC average 90 kW at the meter')));
   const slowCharger = estimateSession({ kw: 50, dc: true }, { batteryKwh: 60, startPct: 10, targetPct: 80, dc10to80Minutes: 30 });
   close(slowCharger.minutes, (42 / 0.93) / (50 * 0.95) * 60, 1e-9);
   assert.ok(!fast.assumptions.some(a => a.includes('unknown')));
+});
+
+test('estimateSession AC: the average power is an assumption, in both languages', () => {
+  const car = { batteryKwh: 50, startPct: 20, targetPct: 80, acKw: 7.4 };
+  assert.ok(estimateSession({ kw: 22, dc: false }, car).assumptions.some(a => a.includes('AC average 95% of 7.4 kW')));
+  assert.ok(estimateSession({ kw: 22, dc: false }, car, translator('pt')).assumptions.some(a => a.includes('média AC de 95% de 7,4 kW')));
+  assert.ok(!estimateSession({ kw: 150, dc: true }, { ...car, dcKw: 100 }).assumptions.some(a => a.includes('AC average')));
 });
 
 test('estimateSession: charging curve integrates kW over SoC', () => {
@@ -165,6 +176,14 @@ test('pickTariffs: a new-sign-ups-only tariff is never best or headline by defau
   // Passed by the user: they have it, so it can lead.
   const mine = pickTariffs(quotes, { level: 'BTN', dc: false }, ['l-bt-promo', 'c-bt-z']);
   assert.equal(mine.headline.id, 'l-bt-promo');
+});
+
+test('napEurPerKwh: the live per-kWh fee, the static price only when the live entry has no fees', () => {
+  assert.equal(napEurPerKwh({ fees: [{ policy: 'pricePerDeliveryUnit', eur: 0.4 }] }, 0.3), 0.4);
+  assert.equal(napEurPerKwh({ fees: [] }, 0.3), 0.3);
+  assert.equal(napEurPerKwh(null, 0.3), 0.3);
+  assert.equal(napEurPerKwh({ fees: [{ policy: 'pricePerChargingTime', eur: 0.1 }] }, 0.3), undefined);
+  assert.equal(napEurPerKwh({ fees: [{ policy: 'flatRate', eur: 1 }] }, 0.3), undefined);
 });
 
 test('napPlan maps NAP policies to the MOBI.E plan shape', () => {
