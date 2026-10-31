@@ -220,10 +220,10 @@ add friction for people trying it in a chat app. If ohmigo ever stores
 something per user, that changes.
 
 **Why fetch live status on demand instead of polling?** Traffic is low, and a
-poller would download 38 MB every few minutes for nobody ([03](03-live-status.md)).
+poller would download the whole feed every few minutes for nobody ([03](03-live-status.md)).
 
-**Why one JSON file for the dataset, not a database?** ~9k sites fit in
-memory in a few MB, and a search is a few milliseconds of looping. A database
+**Why one JSON file for the dataset, not a database?** The sites fit in
+memory, and a search is a few milliseconds of looping. A database
 would be one more service to run, for no gain.
 
 **Why does the assistant send `lang`?** Some of our text reaches the user

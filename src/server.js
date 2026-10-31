@@ -50,15 +50,15 @@ let ds = await loadDataset();
 console.log(`[ohmigo] ${ds.sites.length} sites, data as of ${ds.generatedAt}`);
 
 const live = new LiveStatus();
-// Jittered, so two instances booting together don't both pull the 38 MB feed
+// Jittered, so two instances booting together don't both pull the whole feed
 // at the same second. A request before then just triggers it itself.
 if (process.env.LIVE_WARMUP !== '0') setTimeout(() => live.refresh(), Math.random() * 20_000).unref();
 
 // The dataset changes once a week (Monday morning), but the server may run for
 // weeks without a restart. So every few hours it asks "has it changed?" with
 // the ETag of the copy it has. Unchanged: the answer is a 304 of a few hundred
-// bytes and nothing else happens. Changed: it downloads the new file (~600 KB
-// compressed) and swaps it in; requests already running finish on the old one.
+// bytes and nothing else happens. Changed: it downloads the new file and
+// swaps it in; requests already running finish on the old one.
 // If the check fails, the old copy stays. A local file (development) is never
 // re-checked.
 if (!process.env.DATASET_PATH && ds.etag !== undefined) {
@@ -331,7 +331,7 @@ const httpServer = createHttp((req, res) => {
 
 // A deploy sends SIGTERM to the old process: stop taking connections, let
 // the requests in flight finish (a ranking, a ceme-v2 call: seconds), then
-// exit. 15 s is the cap, for a request stuck on the 38 MB feed.
+// exit. 15 s is the cap, for a request stuck on the live feed.
 let stopping = false;
 function stop(signal) {
   if (stopping) return;

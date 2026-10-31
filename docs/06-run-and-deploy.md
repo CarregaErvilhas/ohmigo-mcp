@@ -51,7 +51,7 @@ elsewhere; point a monitor at `status`. Anyone can read that summary, plus
 the raw error. Send the `x-healthz-token` header with the value of
 `HEALTHZ_TOKEN` and the same answer adds the live feed (`publishedAt`, `fresh`,
 `failures`, `retryAt`, `bytesLast`, the last `error`), the ceme-v2 breaker,
-per-tool counters (`calls`, `errors`, `avgMs`, `maxMs`, `maxBytes`) and memory:
+per-tool counters (`calls`, `errors`, `avgMs`, `maxMs`, `maxChars`) and memory:
 
 ```bash
 curl -H "x-healthz-token: $HEALTHZ_TOKEN" http://127.0.0.1:3002/healthz
@@ -61,7 +61,7 @@ With `HEALTHZ_TOKEN` unset, nobody gets the detail. A wrong token isn't an
 error: you get the summary and a 200.
 
 Every tool call logs one JSON line (`tool`, `ms`, `isError`, `code`,
-`bytes`). Never the arguments: they carry the user's location, car and
+`chars`, the length of the result's text). Never the arguments: they carry the user's location, car and
 tariffs. Results carry `version`, to match a report with a deploy.
 
 ## Connect an AI assistant

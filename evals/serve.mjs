@@ -11,11 +11,12 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CACHE, CUT_AT, EVALS, ROOT, RUNS, dated, linkModules, lisbonNow, mcp, readJson, rel } from './lib.mjs';
+import { DEFAULT_URL } from '../src/data.js';
+import { INSTRUCTIONS_MAX } from '../src/mcp.js';
+import { CACHE, EVALS, ROOT, RUNS, dated, linkModules, lisbonNow, mcp, readJson, rel } from './lib.mjs';
 
 const IDLE_MIN = 30;
 const DATA = join(CACHE, 'chargers.json');
-const DATA_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 
 const argv = process.argv.slice(2);
 if (argv[0] === 'stop') stop(argv[1]);
@@ -64,8 +65,8 @@ async function serve(o) {
   // One frozen copy of the public dataset, so runs compare on the same data.
   // --refresh-data takes this week's.
   if (o.refreshData || !existsSync(DATA)) {
-    console.log(`downloading the dataset from ${DATA_URL}…`);
-    const r = await fetch(DATA_URL, { signal: AbortSignal.timeout(120_000) });
+    console.log(`downloading the dataset from ${DEFAULT_URL}…`);
+    const r = await fetch(DEFAULT_URL, { signal: AbortSignal.timeout(120_000) });
     if (!r.ok) throw new Error(`dataset: HTTP ${r.status}`);
     writeFileSync(DATA, Buffer.from(await r.arrayBuffer()));
   }
@@ -104,7 +105,7 @@ async function serve(o) {
   // cuts them, or none, like a client that ignores them) and the tool list.
   const init = await mcp(url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'ohmigo-evals', version: '1' } });
   const full = init.result.instructions ?? '';
-  const instructions = o.variant === 'none' ? null : o.variant === 'cut' && full.length > CUT_AT ? `${full.slice(0, CUT_AT)}… [truncated]` : full;
+  const instructions = o.variant === 'none' ? null : o.variant === 'cut' && full.length > INSTRUCTIONS_MAX ? `${full.slice(0, INSTRUCTIONS_MAX)}… [truncated]` : full;
   const { tools } = (await mcp(url, 'tools/list')).result;
   const toolsShown = tools.map(({ name, title, description, inputSchema }) => ({ name, title, description, inputSchema }));
 

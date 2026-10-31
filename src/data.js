@@ -6,7 +6,7 @@
 // and publishes it at DEFAULT_URL. Things that change by the minute (is the
 // charger free?) are NOT here: live.js reads them from the NAP when asked.
 //
-// Shape (one JSON file, ~6 MB):
+// Shape (one JSON file):
 //   { schema, generatedAt, sites: [{ id, code, lat, lon, region, city, address,
 //     operator, operatorId, name?, hours?, locationDescription?, phone?, osm?,
 //     points: [{ id, kw, v, a, cable, connector, dc, phases, level, regime, opc, osm? }] }] }
@@ -18,7 +18,7 @@
 // `osm` is what OpenStreetMap adds about the site (its name, brand, opening
 // hours...), when the community mapped it with the MOBI.E code.
 //
-// ~9k sites fit in memory easily, and a linear scan per query takes a few
+// The sites fit in memory easily, and a linear scan per query takes a few
 // milliseconds, so there's no spatial index.
 
 import { existsSync } from 'node:fs';

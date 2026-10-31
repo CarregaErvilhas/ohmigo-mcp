@@ -34,8 +34,8 @@
 //               included: it replaces the CEME + OPC sum. It's what you're
 //               billed, so it applies even where the usual sum is lower;
 //   KWH_GRATIS  the first `freeKwh` of each calendar month are free. ohmigo
-//               stores nothing, so the assistant tells us how much the user
-//               already charged this month (`month_kwh`), we pass it to
+//               keeps nothing about the user between calls, so the assistant
+//               tells us how much they already charged this month (`month_kwh`), we pass it to
 //               ceme-v2, and its `totalEur` has the free kWh still left at the
 //               start of this session. Only applied when that count came in
 //               (`monthKwhKnown`); otherwise it's a tip, like a new-customer

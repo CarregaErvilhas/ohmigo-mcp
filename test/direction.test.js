@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Dataset } from '../src/data.js';
-import { clusterPlaces, directionLabel, samePlace, sameStation, serviceAreas, sideFor } from '../src/direction.js';
+import { clusterPlaces, directionLabel, onMotorway, PAIR_KM, samePlace, sameStation, serviceAreas, sideFor } from '../src/direction.js';
+import { haversineKm } from '../src/geo.js';
 
 // Every pair of motorway sites the data labels with the direction it serves
 // (NAP addresses, OSM names), as of the 2026-10-28 dataset: [the side for
@@ -111,4 +112,59 @@ test('sameStation: the same operator down the road at another address is another
   assert.equal(sameStation(a, { id: 'G-3', operatorId: 'GLPP', lat: 39.7487, lon: -8.8157, address: 'Avenida 25 de Abril' }), true);
   assert.equal(sameStation(a, { id: 'G-4', operatorId: 'GLPP', lat: 39.7472, lon: -8.8157, address: 'Rua X' }), true, '33 m');
   assert.equal(sameStation(a, { id: 'E-1', operatorId: 'EDPC', lat: 39.7470, lon: -8.8157, address: 'Avenida 25 de Abril' }), false);
+});
+
+// A small generator, so a failure repeats.
+const random = seed => () => (seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32;
+
+test('clusterPlaces and serviceAreas compare each site with its neighbours, not with every site', () => {
+  const r = random(1);
+  let reads = 0;
+  const sites = Array.from({ length: 2000 }, (_, i) => {
+    const lat = 38 + r() * 3;
+    return { id: `S-${i}`, lon: -9 + r() * 2, operatorId: `O${i}`, address: i % 2 ? `A1 km ${i}` : `Rua ${i}`, get lat() { reads++; return lat; } };
+  });
+  const places = clusterPlaces(sites.map(site => ({ site })));
+  serviceAreas(places);
+  // Every site against every other would be millions.
+  assert.ok(reads < sites.length * 200, `${reads} coordinate reads for ${sites.length} sites`);
+});
+
+test('clusterPlaces and serviceAreas group the same way as comparing every pair', () => {
+  // What they did before the grid: the first place or group that fits.
+  const clusterAll = hits => {
+    const places = [];
+    for (const h of hits) {
+      const place = places.find(pl => samePlace(pl[0].site, h.site));
+      if (place) place.push(h); else places.push([h]);
+    }
+    return places;
+  };
+  const areasAll = places => {
+    const groups = [];
+    for (const pl of places) {
+      const g = onMotorway(pl[0].site) && groups.find(g => onMotorway(g[0][0].site) && haversineKm(g[0][0].site, pl[0].site) <= PAIR_KM);
+      if (g) g.push(pl); else groups.push([pl]);
+    }
+    return groups;
+  };
+  const shape = x => JSON.stringify(x, (k, v) => k === 'site' ? v.id : v);
+  // Tight clumps, so sites sit at every distance around the limits, in the
+  // far north too (the data has stray coordinates), where a degree of
+  // longitude is short.
+  for (const [seed, lat0, lon0] of [[1, 38.7, -9.1], [2, 41.1, -8.6], [3, 66.2, -18.1], [4, 37, -8.05]]) {
+    const r = random(seed);
+    const hits = Array.from({ length: 1500 }, (_, i) => {
+      const clump = Math.floor(r() * 40);
+      return { site: {
+        id: `S-${i}`, operatorId: `O${Math.floor(r() * 3)}`,
+        lat: lat0 + (clump % 7) * 0.03 + (r() - 0.5) * 0.02,
+        lon: lon0 + Math.floor(clump / 7) * 0.03 + (r() - 0.5) * 0.02,
+        address: r() < 0.5 ? `A${clump % 3 + 1} km ${clump}` : `Rua ${clump}`,
+      } };
+    });
+    const places = clusterPlaces(hits);
+    assert.equal(shape(places), shape(clusterAll(hits)), `places, seed ${seed}`);
+    assert.equal(shape(serviceAreas(places)), shape(areasAll(places)), `areas, seed ${seed}`);
+  }
 });

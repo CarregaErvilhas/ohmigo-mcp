@@ -453,7 +453,7 @@ const monthKwh = a => expandMonthKwh(a.month_kwh, tariffKey).catch(e => { if (e.
 // What a ranking quotes. A car park with ten identical T2s prices the same
 // ten times, so each site keeps one socket per kind (the one most likely
 // free): that halves a 5 km search in Lisbon. And a 50 km radius still has
-// ~4,000 kinds, so sites are taken nearest first (to the centre, or to the
+// thousands of kinds, so sites are taken nearest first (to the centre, or to the
 // route) until MAX_RANKED_POINTS; the response says when that cut bit.
 const MAX_RANKED_POINTS = 2000;
 const DETAIL_IN_RANKING = 3;
