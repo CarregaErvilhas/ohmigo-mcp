@@ -18,8 +18,76 @@
 // writes offers/custofinal.json; src/offers.js loads it.
 //
 // The parser is strict on purpose: an unknown column header, a missing
-// caption or zero rows throw, so a change in the blog's layout fails the
-// weekly job loudly instead of quietly publishing wrong prices.
+// caption, zero rows, a price cell that isn't a number or a row that fails
+// offerProblems() throw, so a change in the blog's layout (or a typo in it)
+// fails the weekly job loudly instead of quietly publishing wrong prices.
+
+// Where every scraped offer must come from.
+export const BLOG_HOST = 'custofinal.blogspot.com';
+
+// What a final price can plausibly be, in €/kWh. Wide on purpose: this is not
+// a judgement on the market, it catches a lost decimal comma (41 for 0,41) or
+// a wrong unit. A person still reads every price change in the pull request.
+export const MIN_EUR_PER_KWH = 0.05;
+export const MAX_EUR_PER_KWH = 2;
+// Labels are shown to assistants and to people, so one that's suddenly a
+// paragraph isn't an operator name any more.
+export const MAX_LABEL_LENGTH = 100;
+
+// Control characters, invisible format characters (a right-to-left override
+// makes text read differently from what it says), the brackets of a tag that
+// survived decoding, or an entity decode() doesn't know.
+const UNSAFE_TEXT = /[\p{Cc}\p{Cf}<>]|&[#\w]+;/u;
+
+// Everything wrong with an offer, as sentences (none = sane). Checks only the
+// fields it's given: the parser and toOffers() each pass the part they check,
+// and a manual.json override lists just what it changes. `hosts`: where its source may be.
+export function offerProblems(offer, hosts = [BLOG_HOST]) {
+  const problems = [];
+  for (const field of ['label', 'provider', 'plan', 'network']) {
+    const text = offer[field];
+    if (text == null) continue;
+    if (typeof text !== 'string') problems.push(`${field} is not text`);
+    else if (text.length > MAX_LABEL_LENGTH) problems.push(`${field} is too long (${text.length}, at most ${MAX_LABEL_LENGTH})`);
+    else if (UNSAFE_TEXT.test(text)) problems.push(`${field} ${JSON.stringify(text)} has control or format characters, angle brackets or entities`);
+  }
+  for (const [band, price] of Object.entries(offer.prices || {})) {
+    if (price === null) continue;
+    if (typeof price !== 'number' || !(price >= MIN_EUR_PER_KWH && price <= MAX_EUR_PER_KWH)) {
+      problems.push(`${band} price ${price} is out of bounds (${MIN_EUR_PER_KWH} to ${MAX_EUR_PER_KWH} €/kWh)`);
+    }
+  }
+  if ('source' in offer) {
+    const url = URL.parse(offer.source);
+    if (url?.protocol !== 'https:' || !hosts.includes(url.host)) problems.push(`source ${offer.source} is not https on ${hosts.join(' or ')}`);
+  }
+  return problems;
+}
+
+function assertSane(offer) {
+  const problems = offerProblems(offer);
+  if (problems.length) throw new Error(`offer ${JSON.stringify(offer.label)}: ${problems.join('; ')}`);
+}
+
+// The price post to read: the newest by publication date, of the posts with
+// the blog's tables. Not by `updated`: an author fixing a typo in a months-old
+// post would make its old prices look like the latest ones. Any such table
+// counts, not only one that parses: a new post in a new layout has to fail in
+// parseTables, not fall back quietly to last month's prices.
+export function newestPost(entries) {
+  return entries
+    .filter(e => /class="[^"]*\bevtable\b/.test(e.content?.$t || ''))
+    .sort((a, b) => Date.parse(b.published.$t) - Date.parse(a.published.$t))[0];
+}
+
+// One price cell, "0,41" -> 0.41. Empty (or missing) means not offered at this
+// power; anything else that isn't a number is a table we can't read.
+function priceOf(cell = '', name) {
+  if (!cell) return null;
+  const v = cell.replace(',', '.');
+  if (!/^\d+(\.\d+)?$/.test(v)) throw new Error(`offer ${JSON.stringify(name)}: price "${cell}" is not a number`);
+  return Number(v);
+}
 
 // Header label -> band key. The bands are the blog's; see bandFor().
 export const BANDS = {
@@ -35,14 +103,16 @@ const decode = s => s
 
 const cells = rowHtml => [...rowHtml.matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)].map(m => decode(m[1]));
 
+// The bodies of the post's price tables. The blog also has a small "price vs
+// fuel" scale table with the same class; price tables are the ones with an
+// "Operador" column.
+const priceTables = html => [...html.matchAll(/<table\b[^>]*class="[^"]*evtable[^"]*"[^>]*>([\s\S]*?)<\/table>/gi)]
+  .map(m => m[1]).filter(t => /Operador/i.test(t));
+
 // html: the post body. Returns [{ caption, kind, bands: [key...], rows: [{ name, network, prices: { key: number|null } }] }]
 export function parseTables(html) {
-  const tables = [...html.matchAll(/<table\b[^>]*class="[^"]*evtable[^"]*"[^>]*>([\s\S]*?)<\/table>/gi)].map(m => m[1]);
   const out = [];
-  for (const t of tables) {
-    // The blog also has a small "price vs fuel" scale table with the same
-    // class. Price tables are the ones with an "Operador" column.
-    if (!/Operador/i.test(t)) continue;
+  for (const t of priceTables(html)) {
     const caption = decode(t.match(/<caption\b[^>]*>([\s\S]*?)<\/caption>/i)?.[1] || '');
     if (!caption) throw new Error('price table without a caption');
     const kind = /subscri[çc][õo]es pagas/i.test(caption) && !/sem\b/i.test(caption) ? 'subscription' : 'payg';
@@ -56,18 +126,22 @@ export function parseTables(html) {
       return key;
     });
     const body = t.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody>/i)?.[1] || '';
+    // Cells map to bands by position, so a merged one would shift the prices.
+    if (/<t[hd]\b[^>]*\b(?:col|row)span=/i.test(body)) throw new Error('a price row has merged cells');
     const rows = [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(m => cells(m[1])).filter(r => r.length >= 2 && r[0]);
     if (!rows.length) throw new Error(`table "${caption}": no rows`);
     out.push({
       caption, kind, bands,
-      rows: rows.map(([name, network, ...vals]) => ({
-        name, network,
+      rows: rows.map(([name, network, ...vals]) => {
         // Some rows stop early (no trailing empty cells): missing = not offered.
-        prices: Object.fromEntries(bands.map((k, i) => {
-          const v = (vals[i] || '').replace(',', '.');
-          return [k, v && Number.isFinite(Number(v)) ? Number(v) : null];
-        })),
-      })),
+        // Too many cells can't be read: we couldn't tell which one is extra,
+        // so the prices could land in the wrong power bands.
+        if (vals.length > bands.length) throw new Error(`offer ${JSON.stringify(name)}: ${vals.length} price cells for ${bands.length} power bands`);
+        // Labels are checked on every row: the ones toOffers() leaves out still
+        // reach the pull request through `unmapped` and `skipped`.
+        assertSane({ label: name, network });
+        return { name, network, prices: Object.fromEntries(bands.map((k, i) => [k, priceOf(vals[i], name)])) };
+      }),
     });
   }
   if (!out.length) throw new Error('no price tables found');
@@ -93,7 +167,11 @@ function feeOf(text) {
 // Turns the parsed tables into offers, using networks.json to say which
 // chargers each "Postos" label means. Labels missing from networks.json are
 // returned in `unmapped` and left out: a human has to say what they mean.
+// Only rows that ship get their prices checked, so a typo in a row left out
+// doesn't hold back the rest of the update.
 export function toOffers(tables, networks, source) {
+  const [badSource] = offerProblems({ source: source.url });
+  if (badSource) throw new Error(badSource);
   const net = new Map(Object.entries(networks).map(([k, v]) => [fold(k), v]));
   const offers = [], unmapped = new Set(), skipped = [];
   for (const t of tables) {
@@ -103,6 +181,7 @@ export function toOffers(tables, networks, source) {
       if (where.scope === 'unknown') { skipped.push(`${r.name} @ ${r.network}`); continue; }
       const { provider, plan } = splitName(r.name);
       const fee = t.kind === 'subscription' ? feeOf(r.name) : null;
+      assertSane({ label: r.name, prices: r.prices });
       offers.push({
         id: slug(`${r.name} ${r.network}`),
         label: r.name, provider, plan, network: r.network,

@@ -249,6 +249,7 @@ before(async () => {
   server = spawn(process.execPath, ['src/server.js'], {
     cwd: new URL('..', import.meta.url),
     env: {
+      HEALTHZ_TOKEN: 'test-token',
       ...process.env, PORT: '0', HOST: '127.0.0.1', DATASET_PATH: data, CEME_API_URL: 'http://127.0.0.1:9', CEME_API_KEY: '',
       NAP_STATUS_URL: `http://127.0.0.1:${feedServer.address().port}/live`, LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '60',
       // Every copy is past the TTL at once, and usable.
@@ -277,7 +278,7 @@ async function call(name, args) {
 }
 
 const car = { battery_kwh: 58, start_pct: 20, lang: 'en' };
-const idle = async () => { while ((await fetch(`${base}/healthz`).then(r => r.json())).live.refreshing) await new Promise(r => setTimeout(r, 10)); };
+const idle = async () => { while ((await fetch(`${base}/healthz`, { headers: { 'x-healthz-token': 'test-token' } }).then(r => r.json())).live.refreshing) await new Promise(r => setTimeout(r, 10)); };
 
 // These run first: they prove no download starts, with no copy in memory.
 test('http: errors that need no live data do not touch the feed', limit, async () => {
