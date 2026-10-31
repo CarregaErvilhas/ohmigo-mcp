@@ -66,6 +66,7 @@ const eur = (v, d = 4) => v == null ? '' : Number(v).toLocaleString('pt-PT', { m
 const tag = (txt, cls = '') => `<span class="tag ${cls}">${esc(txt)}</span>`;
 const fold = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const CEME_DOWN = 'ceme-v2 indisponível de momento.';
+const cemeStale = () => (D.staleSince ? `<p class="err">Dados do ceme-v2 de ${esc(D.staleSince)}: o serviço está a limitar pedidos, por isso podem estar desatualizados.</p>` : '');
 const PERIODS = ['VAZIO', 'FORA_VAZIO', 'CHEIAS', 'PONTA', 'SIMPLES'];
 const REGIME = { mobie: 'MOBI.E', mobie_sem_tarifa: 'MOBI.E sem tarifa OPC', sem_ceme: 'fora MOBI.E' };
 let D, tab = location.hash.slice(1) || 'resumo', q = '';
@@ -120,6 +121,7 @@ function resumo() {
     <tr><td>Rede → operadores</td><td><code>offers/networks.json</code></td><td class="nw">manual</td></tr>
   </table>
   ${ce.error ? `<p class="err">${CEME_DOWN}</p>` : ''}
+  ${cemeStale()}
   ${D.offers.orphans?.length ? `<h2>manual.json órfãos</h2><ul>${D.offers.orphans.map(o => `<li>${esc(o)}</li>`).join('')}</ul>` : ''}`;
 }
 

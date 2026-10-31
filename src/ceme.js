@@ -14,6 +14,7 @@
 
 import { createHash } from 'node:crypto';
 import { limiter } from './limit.js';
+import { QUARTER_MS } from './profile.js';
 
 const BASE = (process.env.CEME_API_URL || 'https://ceme.ocarroeletrico.com').replace(/\/$/, '');
 const KEY = process.env.CEME_API_KEY || null;
@@ -62,10 +63,17 @@ let quotaUntil = 0;
 // burst into that limit. 6 lets a ranking finish its usual 20-30 calls in a few
 // round trips.
 export const MAX_CONCURRENT = 6;
-// How many wait for a place: about two rankings of the usual size (the three
-// that can run at once rarely all start cold). Past that the wait is seconds
-// even at a fast ceme-v2, and a call that won't answer in time is better shed.
-export const MAX_QUEUED = 60;
+// What one ranking may spend, and how many run at once per process (quote.js
+// enforces both). A ranking asks once per distinct charging speed: 20-32 near
+// Lisbon or Porto on the real dataset, depending on the car. 40 leaves those
+// alone and stops a search over every speed there is (72 nationwide).
+export const MAX_SIMS_PER_CALL = 40;
+export const MAX_RANKINGS = 3;
+// How many wait for a place: every call the rankings running at once can make,
+// so they never shed each other's calls, plus room for the single estimates
+// that arrive during a burst of them.
+const ROOM_FOR_ESTIMATES = 20;
+export const MAX_QUEUED = MAX_RANKINGS * MAX_SIMS_PER_CALL + ROOM_FOR_ESTIMATES;
 
 // Circuit breaker: after BREAKER_FAILURES failures in a row, calls fail at
 // once for BREAKER_MS instead of each waiting up to 10 s for an answer that
@@ -83,8 +91,15 @@ export const cemeHealth = () => ({
 // Every error from here is tagged, so the tools can answer without the
 // energy price instead of failing the whole call.
 const unavailable = (msg, cause) => Object.assign(new Error(msg, { cause }), { ceme: true });
-const rateLimited = path => Object.assign(unavailable(`ceme-v2 ${path}: rate limited`), { rateLimited: true });
-const gate = limiter({ concurrent: MAX_CONCURRENT, queued: MAX_QUEUED, full: () => unavailable('ceme-v2: too many calls waiting') });
+// `refused`: the call never reached ceme-v2 because this server held it back,
+// so the tools mustn't say the pricing service didn't answer.
+const refused = (msg, extra) => Object.assign(unavailable(msg), { refused: true }, extra);
+const rateLimited = path => refused(`ceme-v2 ${path}: rate limited`, { rateLimited: true });
+const gate = limiter({
+  concurrent: MAX_CONCURRENT, queued: MAX_QUEUED,
+  full: () => refused('ceme-v2: too many calls waiting'),
+  gone: () => refused('ceme-v2: the request was abandoned'),
+});
 
 // Retry-After is seconds or an HTTP date.
 function retryAfterMs(header) {
@@ -124,9 +139,9 @@ function refuseIfOff(path) {
 
 // Checked again after the wait: the breaker may have opened, or the quota run
 // out, while this call stood in line. -> { data, bytes }
-async function call(path, init = {}) {
+async function call(path, init = {}, signal) {
   refuseIfOff(path);
-  return gate(() => { refuseIfOff(path); return attempt(path, init); });
+  return gate(() => { refuseIfOff(path); return attempt(path, init); }, signal);
 }
 
 async function attempt(path, init) {
@@ -170,20 +185,23 @@ function evict() {
   while (cache.size > MAX_CACHE_ENTRIES || cacheBytes > MAX_CACHE_BYTES) forget(cache.keys().next().value);
 }
 
-// A copy of the last good answer that says so. Only objects: the reply to
-// /v1/tariffs may be a bare list, and nobody needs its age.
-const stale = ({ value, at }) => (Array.isArray(value) ? value : { ...value, staleSince: at });
+// A copy of the last good answer that says so. A reply can be a bare list, which
+// keeps it as a property: JSON won't show it, whoever reads the list will.
+const stale = ({ value, at }) => Object.assign(Array.isArray(value) ? [...value] : { ...value }, { staleSince: at });
+
+const cacheKey = key => (key.length > MAX_KEY_CHARS ? `#${createHash('sha256').update(key).digest('base64url')}` : key);
+const isFresh = entry => Date.now() - entry.at < TTL_MS;
 
 function cached(fullKey, fn, { maxBytes = MAX_CACHE_BYTES } = {}) {
-  const key = fullKey.length > MAX_KEY_CHARS ? `#${createHash('sha256').update(fullKey).digest('base64url')}` : fullKey;
+  const key = cacheKey(fullKey);
   const hit = cache.get(key);
   if (hit?.pending) return hit.pending;
-  if (hit && Date.now() - hit.at < TTL_MS) return Promise.resolve(hit.value);
+  if (hit && isFresh(hit)) return Promise.resolve(hit.value);
   const entry = hit ?? { at: 0, value: undefined, bytes: 0, pending: null };
   entry.pending = fn().then(({ data, bytes }) => {
     forget(key);
     const size = bytes + key.length;
-    if (size <= Math.min(maxBytes, MAX_CACHE_BYTES)) {
+    if (size <= maxBytes) {
       cache.set(key, Object.assign(entry, { at: Date.now(), value: data, bytes: size, pending: null }));
       cacheBytes += size;
       evict();
@@ -212,36 +230,40 @@ function cached(fullKey, fn, { maxBytes = MAX_CACHE_BYTES } = {}) {
 // nearby requests share a cache entry (the quarter-hour is the OMIE unit).
 // With one, the key is the profile itself: points with the same power and
 // start share it, so a ranking needs one call per distinct charging speed.
-// The slices go out exactly as they came. In the key, only the first slice's
-// `at` is rounded down to its quarter-hour (the others are on one already):
-// ceme-v2 prices a slice by its quarter, so two starts in the same quarter with
-// the same kWh in every slice cost the same. kWh are never rounded in the key,
-// since any other kWh is another total. That means it only helps sessions that
-// fit in one quarter: a longer one starting a minute later has other kWh in
-// its first slice, so it's a new entry and a new call.
+// The slices go out exactly as they came, and the key is exact: kWh or start,
+// anything else could be another total. So a session spanning quarter-hours
+// that starts a minute later is a new entry and a new call.
 //   detail: ask for each tariff's per-slice breakdown (period, price, OMIE).
 //   monthKwh: what the user already charged this month per tariff, for
 //   free-kWh promotions (see expandMonthKwh). Part of the cache key.
-const quarterOf = at => new Date(Math.floor(Date.parse(at) / 900_000) * 900_000).toISOString();
-
-export function simulate({ kwh, at = new Date(), region = 'CONT', profile = null, detail = false, monthKwh = null }) {
+function simRequest({ kwh, at = new Date(), region = 'CONT', profile = null, detail = false, monthKwh = null }) {
   const mk = monthKwh && Object.keys(monthKwh).length ? monthKwh : null;
   const mkKey = mk ? JSON.stringify(Object.entries(mk).sort()) : '';
   if (profile?.length) {
     const slices = profile.map(({ at, kwh }) => ({ at, kwh }));
     const sum = slices.reduce((a, x) => a + x.kwh, 0);
-    const key = `simp|${region}|${detail ? 1 : 0}|${mkKey}|${slices.map((x, i) => `${i ? x.at : quarterOf(x.at)}=${x.kwh}`).join(',')}`;
-    return cached(key, () => call('/v1/simulate', {
-      method: 'POST',
-      body: JSON.stringify({ kwh: Math.round(sum * 1000) / 1000, at: slices[0].at, region, useSpot: true, profile: slices, detail, ...(mk && { monthKwh: mk }) }),
-    }), { maxBytes: detail ? MAX_DETAIL_CACHE_BYTES : MAX_CACHE_BYTES });
+    return {
+      key: `simp|${region}|${detail ? 1 : 0}|${mkKey}|${slices.map(x => `${x.at}=${x.kwh}`).join(',')}`,
+      body: { kwh: Math.round(sum * 1000) / 1000, at: slices[0].at, region, useSpot: true, profile: slices, detail, ...(mk && { monthKwh: mk }) },
+      maxBytes: detail ? MAX_DETAIL_CACHE_BYTES : MAX_CACHE_BYTES,
+    };
   }
   const k = Math.max(0.1, Math.round(kwh * 10) / 10);
-  const q = new Date(Math.floor(at.getTime() / 900_000) * 900_000);
-  return cached(`sim|${region}|${mkKey}|${k}|${q.toISOString()}`, () => call('/v1/simulate', {
-    method: 'POST',
-    body: JSON.stringify({ kwh: k, at: q.toISOString(), region, useSpot: true, ...(mk && { monthKwh: mk }) }),
-  }));
+  const q = new Date(Math.floor(at.getTime() / QUARTER_MS) * QUARTER_MS).toISOString();
+  return { key: `sim|${region}|${mkKey}|${k}|${q}`, body: { kwh: k, at: q, region, useSpot: true, ...(mk && { monthKwh: mk }) } };
+}
+
+// `signal`: a call still in line when the request is abandoned never goes out.
+export function simulate(args) {
+  const { key, body, maxBytes } = simRequest(args);
+  return cached(key, () => call('/v1/simulate', { method: 'POST', body: JSON.stringify(body) }, args.signal), { maxBytes });
+}
+
+// Would simulate() answer without a new call to ceme-v2? (a ranking's cap only
+// counts the calls that really go out)
+export function isCovered(args) {
+  const hit = cache.get(cacheKey(simRequest(args).key));
+  return !!hit && (!!hit.pending || isFresh(hit));
 }
 
 // The assistant says how much the user charged this month with each of their

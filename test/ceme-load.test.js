@@ -261,13 +261,78 @@ test('long keys are hashed: the cache holds a digest, and different sessions sta
   assert.ok(perEntry < JSON.stringify(SIM).length + 200, `${perEntry} bytes per entry: the key is not in there whole`);
 });
 
-test('one-slice sessions inside a quarter-hour share an entry; the slices are sent as they are', async () => {
+test('the key is exact: another start minute is another call, and the slices go out as they are', async () => {
   const { simulate } = await fresh();
   const calls = stub(() => json(SIM));
   await simulate({ kwh: 5, profile: [{ at: '2026-11-10T12:07:00.000Z', kwh: 5 }] });
-  await simulate({ kwh: 5, profile: [{ at: '2026-11-10T12:11:00.000Z', kwh: 5 }] });
+  await simulate({ kwh: 5, profile: [{ at: '2026-11-10T12:07:00.000Z', kwh: 5 }] });
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].body.profile[0].at, '2026-11-10T12:07:00.000Z', 'never rewritten on the way out');
+  await simulate({ kwh: 5, profile: [{ at: '2026-11-10T12:11:00.000Z', kwh: 5 }] });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].body.profile[0].at, '2026-11-10T12:07:00.000Z');
+});
+
+test('isCovered says when simulate needs no new call', async () => {
+  const { simulate, isCovered, TTL_MS } = await fresh();
+  mock.timers.enable({ apis: ['Date'], now: NOW });
+  stub(() => json(SIM));
+  const args = { kwh: 5, profile: [{ at: '2026-11-10T12:07:00.000Z', kwh: 5 }] };
+  assert.equal(isCovered(args), false);
+  const flying = simulate(args);
+  assert.equal(isCovered(args), true, 'in flight costs nothing either');
+  await flying;
+  assert.equal(isCovered(args), true);
+  mock.timers.tick(TTL_MS + 1);
+  assert.equal(isCovered(args), false);
+});
+
+test('a call shed by the line or the quota is marked refused; an outage is not', async () => {
+  const { simulate, MAX_CONCURRENT, MAX_QUEUED } = await fresh();
+  const g = gated();
+  const accepted = Array.from({ length: MAX_CONCURRENT + MAX_QUEUED }, (_, i) => simulate({ kwh: i + 1, at: at(0) }));
+  await settle();
+  await assert.rejects(simulate({ kwh: 5000, at: at(0) }), e => e.refused === true);
+  while (g.waiting.length) { g.release(); await settle(); await settle(); }
+  await Promise.all(accepted);
+  const limited = await fresh();
+  stub(() => tooMany({ 'retry-after': '7' }));
+  await assert.rejects(limited.simulate({ kwh: 1, at: at(0) }), e => e.refused === true);
+  const down = await fresh();
+  stub(() => new Response('oops', { status: 503 }));
+  await assert.rejects(down.simulate({ kwh: 1, at: at(0) }), e => e.ceme === true && !e.refused);
+});
+
+test('the line fits every call the rankings running at once can make', async () => {
+  const { MAX_CONCURRENT, MAX_QUEUED, MAX_RANKINGS, MAX_SIMS_PER_CALL } = await fresh();
+  assert.ok(MAX_QUEUED + MAX_CONCURRENT > MAX_RANKINGS * MAX_SIMS_PER_CALL);
+  assert.ok(MAX_QUEUED > MAX_RANKINGS * MAX_SIMS_PER_CALL, 'with room left for estimates');
+});
+
+test('a call abandoned in line leaves it and never goes out', async () => {
+  const { simulate, MAX_CONCURRENT } = await fresh();
+  const g = gated();
+  const running = Array.from({ length: MAX_CONCURRENT }, (_, i) => simulate({ kwh: i + 1, at: at(0) }));
+  const stop = new AbortController();
+  const waiting = simulate({ kwh: 99, at: at(0), signal: stop.signal });
+  await settle();
+  stop.abort();
+  await assert.rejects(waiting, e => e.refused === true);
+  while (g.waiting.length) { g.release(); await settle(); await settle(); }
+  await Promise.all(running);
+  assert.equal(g.calls.length, MAX_CONCURRENT);
+});
+
+test('a last good list keeps its shape and still says how old it is', async () => {
+  mock.timers.enable({ apis: ['Date'], now: NOW });
+  const { promos, TTL_MS } = await fresh();
+  let limited = false;
+  stub(() => limited ? tooMany({ 'retry-after': '30' }) : json([{ id: 'p' }]));
+  await promos();
+  mock.timers.tick(TTL_MS + 1000);
+  limited = true;
+  const served = await promos();
+  assert.ok(Array.isArray(served));
+  assert.equal(served.staleSince, NOW);
 });
 
 test('what could price differently never shares an entry', async () => {
