@@ -599,6 +599,111 @@
           }
         ]
       }
+    },
+    {
+      "id": "uber-driver-powerdot",
+      "why": "A direct offer only for one group (offers/manual.json, not a CEME tariff): pass the group the user named and say whom the price is for.",
+      "message": "Sou motorista Uber, com conta Uber Driver. Quanto me custa carregar no Powerdot da Rua Virgílio Vieira da Cunha, em Leiria? Fiat 500e de 42 kWh, de 20% a 80%.",
+      "requires": [
+        {
+          "site": "HRZ-LRA-00075"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "audiences": "uber-driver"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply say that one of the prices is only for Uber drivers (professional drivers with an Uber Driver account)?"
+        ]
+      }
+    },
+    {
+      "id": "remembered-audience",
+      "why": "A group the app remembers counts as said: pass it without asking again.",
+      "memory": "É motorista profissional TVDE com conta Uber Driver. Carro: Fiat 500e de 42 kWh (37 kWh úteis).",
+      "message": "Quanto me custa carregar no Powerdot da Rua Virgílio Vieira da Cunha, em Leiria? Estou com 20% e quero chegar aos 80%.",
+      "requires": [
+        {
+          "site": "HRZ-LRA-00075"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "audiences": "uber-driver"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "card-at-charger-disagree",
+      "why": "The NAP says a bank card works at the charger, OpenStreetMap says it doesn't: say so instead of picking one.",
+      "message": "Posso pagar com o cartão multibanco no posto da EDP da Rua da Comissão Iniciativa, em Leiria?",
+      "requires": [
+        {
+          "site": "EDP-LRA-00093"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|find_chargers|estimate_charging_cost",
+            "args": {
+              "*": "comiss|EDP-LRA-0009[34]"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply tell the user that the sources disagree on whether a bank card works at that charger, or tell them to check on site, instead of stating flatly that it works or that it doesn't?"
+        ]
+      }
+    },
+    {
+      "id": "contactless-near",
+      "why": "\"Contactless\" is the card_payment filter too.",
+      "message": "Quero carregar perto de Coimbra e pagar por contactless com o telemóvel, sem apps nem cartões de carregamento. Onde posso ir?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_chargers|find_cheapest_charging|lookup_charger",
+            "args": {
+              "card_payment": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "adhoc-no-terminal",
+      "why": "Without a CEME card the user pays ad hoc; where no card terminal is listed, that's on the phone, not with a card at the charger.",
+      "message": "Não tenho cartão de carregamento nenhum nem apps. Consigo carregar no posto LRA-00156? Como é que pago? Nissan Leaf de 40 kWh, de 20% a 80%.",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply explain that without a CEME card the user can pay ad hoc on their phone (QR code or website), without claiming that a bank card works at a terminal on that charger?"
+        ]
+      }
     }
   ]
 }

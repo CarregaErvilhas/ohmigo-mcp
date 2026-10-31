@@ -37,6 +37,7 @@
 
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
+import { cardPayment } from './data.js';
 import { siteOpen } from './hours.js';
 import { localOffset, localTime, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
@@ -165,16 +166,21 @@ function feePlan(point, live) {
 }
 
 // MOBI.E's ad hoc price, which comes without VAT like its operator fees.
-function adhocOption(point, session, t, region) {
+// "Ad hoc" says no CEME is needed, not how you pay: at most of these chargers
+// neither the NAP nor OpenStreetMap lists a card terminal, so it's done on the
+// phone (QR code or website at the charger). The label says what the site's
+// data says (cardPayment: data.js), and stays vague when it says nothing.
+function adhocOption(point, session, t, region, site) {
   const plan = point.opc?.AD_HOC_PAYMENT;
   if (!plan) return null;
   const vat = vatFor(region);
   const c = opcCost(plan, { kwh: session.kwh, minutes: session.minutes });
+  const { value: card, disagree } = site ? cardPayment(site) : {};
   return {
-    kind: 'adhoc', label: t('option.adhoc'),
+    kind: 'adhoc', label: t(card === true ? 'option.adhoc.card' : card === false ? 'option.adhoc.noCard' : 'option.adhoc'),
     total: r2(c.high * vat), low: r2(c.low * vat), high: r2(c.high * vat),
     tariff: describePlan(plan, t),
-    note: t('option.adhoc.note', { vat: pct(vat, t) }),
+    note: [t('option.adhoc.note', { vat: pct(vat, t) }), ...(disagree ? [t('option.adhoc.cardDisagree')] : [])].join('; '),
   };
 }
 
@@ -280,7 +286,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
       base.assumptions.push(note?.vatIncluded ? t('assume.napVatIn') : t('assume.napPrice', { vat: pct(vat, t) }));
       if (note?.timeOfUse) base.assumptions.push(t('assume.napTimeOfUse'));
     } else if (walkUp) {
-      base.options.push(adhocOption(point, session, t, base.region));
+      base.options.push(adhocOption(point, session, t, base.region, site));
     }
     base.options.sort((a, b) => a.total - b.total);
     const first = base.options[0];
@@ -294,7 +300,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   // ad hoc price here: it's the operator's own word, and can be newer than
   // MOBI.E's file (IONITY: 0.51 €/kWh there, 0.63 with VAT, the same as its
   // own price today).
-  const adhoc = ownWalkUp(site, direct) ? null : adhocOption(point, session, t, base.region);
+  const adhoc = ownWalkUp(site, direct) ? null : adhocOption(point, session, t, base.region, site);
   const want = detail || qa;
   const key = `${base.region}|${want ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',') || `${start.toISOString()}=${session.kwh}`}`;
   if (!simCache.has(key)) simCache.set(key, simulate({ kwh: session.kwh, at: start, region: base.region, profile: slices, detail: want, monthKwh }));

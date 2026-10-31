@@ -44,6 +44,9 @@ export const MESSAGES = {
     'option.opcDirect.peak': () => 'the highest price of the day at this charger; lower at other hours (see the operator\'s app)',
 
     'option.adhoc': () => 'Bank card / QR at the charger (no CEME)',
+    'option.adhoc.card': () => 'Bank card at the charger (terminal or contactless), no CEME',
+    'option.adhoc.noCard': () => 'No CEME: paid on your phone (QR code or website at the charger); no card terminal is listed here',
+    'option.adhoc.cardDisagree': () => 'the NAP and OpenStreetMap disagree on whether a card works at the charger: check on site',
     'option.adhoc.note': ({ vat }) => `MOBI.E's ad hoc price, published without VAT; ${vat} % VAT added`,
     'option.opcDirect': ({ operator }) => `${operator} direct (their app/card, no subscription)`,
     'option.opcDirect.noName': () => 'Operator direct (their app/card, no subscription; the NAP names no operator)',
@@ -147,6 +150,9 @@ export const MESSAGES = {
     'option.opcDirect.peak': () => 'preço mais alto do dia neste posto; mais baixo noutras horas (ver a app do operador)',
 
     'option.adhoc': () => 'Cartão bancário / QR no posto (sem CEME)',
+    'option.adhoc.card': () => 'Cartão bancário no posto (terminal ou contactless), sem CEME',
+    'option.adhoc.noCard': () => 'Sem CEME: pagas no telemóvel (QR code ou site no posto); não há terminal de cartão indicado aqui',
+    'option.adhoc.cardDisagree': () => 'o PAN e o OpenStreetMap não batem certo sobre se o cartão funciona no posto: confirma no local',
     'option.adhoc.note': ({ vat }) => `preço ad hoc da MOBI.E, publicado sem IVA; somamos ${vat} % de IVA`,
     'option.opcDirect': ({ operator }) => `${operator} directo (app/cartão do operador, sem subscrição)`,
     'option.opcDirect.noName': () => 'Operador directo (app/cartão do operador, sem subscrição; o PAN não diz qual é)',

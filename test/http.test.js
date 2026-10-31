@@ -94,6 +94,12 @@ test('http: estimate_charging_cost answers with structuredContent, and the text 
   const json = JSON.parse(text.slice(text.indexOf('\n\n{') + 2));
   assert.deepEqual(json, r.structuredContent);
   assert.ok(json.results[0].options.length > 1);
+  assert.ok(json.notes.some(n => /more ways to pay/.test(n)), 'says there are more ways to pay');
+  // The NAP lists no card method here but OpenStreetMap tags a terminal: a
+  // yes from either counts, and the option says the sources disagree.
+  const adhoc = json.results.flatMap(q => q.options).find(o => o.kind === 'adhoc');
+  assert.match(adhoc.label, /bank card at the charger/i);
+  assert.match(adhoc.note, /disagree/);
 });
 
 test('http: find_cheapest_charging ranks MOBI.E and the networks outside it', async () => {

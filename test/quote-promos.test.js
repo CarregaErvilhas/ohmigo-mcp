@@ -139,6 +139,17 @@ test('outside MOBI.E with a MOBI.E ad hoc price: says bank card / QR, and stands
   assert.equal(azo.best.total, r2(0.28 * azo.session.kwhBilled * 1.16), 'island VAT');
 });
 
+test('ad hoc says how you pay as far as the site\'s data says: card at the charger, the phone, or both', async () => {
+  const p = { id: 'a1', kw: 22, dc: false, connector: 'T2', regime: 'sem_ceme', opc: { AD_HOC_PAYMENT: { energy: [0.28] } } };
+  const label = async extra => (await quotePoint({ site: { ...site('HIGH'), operator: 'X', ...extra }, point: p }, car, { at, lang: 'en' })).best;
+  assert.match((await label({})).label, /Bank card \/ QR/, 'no payment data: stays vague');
+  assert.match((await label({ payment: ['apps', 'rfid'] })).label, /phone.*no card terminal/, 'a NAP list without cards: the phone');
+  assert.match((await label({ payment: ['apps', 'creditCard'] })).label, /Bank card at the charger/);
+  const both = await label({ payment: ['apps'], osm: { cards: true } });
+  assert.match(both.label, /Bank card at the charger/, 'a yes from either source counts');
+  assert.match(both.note, /disagree/);
+});
+
 test('rank: MOBI.E and outside MOBI.E share one list, the price decides', async () => {
   const { rank } = await import('../src/quote.js');
   const cont = { id: 'c1', kw: 50, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.05 };
