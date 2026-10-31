@@ -77,8 +77,10 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
   quarter by quarter ([02](docs/02-cost-math.md)).
 - **Durations are modelled**, not measured. Without the car's curve or 10-80 %
   time, they're rough.
-- **Live status is up to 15 minutes old**, and the first question after a quiet
-  spell waits ~25 s for the download.
+- **Live data can be old.** A recent copy of the feed answers at once while a
+  newer one downloads, up to the age set by `LIVE_MAX_STALE_SECONDS`, and the
+  answer says how old it is. Only the first question after a long quiet spell
+  waits for the download ([03](docs/03-live-status.md)).
 - **Some MOBI.E chargers publish no operator fee anywhere.** Their price is
   energy only, shown as "≥".
 - **Chargers outside MOBI.E** (Continente, Tesla) are priced from the NAP's

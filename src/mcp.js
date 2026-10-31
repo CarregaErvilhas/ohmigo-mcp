@@ -232,7 +232,7 @@ const car = a => ({
 // A business error (no such place, which side of the motorway...). The text
 // is what the assistant acts on; structuredContent lets the inline view show
 // it instead of an empty list.
-const err = (msg, code = 'error') => ({ isError: true, structuredContent: { kind: 'error', code, message: msg }, content: [{ type: 'text', text: msg }] });
+const err = (msg, code = 'error', extra) => ({ isError: true, structuredContent: { kind: 'error', code, message: msg, ...extra }, content: [{ type: 'text', text: msg }] });
 // structuredContent is the answer, but several assistants (Claude's apps
 // among them) only hand the model the text. So the text carries the same
 // JSON, after a few summary lines: with the lines alone, those assistants saw
@@ -362,11 +362,11 @@ async function withLive(live, ctx, t) {
   return live.snapshot();
 }
 
-// A status past the TTL is answered with on purpose (src/live.js), so the
-// result says how old it is. With no copy there are no statuses to doubt.
+// Old live data is answered with on purpose (src/live.js), so the result says
+// how old it is. With no copy there is nothing to doubt.
 export const liveNotes = (live, t) => {
-  const { fresh, checkedAt } = live.info();
-  return fresh || !checkedAt ? [] : [t('note.liveAge', { min: Math.ceil((Date.now() - new Date(checkedAt)) / 60_000) })];
+  const { outdated, ageMs } = live.info();
+  return outdated ? [t('note.liveAge', { min: Math.max(1, Math.ceil(ageMs / 60_000)) })] : [];
 };
 
 // What estimate_charging_cost prices, in two steps. targetsFor settles which
@@ -678,16 +678,21 @@ export function createServer(getDataset, live) {
     const w = resolveWhere(ds, a, t);
     if (w.error) return err(w.error, w.code);
     if (a.target_pct <= a.start_pct) return err(t('err.target'), 'target');
-    const status = await withLive(live, ctx, t);
     const { total, results } = ds.search({ ...w, ...filterOf(a), limit: Infinity });
     if (!results.length) return err(t('err.noMatch'), 'noMatch');
+    const status = await withLive(live, ctx, t);
     const { candidates, truncated } = rankCandidates(results, status, w.route != null);
     const ranked = await rank(candidates, car(a), {
       at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live: status, lang, audiences: a.audiences,
       monthKwh: await monthKwh(a),
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
-    if (!ranked.length) return err(t('err.noneLeft'), 'noneLeft');
+    if (!ranked.length) {
+      // "Everything is busy" may be the old status talking: this is where its
+      // age matters most.
+      const notes = liveNotes(status, t);
+      return err([t('err.noneLeft'), ...notes].join('\n'), 'noneLeft', notes.length ? { notes } : undefined);
+    }
     const top = ranked.slice(0, a.limit);
     // Any MOBI.E socket without its CEME price was ranked on its other
     // prices only (or last): say so even when the top rows are all outside

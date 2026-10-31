@@ -4,12 +4,13 @@
 // download). It's fetched on demand: a request that finds the copy older than
 // the TTL triggers one refresh, every concurrent request shares it, and the
 // next users within the TTL get it for free. A copy past the TTL is still
-// good enough for a while (MAX_STALE_MS, default 1 h): the request answers
-// with it at once, flagged stale, and the refresh runs behind it. Only with no
-// copy, or one older than that, does a request wait, and only up to a budget;
-// past that it answers with what there is, and the refresh carries on for
-// whoever asks next. So a status can be as old as MAX_STALE_MS, or older while
-// the feed is down, and the result says so (fresh: false, and a note in mcp.js).
+// good enough for a while (LIVE_MAX_STALE_SECONDS): the request answers with
+// it at once, flagged stale, and the refresh runs behind it. Only with no copy,
+// or one older than that, does a request wait, and only up to a budget; past
+// that it answers with what there is, and the refresh carries on for whoever
+// asks next. So a status can be that old, or older while the feed is down, and
+// the result says so (fresh: false, and a note with its age, see outdated in
+// info()).
 //
 // Refreshes use If-None-Match (304 with no body when unchanged) and parse the
 // body as a stream, so the 38 MB never sit in memory as text. In practice the
@@ -207,9 +208,23 @@ export class LiveStatus {
     return { get: (siteId, pointId) => points.get(pointKey(siteId, pointId)) || null, info: () => info };
   }
 
+  // How old the data itself is. publicationTime, not fetchedAt: a 304 moves
+  // fetchedAt on, and a publisher that has stalled keeps answering 304 with
+  // the same old file. fetchedAt only stands in if the time doesn't parse.
+  ageMs() {
+    if (this.fetchedAt == null) return null;
+    const published = Date.parse(this.publicationTime);
+    return Date.now() - (Number.isNaN(published) ? this.fetchedAt : published);
+  }
+
   info() {
+    const ageMs = this.ageMs();
     return {
       publishedAt: this.publicationTime,
+      ageMs,
+      // Worth telling the user. Goes beyond !fresh for that stalled publisher:
+      // the copy is fresh, what it says isn't.
+      outdated: ageMs != null && (!this.fresh() || ageMs > this.ttlMs),
       checkedAt: this.fetchedAt && new Date(this.fetchedAt).toISOString(),
       fresh: this.fresh(),
       refreshing: !!this.running,
