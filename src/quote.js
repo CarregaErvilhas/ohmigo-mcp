@@ -103,7 +103,25 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
     return !seen.has(k) && seen.add(k);
   }).slice(0, shown);
   const headline = options.find(t => !t.bundle && !t.newCustomers) || ok.find(t => !t.bundle && !t.newCustomers) || best;
-  return { options, headline, best, missing: false };
+  return { options, headline, best, missing: false, unlistedCheaper: unlistedCheaper(ok, options, best, headline) };
+}
+
+// Tariffs left out of the default list (not popular) that would cost less
+// than the headline here. Plenty of drivers hold one without knowing it beats
+// what they see: a CEME's tariff for its home-electricity clients, or an old
+// one closed to new sign-ups that existing clients keep. Only a count goes
+// out, so the answer stays short and the driver can say which card they have.
+// The cheapest of all (`best`) is shown anyway as a tip, so it isn't counted;
+// new-sign-up-only tariffs aren't either (a driver can't already hold one).
+function unlistedCheaper(ok, options, best, headline) {
+  if (!headline) return 0;
+  const shown = new Set([...options, ...(best ? [best] : [])].map(t => cardKey(t.id)));
+  const cards = new Set();
+  for (const t of ok) {
+    if (t.newCustomers || t.totalEur >= headline.totalEur) continue;
+    if (!shown.has(cardKey(t.id))) cards.add(cardKey(t.id));
+  }
+  return cards.size;
 }
 
 // The CEME's own bill, line by line, as ceme-v2 builds it (same rounding, so
@@ -433,6 +451,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     parts: opc.parts && Object.fromEntries(Object.entries(opc.parts).map(([k, v]) => [k, r2(v.high)])),
   };
   base.options = shownOpts;
+  if (picked.unlistedCheaper) base.unlistedCheaper = picked.unlistedCheaper;
   if (!base.options.some(o => o.tariffId === head.tariffId)) base.options.unshift(head);
   if (picked.best && !picked.options.some(o => o.id === picked.best.id)) {
     const b = cemeOption(picked.best, ctx);

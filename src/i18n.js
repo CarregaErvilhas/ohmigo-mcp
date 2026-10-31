@@ -96,6 +96,7 @@ export const MESSAGES = {
       ? `Only the first ${n} of the ${total} matching tariffs are listed.`
       : `Only the first ${n} of the ${total} tariffs are listed; if the user's isn't here, call again with query (the CEME or tariff name) instead of saying it doesn't exist.`,
     'note.detailTop': ({ n }) => `The timeline (detail) is only included for the first ${n} results; for one charger's breakdown, use estimate_charging_cost.`,
+    'note.unlisted': () => 'Only popular CEME tariffs are priced, and at some chargers others would cost less than the headline (unlistedCheaper: how many). Many are for clients with another contract or closed to new sign-ups, so the driver may already hold one. Once per conversation, in one sentence, say there are cheaper tariffs not shown and ask whether they have a card from another CEME; if so, find it with list_ceme_tariffs and pass tariff_ids.',
     'note.moreWays': () => 'Each charger has more ways to pay in options than its best (other CEMEs, bank card at the charger, apps, subscriptions): tell the user there are more and offer to list them.',
     'err.tariffs': () => "The CEME tariff list can't be fetched right now (the pricing service didn't answer). Try again in a few minutes.",
     'err.placeWhich': ({ place, towns }) => `"${place}" fits several towns: ${towns}. Ask the user which one (or pass lat/lon) and call again with its full name.`,
@@ -222,6 +223,7 @@ export const MESSAGES = {
       ? `Só estão listados os primeiros ${n} dos ${total} tarifários que correspondem.`
       : `Só estão listados os primeiros ${n} dos ${total} tarifários; se o do utilizador não estiver aqui, volta a chamar com query (o nome do CEME ou do tarifário) em vez de dizer que não existe.`,
     'note.detailTop': ({ n }) => `A timeline (detail) só vem nos primeiros ${n} resultados; para o detalhe de um posto, usa estimate_charging_cost.`,
+    'note.unlisted': () => 'Só se cotam os tarifários CEME populares, e em alguns postos outros sairiam mais baratos do que a primeira opção (unlistedCheaper: quantos). Muitos são para clientes com outro contrato ou já fechados a novas adesões, por isso o condutor pode já ter um. Uma vez por conversa, numa frase, diz que há tarifários mais baratos fora da lista e pergunta se tem cartão de outro CEME; se tiver, encontra-o com list_ceme_tariffs e passa tariff_ids.',
     'note.moreWays': () => 'Cada posto tem mais formas de pagar em options do que a melhor (outros CEME, cartão bancário no posto, apps, subscrições): diz ao utilizador que há mais e oferece-te para as listar.',
     'err.tariffs': () => 'Não é possível obter a lista de tarifários CEME neste momento (o serviço de preços não respondeu). Tenta daqui a alguns minutos.',
     'err.placeWhich': ({ place, towns }) => `"${place}" serve a várias localidades: ${towns}. Pergunta ao utilizador qual é (ou usa lat/lon) e volta a chamar com o nome completo.`,
