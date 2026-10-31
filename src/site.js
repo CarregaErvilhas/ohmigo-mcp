@@ -86,6 +86,8 @@ function seo(lang, paths, title, desc) {
     `<meta property="og:image" content="${SITE_URL}/og.png">`,
     `<meta property="og:image:width" content="1200">`,
     `<meta property="og:image:height" content="630">`,
+    // The same image on every page, so the landing page's alt text.
+    `<meta property="og:image:alt" content="${attr(text(S[lang]['meta.ogalt']))}">`,
     `<meta name="twitter:card" content="summary_large_image">`,
   ];
 }
@@ -128,6 +130,8 @@ export function render(lang) {
     .replace(/<!-- seo:[^>]*-->/, head(lang))
     // Every data-i element is empty in the source (test/site.test.js).
     .replace(/(<(\w+)\b[^>]*\bdata-i="([^"]+)"[^>]*>)(<\/\2>)/g, (m, open, tag, key, close) => open + (t[key] ?? '') + close)
+    // Names for screen readers: an attribute, so data-i can't fill them.
+    .replace(/data-aria="([^"]+)"/g, (m, key) => `aria-label="${attr(t[key] ?? '')}"`)
     .replace(/ aria-current="page"/g, '')
     .replace(`data-lang="${lang}"`, `data-lang="${lang}" aria-current="page"`);
   return lang === 'en' ? englishLegalLinks(html) : html;

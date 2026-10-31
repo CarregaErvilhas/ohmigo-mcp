@@ -1,0 +1,14 @@
+# ohmigo
+
+> ohmigo is a free MCP server that gives AI assistants the prices at every public EV charger in Portugal published on the National Access Point (NAP), MOBI.E and the networks outside it. It estimates what a charging session costs for each way to pay and whether the charger is free now. No account, no sign-up, no authentication. All prices are estimates.
+
+MCP server (Streamable HTTP): https://ohmigo.ocarroeletrico.com/mcp
+
+## Pages
+
+- [Home, in Portuguese](https://ohmigo.ocarroeletrico.com/): what ohmigo is and how to add it to an assistant
+- [Home, in English](https://ohmigo.ocarroeletrico.com/en)
+- [Data](https://ohmigo.ocarroeletrico.com/dados): the tariffs, offers and operators behind the tools, in Portuguese
+- [Privacy](https://ohmigo.ocarroeletrico.com/privacy)
+- [Support](https://ohmigo.ocarroeletrico.com/support)
+- [Source code](https://github.com/CarregaErvilhas/ohmigo-mcp)
