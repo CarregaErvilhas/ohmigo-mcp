@@ -88,8 +88,6 @@ const ICONS = Object.fromEntries([
   ['/icon.svg', 'image/svg+xml'], ['/icon-512.png', 'image/png'],
   ['/apple-touch-icon.png', 'image/png'], ['/favicon.ico', 'image/x-icon'],
 ].map(([path, type]) => [path, { type, body: readFileSync(new URL(`../site${path}`, import.meta.url)) }]));
-// Privacy and support, also rendered at boot, one copy per URL (src/site.js).
-// Directories and assistants' review forms want a stable URL for each.
 // The data dump: what the tools know, for people (src/dump.js). Public, but
 // kept out of search engines (X-Robots-Tag, which also covers the JSON).
 // Meant to sit behind Cloudflare's cache: tariffs, offers and the dataset
@@ -118,6 +116,13 @@ const SITE_HEADERS = {
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'strict-origin-when-cross-origin',
   'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+};
+// Privacy and support, also rendered at boot, one copy per URL (src/site.js).
+// Directories and assistants' review forms want a stable URL for each. These
+// pages send no script, so their policy doesn't allow one.
+const LEGAL_HEADERS = {
+  ...SITE_HEADERS,
+  'content-security-policy': SITE_HEADERS['content-security-policy'].replace("script-src 'unsafe-inline'", "script-src 'none'"),
 };
 
 const send = (res, status, body, type = 'application/json') => {
@@ -190,13 +195,14 @@ const httpServer = createHttp(async (req, res) => {
   if (LEGAL_PAGES[url.pathname] && get) {
     // Old links chose the language with ?lang=, as on the landing page.
     const { paths } = Object.values(LEGAL).find(p => Object.values(p.paths).includes(url.pathname));
-    const twin = paths[url.searchParams.get('lang')];
+    const want = url.searchParams.get('lang');
+    const twin = Object.hasOwn(paths, want ?? '') ? paths[want] : null;
     if (twin && twin !== url.pathname) {
       url.searchParams.delete('lang');
       res.writeHead(301, { location: twin + url.search });
       return res.end();
     }
-    res.writeHead(200, SITE_HEADERS);
+    res.writeHead(200, LEGAL_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : LEGAL_PAGES[url.pathname]);
   }
   if (url.pathname === '/dados' && (req.method === 'GET' || req.method === 'HEAD')) {

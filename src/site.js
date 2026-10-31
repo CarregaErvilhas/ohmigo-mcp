@@ -155,11 +155,12 @@ export function renderLegal(page, lang) {
     .replace('<p class="lede" id="lede"></p>', () => `<p class="lede" id="lede">${t[`${page}.lede`]}</p>`)
     .replace('<div id="body"></div>', () => `<div id="body">${sections.map(s => section(s, t)).join('')}</div>`)
     .replace(/(<(\w+)\b[^>]*\bdata-i="([^"]+)"[^>]*>)(<\/\2>)/g, (m, open, tag, key, close) => open + (t[key] ?? '') + close);
-  const linked = lang === 'en'
-    ? englishLegalLinks(html).replaceAll('href="/"', `href="${PATHS.en}"`).replaceAll('href="/#', `href="${PATHS.en}#`)
-    : html;
+  const linked = lang === 'en' ? englishLegalLinks(html) : html;
+  // These pages have no script to save a language choice, so the way home
+  // carries it and the landing page's script saves it (site/index.html).
+  const home = `${PATHS[lang]}?lang=${lang}`;
   // Plain links, one per language: the page itself and its twin.
-  return linked.replace(/<a href="" data-lang="(\w+)"/g, (m, l) =>
+  return linked.replaceAll('href="/"', `href="${home}"`).replaceAll('href="/#', `href="${home}#`).replace(/<a href="" data-lang="(\w+)"/g, (m, l) =>
     `<a href="${paths[l]}" data-lang="${l}"${l === lang ? ' aria-current="page"' : ''}`);
 }
 

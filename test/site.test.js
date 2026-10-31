@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import { CTA, LEGAL, LEGAL_PAGES, PAGES, SITEMAP } from '../src/site.js';
 
 const html = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
@@ -95,10 +96,39 @@ for (const { path, twin, page, lang, html, locale } of URLS) {
     assert.match(h, new RegExp(`<a href="${path}" data-lang="${lang}"[^>]* aria-current="page"`));
     assert.match(h, new RegExp(`<a href="${twin}" data-lang="${lang === 'pt' ? 'en' : 'pt'}"`));
     const footer = h.match(/<footer>[\s\S]*<\/footer>/)[0];
-    const [home, privacy, support] = lang === 'pt' ? ['/', '/privacidade', '/suporte'] : ['/en', '/privacy', '/support'];
+    const [home, privacy, support] = lang === 'pt' ? ['/?lang=pt', '/privacidade', '/suporte'] : ['/en?lang=en', '/privacy', '/support'];
     for (const href of [home, privacy, support]) assert.ok(footer.includes(`href="${href}"`), href);
   });
 }
+
+// The start of the landing page's script, run against a fake browser: which
+// page a visitor ends up on, and what is left saved.
+function landing(path, saved) {
+  const code = html.match(/const store = \{[\s\S]*?(?=  for \(const a of document\.querySelectorAll\('\[data-lang\]'\))/)[0];
+  const url = new URL(path, 'https://x');
+  const stored = new Map(saved ? [['ohmigo.lang', saved]] : []);
+  const replaced = [];
+  runInNewContext(code, {
+    URLSearchParams,
+    document: { documentElement: { lang: url.pathname === '/en' ? 'en' : 'pt-PT' } },
+    location: { search: url.search, hash: url.hash, replace: to => replaced.push(to) },
+    localStorage: { getItem: k => stored.get(k) ?? null, setItem: (k, v) => stored.set(k, v) },
+  });
+  return { to: replaced[0] ?? null, saved: stored.get('ohmigo.lang') ?? null };
+}
+
+test('landing: an earlier pick of English still redirects a plain /', () => {
+  assert.deepEqual(landing('/', 'en'), { to: '/en', saved: 'en' });
+  assert.deepEqual(landing('/', null), { to: null, saved: null });
+  assert.deepEqual(landing('/', 'pt'), { to: null, saved: 'pt' });
+});
+
+test('landing: a link home from a legal page wins over the saved language, and replaces it', () => {
+  assert.deepEqual(landing('/?lang=pt', 'en'), { to: null, saved: 'pt' });
+  assert.deepEqual(landing('/en?lang=en', 'pt'), { to: null, saved: 'en' });
+  // After that, a plain / stays where the reader chose.
+  assert.equal(landing('/', landing('/?lang=pt', 'en').saved).to, null);
+});
 
 test('landing: the footer links to the pages in its own language', () => {
   assert.ok(PAGES.pt.toString().includes('href="/privacidade"'));

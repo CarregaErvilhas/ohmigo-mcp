@@ -607,7 +607,7 @@
     "why.c2": "Vê se o posto está livre agora, com dados oficiais do PAN, atualizados a cada poucos minutos.",
     "why.c3t": "Perto ou pelo caminho",
     "why.c3": "Pergunta pelo mais barato perto de ti ou ao longo de uma viagem, de Lisboa ao Porto, por exemplo.",
-    "why.c4t": "Não guarda nada",
+    "why.c4t": "Nada ligado a ti",
     "why.c4": "Sem contas, sem registo, sem rastreio. O ohmigo não sabe quem és. Grátis.",
     "inst.eyebrow": "Instalar",
     "inst.title": "Vamos a isso! São só uns cliques.",
@@ -661,7 +661,7 @@
     "faq.q1": "Quanto custa?",
     "faq.a1": "<p>O ohmigo é <b>grátis</b>. Só precisas de uma conta no ChatGPT, no Claude ou no Grok. <b>O Grok deixa adicionar o ohmigo na conta gratuita</b>; o ChatGPT só em alguns planos pagos.</p>",
     "faq.q2": "O ohmigo fica a saber os meus dados?",
-    "faq.a2": "<p><b>Não.</b> Não há contas, não guarda nada e não sabe quem és. O teu assistente lembra-se do teu carro e dos teus cartões e envia-os em cada pergunta. O ohmigo faz as contas e esquece.</p>",
+    "faq.a2": "<p><b>Não.</b> Não há contas, não guarda nada ligado a ti e não sabe quem és. O teu assistente lembra-se do teu carro e dos teus cartões e envia-os em cada pergunta. O ohmigo só os usa para fazer as contas.</p>",
     "faq.q3": "Os preços são exatos?",
     "faq.a3": "<p>São <b>estimativas muito boas</b>, não uma fatura. O ohmigo junta o preço da energia do teu CEME, as taxas do operador do posto e os impostos, e calcula quanto tempo e energia vai levar o carregamento. Cada resposta diz o que assumiu, para saberes de onde vem o número.</p>",
     "faq.q4": "O que é um CEME?",
@@ -726,7 +726,7 @@
     "why.c2": "See if a charger is free right now, from the NAP's official data, updated every few minutes.",
     "why.c3t": "Nearby or on the way",
     "why.c3": "Ask for the cheapest option near you, or along a trip, say from Lisbon to Porto.",
-    "why.c4t": "Keeps nothing",
+    "why.c4t": "Nothing tied to you",
     "why.c4": "No accounts, no sign-up, no tracking. ohmigo doesn't know who you are. Free.",
     "inst.eyebrow": "Install",
     "inst.title": "Let's do it! It's just a few clicks.",
@@ -780,7 +780,7 @@
     "faq.q1": "How much does it cost?",
     "faq.a1": "<p>ohmigo is <b>free</b>. You just need a ChatGPT, Claude or Grok account. <b>Grok lets you add ohmigo on the free account</b>; ChatGPT only on some paid plans.</p>",
     "faq.q2": "Does ohmigo learn anything about me?",
-    "faq.a2": "<p><b>No.</b> There are no accounts, it stores nothing and doesn't know who you are. Your assistant remembers your car and cards and sends them with each question. ohmigo does the math and forgets.</p>",
+    "faq.a2": "<p><b>No.</b> There are no accounts, it keeps nothing linked to you and doesn't know who you are. Your assistant remembers your car and cards and sends them with each question. ohmigo only uses them to do the math.</p>",
     "faq.q3": "Are the prices exact?",
     "faq.a3": "<p>They're <b>good estimates</b>, not a bill. ohmigo combines your CEME's energy price, the charger operator's fees and taxes, and works out how long and how much energy the session takes. Every answer says what it assumed, so you know where the number comes from.</p>",
     "faq.q4": "What's a CEME?",
@@ -809,13 +809,17 @@
   // The server renders each language at its own URL (/ and /en, see
   // src/site.js), so search engines index both. A visitor who picked English
   // before is sent there from /; nobody else is redirected (a crawler must
-  // see the page it asked for).
+  // see the page it asked for). The privacy and support pages send no script,
+  // so their home links carry the language being read (?lang=) and it is
+  // saved here: a choice made on those pages isn't undone by an older one.
   const store = {
     get() { try { return localStorage.getItem('ohmigo.lang'); } catch { return null; } },
     set(v) { try { localStorage.setItem('ohmigo.lang', v); } catch {} },
   };
   const lang = document.documentElement.lang === 'en' ? 'en' : 'pt';
-  if (lang === 'pt' && store.get() === 'en' && !new URLSearchParams(location.search).has('lang')) {
+  const asked = new URLSearchParams(location.search).get('lang');
+  if (asked === lang) store.set(lang);
+  if (lang === 'pt' && store.get() === 'en' && asked === null) {
     location.replace('/en' + location.search + location.hash);
   }
   for (const a of document.querySelectorAll('[data-lang]')) {

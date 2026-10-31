@@ -39,8 +39,10 @@ assistants' directories ask for, in Portuguese; `GET /privacy` and
 `GET /support` are their English copies. They work the same way: one source,
 `site/legal.html`, with the same two-language strings block and parity test, and
 `src/site.js` renders one copy per URL at boot (`LEGAL` lists each page's
-sections). These pages send no script: the language buttons are plain links, and
-an old `?lang=` link redirects too. If the server starts keeping or sending
+sections). These pages send no script, and their CSP says so: the language
+buttons are plain links, an old `?lang=` link redirects too, and the links home
+carry `?lang=` so the landing page's script saves the language being read. If
+the server starts keeping or sending
 anything new about the user, update the privacy page first.
 
 `GET /healthz` shows how the server is doing: `status` is `ok`, or

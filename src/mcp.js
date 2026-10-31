@@ -12,7 +12,7 @@
 // MCP Apps: two tools also point at a `ui://` HTML resource (ui/results.html).
 // Chat apps that support it render that page inline, next to the answer.
 //
-// Stateless by design: we store nothing about the user. Car, battery and
+// Stateless by design: we keep nothing linked to the user. Car, battery and
 // tariffs live in the assistant's memory and come in on every call.
 
 import { McpServer } from '@modelcontextprotocol/server';

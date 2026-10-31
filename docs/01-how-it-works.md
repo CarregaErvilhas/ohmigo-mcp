@@ -210,7 +210,7 @@ labels agree or they're a few dozen metres apart (`samePlace`).
 indexed tariffs, time zones, daylight saving and island VAT. Doing it twice
 means two places to fix every bug, so ohmigo calls its API.
 
-**Why no auth?** The data is public and nothing is stored. A login would only
+**Why no auth?** The data is public and nothing linked to a user is kept. A login would only
 add friction for people trying it in a chat app. If ohmigo ever stores
 something per user, that changes.
 
