@@ -22,11 +22,15 @@ assistant found out about the car:
    The charger's power is OpenStreetMap's where it differs from the NAP's
    ([05](05-dataset.md)), and the estimate says so in its assumptions.
 2. **10-80 % time**: 70 % of the battery charged in that many minutes gives
-   the car's real average speed below 80 %. Above 80 % we assume it drops.
+   the car's real average speed below 80 %, at the battery. The meter counts
+   the losses too, so that speed is scaled up to the meter's side, and a
+   session from 10 to 80 % on a fast enough charger takes the published time.
+   Above 80 % we assume it drops.
 3. **Nothing**: a share of the peak power below 80 % and a smaller share
    above. A rough guess.
 
-AC sessions are simpler: the power stays nearly flat until the end.
+AC sessions are simpler: the power stays nearly flat until the end, so we take
+a fixed share of the peak.
 
 Every guess goes into `assumptions`, in the user's language, so the assistant
 can say things like "this assumes 7 % losses and a 28-minute 10-80 % time".
@@ -219,8 +223,10 @@ and that a bank card at the terminal pays the same (`walkUp`), which the
 label then says.
 Some of these chargers also have an `AD_HOC_PAYMENT` price in MOBI.E's file
 (HighGreenPower): it's the same walk-up price, so the label says you pay by
-bank card / QR, and when the NAP price is missing (live feed down) the
-`adhoc` option takes its place.
+bank card / QR, and when there's no NAP price per kWh (the live entry lists
+only time or flat fees, or nothing is known) the `adhoc` option takes its
+place. The dataset's price stands in when the live feed is down or its entry
+has no fees.
 
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the

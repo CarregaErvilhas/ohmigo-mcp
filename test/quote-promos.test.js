@@ -117,6 +117,22 @@ test('outside MOBI.E: the NAP site price, plus VAT, is ranked like any other', a
   assert.ok(q.assumptions.some(a => a.includes("operator's price from the NAP") && a.includes('(23 %)')));
 });
 
+test('outside MOBI.E: a live socket with no fees keeps its static NAP price', async () => {
+  const p = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
+  const s = { ...site('ZZZZ'), operator: 'Someone' };
+  const liveWith = fees => ({ get: () => ({ status: 'available', fees }) });
+  const kept = await quotePoint({ site: s, point: p }, car, { at, lang: 'en', live: liveWith([]) });
+  assert.equal(kept.status, 'available');
+  assert.equal(kept.options.find(o => o.kind === 'opc_direct').eurPerKwhExVat, 0.3);
+  const live = await quotePoint({ site: s, point: p }, car, { at, lang: 'en', live: liveWith([{ policy: 'pricePerDeliveryUnit', eur: 0.4 }]) });
+  assert.equal(live.options.find(o => o.kind === 'opc_direct').eurPerKwhExVat, 0.4, 'the live price still wins');
+  // Live fees that aren't per kWh say the static price no longer holds.
+  for (const policy of ['pricePerChargingTime', 'flatRate']) {
+    const other = await quotePoint({ site: s, point: p }, car, { at, lang: 'en', live: liveWith([{ policy, eur: 0.1 }]) });
+    assert.equal(other.options.find(o => o.kind === 'opc_direct'), undefined, policy);
+  }
+});
+
 test('Tesla: the NAP price is its app price with VAT in, and the only one', async () => {
   const tesla = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
   const q = await quotePoint({ site: { ...site('TSLA'), operator: 'Tesla' }, point: tesla }, car, { at, lang: 'en' });

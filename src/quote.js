@@ -45,10 +45,10 @@
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
 import { cardPayment } from './data.js';
-import { siteOpen } from './hours.js';
+import { closesDuring, daysLater, siteOpen } from './hours.js';
 import { localOffset, localTime, MAX_SESSION_HOURS, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
-import { napPlan } from './live.js';
+import { napEurPerKwh, napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
 import { forAudiences, isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, unpricedHere, withPromos } from './promos.js';
@@ -288,7 +288,10 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (point.napKw !== undefined) base.assumptions.push(t('assume.osmKw', { kw: point.kw, nap: point.napKw }));
   if (site.operatorInferred) base.assumptions.push(t('assume.operatorInferred', { operator: site.operator }));
   const hours = siteOpen(site, start);
-  if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: [hours.nap, hours.osm].filter(Boolean).join(' / ') }));
+  const hoursText = [hours.nap, hours.osm].filter(Boolean).join(' / ');
+  if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: hoursText }));
+  const closes = hours.open ? closesDuring(site, start, end) : null;
+  if (closes) base.assumptions.push(t('assume.closesDuring', { hours: hoursText, at: localTime(closes, site.region), days: daysLater(start, closes, site.region), end: base.session.endLocal }));
   const direct = offersAt(site, point, audiences);
 
   if (point.regime === 'sem_ceme') {
@@ -304,7 +307,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // the same walk-up price (HighGreenPower: 0.28 in both): it says how to
     // pay (bank card / QR, no app or account) and stands in when the live
     // feed is down.
-    const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
+    const nap = napEurPerKwh(lp, point.napPrice);
     const vat = vatFor(base.region);
     const note = napNote(site);
     const wrong = note && !note.vatIncluded && !note.timeOfUse;
