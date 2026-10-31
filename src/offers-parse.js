@@ -69,12 +69,14 @@ function assertSane(offer) {
   if (problems.length) throw new Error(`offer ${JSON.stringify(offer.label)}: ${problems.join('; ')}`);
 }
 
-// The price post to read: the newest by publication date, of the posts with a
-// price table. Not by `updated`: an author fixing a typo in a months-old post
-// would make its old prices look like the latest ones.
+// The price post to read: the newest by publication date, of the posts with
+// the blog's tables. Not by `updated`: an author fixing a typo in a months-old
+// post would make its old prices look like the latest ones. Any such table
+// counts, not only one that parses: a new post in a new layout has to fail in
+// parseTables, not fall back quietly to last month's prices.
 export function newestPost(entries) {
   return entries
-    .filter(e => priceTables(e.content?.$t || '').length)
+    .filter(e => /class="[^"]*\bevtable\b/.test(e.content?.$t || ''))
     .sort((a, b) => Date.parse(b.published.$t) - Date.parse(a.published.$t))[0];
 }
 
@@ -124,6 +126,8 @@ export function parseTables(html) {
       return key;
     });
     const body = t.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody>/i)?.[1] || '';
+    // Cells map to bands by position, so a merged one would shift the prices.
+    if (/<t[hd]\b[^>]*\b(?:col|row)span=/i.test(body)) throw new Error('a price row has merged cells');
     const rows = [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(m => cells(m[1])).filter(r => r.length >= 2 && r[0]);
     if (!rows.length) throw new Error(`table "${caption}": no rows`);
     out.push({

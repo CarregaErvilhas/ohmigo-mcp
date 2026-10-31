@@ -112,10 +112,16 @@ test('newestPost: by publication date, so editing an old post changes nothing', 
   const early = post('early', '2026-10-15T00:30:00.000+01:00', '2026-10-15T00:30:00.000+01:00');
   assert.equal(newestPost([early, late]).id, 'late');
   assert.equal(newestPost([chat]), undefined);
-  // The small "price vs fuel" scale table has the same class but isn't a price
-  // table, even if the post says "Operador" somewhere else.
-  const scale = { ...chat, content: { $t: '<p>Operador</p><table class="evtable"><th>Preço kWh</th></table>' } };
-  assert.equal(newestPost([current, scale]).id, 'current');
+  // A newer post whose table doesn't read as prices stops the scrape loudly,
+  // instead of falling back to last month's post.
+  const renamed = { ...chat, content: { $t: '<table class="evtable"><th>Fornecedor</th></table>' } };
+  assert.equal(newestPost([current, renamed]).id, 'chat');
+  assert.throws(() => parseTables(renamed.content.$t));
+});
+
+test('parseTables: a merged cell in a price row stops the scrape', () => {
+  const html = '<table class="evtable"><thead><tr><th>Operador</th><th>Rede</th><th>≤7.4</th></tr></thead><tbody><tr><td>A</td><td colspan="2">B</td></tr></tbody></table>';
+  assert.throws(() => parseTables(html), /merged cells/);
 });
 
 test('toOffers: scope from networks.json, walk-up, fees, unmapped and unknown labels', () => {

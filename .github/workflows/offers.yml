@@ -159,7 +159,7 @@ jobs:
         run: |
           # The token is in this one command's URL, not in the remote. Forced
           # because the branch may be left over from a closed PR or a failed
-          # run; it can only ever hold these same prices.
+          # run; it's named after these same prices.
           git push --force \
             "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
           {
