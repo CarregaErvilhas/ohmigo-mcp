@@ -1,7 +1,7 @@
 // Opening hours in OpenStreetMap syntax, read in the site's time zone.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isOpen, parseHours, siteOpen } from '../src/hours.js';
+import { closesDuring, isOpen, parseHours, siteOpen } from '../src/hours.js';
 
 // 2026-11-02 is a Monday; Lisbon is on UTC+0 then.
 const at = (iso) => new Date(iso);
@@ -35,4 +35,20 @@ test('hours: a site is open only when every source with hours says so', () => {
   assert.deepEqual(siteOpen(site, at('2026-11-02T23:00:00Z')), { open: false, nap: '24/7', osm: 'Mo-Su 09:00-21:00', disagree: true });
   assert.equal(siteOpen(site, at('2026-11-02T12:00:00Z')).open, true);
   assert.equal(siteOpen({ region: 'CONT' }).open, null);
+});
+
+test('hours: closesDuring sees a closure at the end of the session or inside it', () => {
+  const site = { region: 'CONT', hours: 'Mo-Su 09:00-21:00' };
+  assert.equal(closesDuring(site, at('2026-11-02T20:00:00Z'), at('2026-11-02T20:59:00Z')), false);
+  assert.equal(closesDuring(site, at('2026-11-02T20:00:00Z'), at('2026-11-02T23:00:00Z')), true);
+  // Open at both ends, closed all night in between.
+  assert.equal(closesDuring(site, at('2026-11-02T20:00:00Z'), at('2026-11-03T10:00:00Z')), true);
+  // A lunch break inside the session.
+  assert.equal(closesDuring({ region: 'CONT', hours: 'Mo-Su 09:00-12:30,14:00-21:00' }, at('2026-11-02T12:00:00Z'), at('2026-11-02T14:30:00Z')), true);
+  assert.equal(closesDuring({ region: 'CONT', hours: '24/7' }, at('2026-11-02T20:00:00Z'), at('2026-11-03T10:00:00Z')), false);
+});
+
+test('hours: closesDuring never guesses from hours it cannot read', () => {
+  assert.equal(closesDuring({ region: 'CONT', hours: 'Apr-Sep 08:30-20:00' }, at('2026-11-02T20:00:00Z'), at('2026-11-03T10:00:00Z')), false);
+  assert.equal(closesDuring({ region: 'CONT' }, at('2026-11-02T20:00:00Z'), at('2026-11-03T10:00:00Z')), false);
 });

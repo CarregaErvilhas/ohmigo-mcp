@@ -41,7 +41,7 @@
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
 import { cardPayment } from './data.js';
-import { siteOpen } from './hours.js';
+import { closesDuring, siteOpen } from './hours.js';
 import { localOffset, localTime, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
 import { napPlan } from './live.js';
@@ -282,7 +282,9 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (point.napKw !== undefined) base.assumptions.push(t('assume.osmKw', { kw: point.kw, nap: point.napKw }));
   if (site.operatorInferred) base.assumptions.push(t('assume.operatorInferred', { operator: site.operator }));
   const hours = siteOpen(site, start);
-  if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: [hours.nap, hours.osm].filter(Boolean).join(' / ') }));
+  const hoursText = [hours.nap, hours.osm].filter(Boolean).join(' / ');
+  if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: hoursText }));
+  else if (hours.open && closesDuring(site, start, end)) base.assumptions.push(t('assume.closesDuring', { hours: hoursText, end: base.session.endLocal }));
   const direct = offersAt(site, point, audiences);
 
   if (point.regime === 'sem_ceme') {
@@ -298,7 +300,9 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     // the same walk-up price (HighGreenPower: 0.28 in both): it says how to
     // pay (bank card / QR, no app or account) and stands in when the live
     // feed is down.
-    const nap = lp ? lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur : point.napPrice;
+    // The live feed's price when it has one; a socket there with no price
+    // policy keeps the static one, like lookup_charger's site card (mcp.js).
+    const nap = lp?.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur ?? point.napPrice;
     const vat = vatFor(base.region);
     const note = napNote(site);
     const wrong = note && !note.vatIncluded && !note.timeOfUse;

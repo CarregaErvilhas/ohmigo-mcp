@@ -93,3 +93,16 @@ export function siteOpen(site, at = new Date()) {
   const open = answers.length ? answers.every(Boolean) : null;
   return { open, nap, osm, disagree: answers.length === 2 && answers[0] !== answers[1] };
 }
+
+// Does the site's hours say it's closed at some moment of a session? Checking
+// only the end isn't enough: a slow AC session from 20:00 to 10:00 is open at
+// both ends of a car park shut all night. Every quarter of an hour is plenty,
+// opening hours don't have shorter gaps. Unreadable hours answer false, like
+// siteOpen's null: never a guess.
+const STEP_MS = 15 * 60_000;
+export function closesDuring(site, start, end) {
+  for (let at = start.getTime(); at < end.getTime(); at += STEP_MS) {
+    if (siteOpen(site, new Date(at)).open === false) return true;
+  }
+  return siteOpen(site, end).open === false;
+}

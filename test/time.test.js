@@ -113,6 +113,44 @@ test('quote: sends the session as quarter-hour slices from the start', async () 
   assert.equal(q.debug, undefined);
 });
 
+// 60 % of 60 kWh on 11 kW AC takes just under 4 h.
+const closing = { ...site, hours: 'Mo-Su 09:00-21:00' };
+const closes = q => q.assumptions.filter(a => /closes before|fecha antes de/.test(a));
+const closedAtStart = q => q.assumptions.filter(a => /closed when the session starts|fechado à hora de início/.test(a));
+
+test('quote: a site that closes before the session ends says so', async () => {
+  fakeCeme();
+  const q = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'en' });
+  assert.equal(q.session.startLocal, '20:00');
+  assert.deepEqual(closedAtStart(q), [], 'open when it starts');
+  assert.match(closes(q)[0], /Mo-Su 09:00-21:00.*closes before the session ends \(expected at 23:\d\d/);
+  const pt = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'pt' });
+  assert.match(closes(pt)[0], /Mo-Su 09:00-21:00.*fecha antes de o carregamento acabar \(previsto para as 23:\d\d/);
+});
+
+test('quote: a slow session open at both ends still crosses the closed night', async () => {
+  fakeCeme();
+  const slow = { ...car, batteryKwh: 80, acKw: 3.7 }; // about 15.5 h, ending mid-morning
+  const q = await quotePoint({ site: closing, point }, slow, { at: new Date('2026-11-10T20:00:00Z'), lang: 'en' });
+  assert.ok(q.session.endLocal >= '09:00' && q.session.endLocal < '21:00', q.session.endLocal);
+  assert.equal(closes(q).length, 1);
+});
+
+test('quote: a session inside the opening hours, or hours we cannot read, adds nothing', async () => {
+  fakeCeme();
+  const inside = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T12:00:00Z'), lang: 'en' });
+  assert.deepEqual(closes(inside), []);
+  const unknown = await quotePoint({ site: { ...site, hours: 'Apr-Sep 08:30-20:00' }, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'en' });
+  assert.deepEqual([...closes(unknown), ...closedAtStart(unknown)], []);
+});
+
+test('quote: closed when it starts is the only warning, not two', async () => {
+  fakeCeme();
+  const q = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T22:00:00Z'), lang: 'en' });
+  assert.equal(closedAtStart(q).length, 1);
+  assert.deepEqual(closes(q), []);
+});
+
 test('quote: detail adds the timeline, qa the debug block', async () => {
   fakeCeme();
   const q = await quotePoint({ site, point }, car, { at: new Date('2026-11-10T21:30:00Z'), lang: 'pt', detail: true });
