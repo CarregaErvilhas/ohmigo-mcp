@@ -462,7 +462,8 @@ export const byBest = (a, b) => sortKey(a) - sortKey(b);
 // Ranks sites by `best` (see sortKey), one row per site (its cheapest
 // point). MOBI.E and the networks outside it share one list: no network is
 // preferred, the price decides. `tooLong` on the list counts the kinds of
-// socket the session limit left out, among those that passed the filters.
+// socket the session limit left out, among those that passed the filters;
+// `nonePriced` says no socket had a quote, filters or not.
 export async function rank(candidates, car, opts = {}) {
   const simCache = new Map();
   // A socket with no quote still goes through the filters below, as a session
@@ -481,5 +482,5 @@ export async function rank(candidates, car, opts = {}) {
     }
     return [...bySite.values()].sort((a, b) => sortKey(a) - sortKey(b));
   };
-  return Object.assign(best(quotes.filter(q => !q.tooLong)), { tooLong: quotes.filter(q => q.tooLong).length });
+  return Object.assign(best(quotes.filter(q => !q.tooLong)), { tooLong: quotes.filter(q => q.tooLong).length, nonePriced: all.every(q => q.tooLong) });
 }

@@ -535,9 +535,9 @@ test('http: a session past the limit is a business error in the user\'s language
   }
   const ranking = await call('find_cheapest_charging', { place: 'Leiria', ...slow, lang: 'en' });
   assert.equal(ranking.structuredContent.code, 'tooLong');
-  // Here the time limit dropped everything first, so raising it is the advice.
+  // No socket could be priced, so raising the time limit wouldn't help.
   const inTime = await call('find_cheapest_charging', { place: 'Leiria', ...slow, max_minutes: 30, lang: 'en' });
-  assert.equal(inTime.structuredContent.code, 'noneLeft');
+  assert.equal(inTime.structuredContent.code, 'tooLong');
   // Only the AC sockets are too slow here: they're left out, and the note says so.
   const some = (await call('estimate_charging_cost', { site: 'GLP-LRA-00156', battery_kwh: 250, start_pct: 0, target_pct: 100, car_ac_kw: 1, lang: 'en' })).structuredContent;
   assert.ok(some.results.length > 0 && some.results.every(q => q.dc));

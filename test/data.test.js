@@ -59,6 +59,7 @@ test('data: a socket with 0 kW or less is unknown power, and OpenStreetMap only 
   ])] });
   assert.deepEqual(ds.sites[0].points.map(p => p.kw), [null, null, 150, 22]);
   assert.equal(ds.sites[0].points[3].napKw, undefined);
+  assert.equal(ds.sites[0].points[2].napKw, null, 'the NAP\'s 0 kW was a blank');
   const [p] = ds.sites[0].points;
   // No power, no band: the same socket at 50 kW has offers on the same network.
   const at = { operatorId: 'XX' };

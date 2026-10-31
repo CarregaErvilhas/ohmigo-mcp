@@ -123,9 +123,9 @@ const Car = {
   dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes: makes the duration far better than the generic curve"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
     .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]"),
-  tariff_ids: z.array(z.string().max(100)).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only those they hold: each charger uses the cheapest. Omit to show the popular ones"),
-  tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs shown per charger'),
-  at: z.string().refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
+  tariff_ids: z.array(z.string().max(100)).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only those they hold: each charger uses the cheapest. Omit for the popular ones"),
+  tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs per charger'),
+  at: z.string().max(40).refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
     .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`).optional()
     .describe(`When the charge starts, ISO 8601 with offset (default now; ${AT_PAST_DAYS} days back to ${AT_AHEAD_DAYS} ahead). Energy prices change between peak and off-peak (vazio) hours`),
   month_kwh: z.record(z.string().max(64), z.number().min(0).max(100000)).optional()
@@ -677,10 +677,9 @@ export function createServer(getDataset, live) {
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
     const tooLong = { hours: MAX_SESSION_HOURS, n: ranked.tooLong };
-    // err.tooLong says "at every socket", so only when that's what happened:
-    // with any socket dropped by a filter, raising the filter is the advice.
-    const sockets = candidates.reduce((n, c) => n + c.points.length, 0);
-    if (!ranked.length) return ranked.tooLong === sockets ? err(t('err.tooLong', tooLong), 'tooLong') : err(t('err.noneLeft'), 'noneLeft');
+    // err.tooLong only when no socket could be priced at all: with any priced
+    // socket dropped by a filter, raising the filter is the advice.
+    if (!ranked.length) return ranked.nonePriced ? err(t('err.tooLong', tooLong), 'tooLong') : err(t('err.noneLeft'), 'noneLeft');
     const top = ranked.slice(0, a.limit);
     // Any MOBI.E socket without its CEME price was ranked on its other
     // prices only (or last): say so even when the top rows are all outside
