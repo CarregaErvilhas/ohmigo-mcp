@@ -637,7 +637,7 @@ export function createServer(getDataset, live) {
       return { ...o, directOffers: direct.length ? direct : undefined };
     });
     const notes = [t('note.operators'), ...voltageNotes(ds, a, t),
-      ...shown.filter(o => o.inferredSites).map(o => t('assume.operatorInferred', { operator: o.name }))];
+      ...shown.filter(o => o.inferredSites).map(o => t('note.operatorsInferred', { operator: o.name, n: o.inferredSites }))];
     return ok({ ...meta(ds, live, lang), total: ops.length, notes, operators: shown },
       [...notes, `${ops.length} operators:`, ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${o.sites} sites, ${o.points} sockets (${o.dcPoints} DC), max ${o.maxKw ?? '?'} kW`)].join('\n'));
   });

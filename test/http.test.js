@@ -235,7 +235,7 @@ test('http: /dados with ceme-v2 down goes out without tariffs, cached 1 min only
     const d = await r.json();
     assert.equal(d.partial, true);
     assert.ok(d.ceme.error);
-    assert.equal(d.counts.sites, 7);
+    assert.equal(d.counts.sites, 8);
   } finally { cemeDown = false; }
 });
 
@@ -252,7 +252,7 @@ test('http: /dados is public, cacheable, unindexed, and has nothing that depends
   assert.match(r.headers.get('x-robots-tag'), /noindex/);
   const d = await r.json();
   assert.equal(d.partial, false);
-  assert.equal(d.counts.sites, 7);
+  assert.equal(d.counts.sites, 8);
   assert.deepEqual(d.ceme.tariffs.map(t => t.id), ['edp-bt-x']);
   assert.equal('totalEur' in d.ceme.tariffs[0], false);
   assert.ok(d.operators.some(o => o.id === 'CONT'));
@@ -285,7 +285,8 @@ test('http: a site the NAP left nameless is its id prefix\'s operator everywhere
 
   const ops = (await call('list_operators', { query: 'continente', lang: 'en' })).structuredContent;
   assert.deepEqual(ops.operators.map(o => [o.operatorId, o.sites, o.inferredSites]), [['CONT', 4, 2]]);
-  assert.ok(ops.notes.some(n => /inferred/.test(n)));
+  assert.ok(ops.notes.some(n => n.includes("2 of Modelo Continente Hipermercados, S.A.'s sites (inferredSites)")));
+  assert.ok(!ops.notes.some(n => n.includes('(operatorInferred)')));
   const glp = (await call('list_operators', { query: 'galp', lang: 'en' })).structuredContent;
   assert.ok(!glp.notes.some(n => /inferred/.test(n)));
 });

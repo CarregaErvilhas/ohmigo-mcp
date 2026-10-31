@@ -269,7 +269,7 @@ export class Dataset {
       // only names an operator whose sites here are all inferred (a region
       // or filter can leave just those).
       if (s.operatorInferred) o.lentName ??= s.operator;
-      else o.names.set(s.operator ?? '?', (o.names.get(s.operator ?? '?') || 0) + 1);
+      else if (s.operator) o.names.set(s.operator, (o.names.get(s.operator) || 0) + 1);
       if (s.website) o.websites.add(s.website);
       o.sites++;
       if (s.operatorInferred) o.inferredSites++;
@@ -285,7 +285,7 @@ export class Dataset {
     return [...by.values()].map(o => {
       const names = [...o.names].sort((x, y) => y[1] - x[1]).map(([n]) => n);
       return {
-        operatorId: o.operatorId, name: names[0] ?? o.lentName, otherNames: names.length > 1 ? names.slice(1) : undefined,
+        operatorId: o.operatorId, name: names[0] ?? o.lentName ?? '?', otherNames: names.length > 1 ? names.slice(1) : undefined,
         website: [...o.websites][0], sites: o.sites, inferredSites: o.inferredSites || undefined, points: o.points, dcPoints: o.dcPoints,
         maxKw: o.maxKw || undefined, maxVoltage: o.maxV || undefined, regions: o.regions, regimes: o.regimes,
       };

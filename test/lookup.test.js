@@ -61,6 +61,19 @@ test('a prefix lends its most common spelling, and the lent name does not vote',
   assert.deepEqual(data.operators({ region: 'AZO' }).map(o => o.name).sort(), ['?', 'Usual']);
 });
 
+test('a nameless site of the same operator does not hide the lent name', () => {
+  const data = new Dataset({ sites: [
+    site('AAA-1', '1', 'A', '', 'One', 'ONE', 40, -8),
+    site('AAA-2', '2', 'A', '', null, null, 40, -8, { region: 'AZO' }),
+    // A published id its prefix can't name: it stays nameless, under ONE.
+    site('BBB-1', '3', 'A', '', null, 'ONE', 40, -8, { region: 'AZO' }),
+    site('CCC-1', '4', 'A', '', null, null, 40, -8, { region: 'MAD' }),
+  ] });
+  assert.equal(data.siteById.get('BBB-1').operator, null);
+  assert.deepEqual(data.operators({ region: 'AZO' }).map(o => [o.operatorId, o.name, o.otherNames]), [['ONE', 'One', undefined]]);
+  assert.equal(data.operators({ region: 'MAD' })[0].name, '?');
+});
+
 test('an id prefix lends only what is safe to lend', () => {
   const lent = new Dataset({ sites: [
     site('MIX-1', '1', 'A', '', 'One', 'ONE', 40, -8), site('MIX-2', '2', 'A', '', 'Two', 'TWO', 40, -8),
