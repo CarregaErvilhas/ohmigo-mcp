@@ -144,6 +144,7 @@ test('http: find_chargers searches the whole country only when a filter keeps th
   const noCard = await call('find_chargers', { card_payment: false });
   assert.equal(noCard.isError, true);
   assert.equal(noCard.structuredContent.code, 'where');
+  assert.match(noCard.content[0].text, /card_payment: true/);
   // A cost ranking still needs a place.
   const cheap = await call('find_cheapest_charging', { min_voltage: 900, ...car });
   assert.equal(cheap.structuredContent.code, 'where');
@@ -289,6 +290,12 @@ test('http: list_ceme_tariffs says so when it cuts the list, and only then', asy
   const narrow = await call('list_ceme_tariffs', { query: 'edp' });
   assert.equal(narrow.structuredContent.count, 1);
   assert.equal(narrow.structuredContent.notes, undefined);
+  // Already narrowed: telling it to call again with query would go in circles.
+  for (const lang of ['en', 'pt']) {
+    const [note] = (await call('list_ceme_tariffs', { query: 'luzigas', lang })).structuredContent.notes;
+    assert.match(note, /60 .*70/);
+    assert.doesNotMatch(note, /query/);
+  }
 });
 
 test('http: a socket with no published power or plug reads "?" in the summary lines', async () => {
@@ -297,6 +304,8 @@ test('http: a socket with no published power or plug reads "?" in the summary li
   assert.match(ranked.content[0].text.split('\n\n')[0], unknown);
   const single = await call('estimate_charging_cost', { site: 'EDP-FAR-00001', ...car });
   assert.match(single.content[0].text.split('\n\n')[0], unknown);
+  const found = await call('lookup_charger', { query: 'EDP-FAR-00001' });
+  assert.match(found.content[0].text.split('\n\n')[0], /1× \? kW \?$/m);
   // Only the text: the data keeps what the dataset says.
   assert.equal(single.structuredContent.results[0].connector, 'nan');
 });

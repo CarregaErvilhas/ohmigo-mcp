@@ -510,7 +510,7 @@ export function createServer(getDataset, live) {
         ...(p.freeKwh != null && { freeKwhPerMonth: p.freeKwh }),
       from: p.from, until: p.to, active: p.active, newCustomers: p.newCustomers, tariffIds: p.tariffs, url: p.url }));
     const shown = rows.slice(0, MAX_TARIFFS);
-    const notes = rows.length > shown.length ? [t('note.tariffsCut', { n: shown.length, total: rows.length })] : [];
+    const notes = rows.length > shown.length ? [t('note.tariffsCut', { n: shown.length, total: rows.length, narrowed: !!q })] : [];
     return ok({ version: VERSION, count: rows.length, ...(notes.length && { notes }), tariffs: shown, ...(promoRows.length && { promos: promoRows }) },
       `${[...notes, ''].join('\n')}${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}${r.newCustomersOnly ? ' (new sign-ups only)' : ''}${r.until ? ` (until ${r.until})` : ''}`).join('\n')}`);
   });
@@ -564,7 +564,7 @@ export function createServer(getDataset, live) {
       sites: cards,
       // OpenStreetMap's licence (ODbL) asks for this wherever its data shows.
       credit: r.results.some(h => h.site.osm) ? t('credit.osm') : undefined,
-    }, [...notes, ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${g.kw ?? '?'} kW ${g.connector}`).join(', ')}`)].join('\n'));
+    }, [...notes, ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g)}`).join(', ')}`)].join('\n'));
   });
 
   server.registerTool('find_chargers', {

@@ -37,6 +37,8 @@ const SCHEMA = 1;
 // a partial match is too generic to be a place (Lisboa, the biggest city, is
 // ~10 %).
 const MIN_PLACE = 3;
+// No town has a name this long, and placeHits' cost grows fast with the length.
+const MAX_PLACE_CHARS = 200;
 const MAX_PLACE_SHARE = 0.15;
 
 const localFile = () => {
@@ -135,10 +137,11 @@ export class Dataset {
   }
 
   placeHits(name) {
-    // "Leiria, Portugal" or "Leiria (Pombal)": the town is the first part.
     // Punctuation around the name isn't part of it: "Leiria." is Leiria.
     const clean = text => fold(text).replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
-    const q = clean(String(name).split(/[,(]/)[0]);
+    const full = clean(String(name).slice(0, MAX_PLACE_CHARS));
+    // "Leiria, Portugal" or "Leiria (Pombal)": the town is the first part.
+    const q = clean(full.split(/[,(]/)[0]);
     if (q.length < MIN_PLACE) return null;
     const words = text => fold(text).split(/[^a-z0-9]+/).filter(Boolean);
     const prefix = text => {
@@ -148,7 +151,6 @@ export class Dataset {
       return false;
     };
     // Some NAP cities carry their own comma ("Lagoa, Faro" and "Lagoa, Azores").
-    const full = clean(String(name));
     let hits = this.sites.filter(s => fold(s.city) === full);
     if (!hits.length) hits = this.sites.filter(s => fold(s.city) === q);
     if (hits.length) return hits;
