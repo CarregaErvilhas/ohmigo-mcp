@@ -1,7 +1,40 @@
 {
   "about": "Hand-maintained corrections and additions to offers/custofinal.json (the scraped blog). An entry whose id exists there overrides the fields it lists; {\"id\": ..., \"disable\": true} removes it; {\"add\": true} adds a new offer (all fields required); an override or disable whose id is not in the scrape fails the tests. Every entry needs source and checkedAt, and the source host must be in sourceHosts (also for offers/nap-notes.json). Guide: docs/04-operator-offers.md.",
-  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com"],
+  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com", "atlante.energy"],
   "offers": [
+    {
+      "id": "atlante-app-myatlante-business-atlante",
+      "add": true,
+      "label": "Atlante - App MyAtlante Business",
+      "provider": "Atlante", "plan": "App MyAtlante Business", "network": "Atlante",
+      "scope": { "operatorIds": ["ATLA"] },
+      "walkUp": false, "subscription": false, "fee": null,
+      "prices": { "ac7": null, "ac22": null, "dc50": 0.45, "dc100": 0.45, "dc120": 0.45, "dc150": 0.45, "dc180": 0.45, "dcMax": 0.45 },
+      "cemeTariffs": ["atlante-myatlantebus"], "holdersOnly": true,
+      "source": "https://atlante.energy/pt-pt/myatlante-business/",
+      "checkedAt": "2026-10-31",
+      "why": "myAtlante Business's single price on fast and ultra-fast chargers, on Atlante's own network; on AC it uses its CEME tariff (ceme-v2). Only shown to drivers who hold it."
+    },
+    {
+      "id": "atlante-app-myatlante-business-rede-mobi-e",
+      "add": true,
+      "label": "Atlante - App MyAtlante Business",
+      "provider": "Atlante", "plan": "App MyAtlante Business", "network": "Rede Mobi.E",
+      "scope": { "mobie": true },
+      "walkUp": false, "subscription": false, "fee": null,
+      "prices": { "ac7": null, "ac22": null, "dc50": 0.49, "dc100": 0.49, "dc120": 0.49, "dc150": 0.49, "dc180": 0.49, "dcMax": 0.49 },
+      "cemeTariffs": ["atlante-myatlantebus"], "holdersOnly": true,
+      "source": "https://atlante.energy/pt-pt/myatlante-business/",
+      "checkedAt": "2026-10-31",
+      "why": "myAtlante Business's single price on fast and ultra-fast chargers, on other operators' chargers; on AC it uses its CEME tariff (ceme-v2). Only shown to drivers who hold it."
+    },
+    {
+      "id": "atlante-app-myatlante-rede-mobi-e",
+      "cemeTariffs": ["atlante-myatlanteac"],
+      "source": "https://atlante.energy/pt-pt/tarifas-de-energia/",
+      "checkedAt": "2026-10-31",
+      "why": "On DC the myAtlante app charges this flat price instead of its CEME tariff (energy + operator fee). myAtlante Business has its own DC price (atlante-app-myatlante-business-*)."
+    },
     {
       "id": "ionity-tpa-ionity",
       "prices": { "dcMax": 0.63 },

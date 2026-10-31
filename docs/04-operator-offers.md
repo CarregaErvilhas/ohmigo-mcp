@@ -129,6 +129,17 @@ it's for. CEME tariffs work the same way, with the `audience` that ceme-v2
 returns (EDP's employee tariff). A new group goes in `audiences.json` first;
 `npm test` fails on an offer naming one that isn't there.
 
+`"cemeTariffs"` (optional) ties an offer to CEME tariffs whose app bills
+it instead. myAtlante's CEME tariff only prices AC sockets (ceme-v2 marks
+it `AC_DC_FLAT`), and on DC the same app charges a flat price. When the
+driver's `tariff_ids` hold one of those tariffs, the offer is their own
+price: it's `listed` and `viaTariff`, and it becomes the total when none of
+their CEME tariffs applies at the socket. The entries are card keys, the
+tariff id without the voltage or cycle (`atlante-myatlanteac` for
+`atlante-mt-myatlanteac`); `npm test` checks that. Add `"holdersOnly": true`
+when only those tariffs' holders get the price (myAtlante Business on DC):
+the offer is then hidden from every other driver.
+
 An override or `disable` whose `id` isn't in the scrape (a typo, or the blog
 renamed the slug) is skipped with a warning at boot, and `npm test` fails
 naming it.
