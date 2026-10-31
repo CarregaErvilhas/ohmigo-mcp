@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ohmigo</title>
 <meta name="description" content="">
+<!-- seo: canonical, hreflang and Open Graph, filled in by src/site.js -->
 <meta name="theme-color" content="#16a34a">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='14' width='44' height='40' rx='14' fill='%2322c55e'/%3E%3C/svg%3E">
 <style>
@@ -29,9 +30,9 @@
   .bar { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 12px; }
   .logo { font-weight: 900; font-size: 22px; color: var(--fg); text-decoration: none; }
   .langs { display: flex; gap: 6px; }
-  .langs button { border: 2px solid transparent; background: var(--card); border-radius: 999px; padding: 5px 12px;
-    font: 700 14px var(--font); color: var(--fg); cursor: pointer; }
-  .langs button[aria-pressed="true"] { border-color: var(--green); }
+  .langs a { border: 2px solid transparent; background: var(--card); border-radius: 999px; padding: 5px 12px;
+    font: 700 14px var(--font); color: var(--fg); text-decoration: none; }
+  .langs a[aria-current="page"] { border-color: var(--green); }
   h1 { font-size: clamp(32px, 6vw, 48px); font-weight: 900; line-height: 1.15; margin: 40px 0 12px; letter-spacing: -.01em; }
   h2 { font-size: 24px; font-weight: 800; margin: 0 0 .4em; }
   .lede { font-size: 20px; color: var(--muted); margin: 0 0 32px; }
@@ -54,8 +55,8 @@
   <div class="wrap bar">
     <a class="logo" href="/">ohmigo</a>
     <div class="langs" role="group" aria-label="Language / Idioma">
-      <button type="button" data-lang="pt" aria-pressed="true">PT</button>
-      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      <a href="" data-lang="pt" hreflang="pt-PT" title="Português">PT</a>
+      <a href="" data-lang="en" hreflang="en" title="English">EN</a>
     </div>
   </div>
 </header>
@@ -72,12 +73,11 @@
   </div>
 </footer>
 
-<!-- Both pages in both languages. The server sends this same file for
-     /privacidade and /suporte (and their English aliases); the script picks
-     the page from the path. Each page is a list of sections, [heading key,
-     paragraph/list keys...]; a key ending in "li" is a list item. Values are
-     trusted HTML (written here, never user input). test/site.test.js checks
-     that pt and en have the same keys. -->
+<!-- strings: both pages in both languages, never sent to the browser.
+     src/site.js renders one copy per URL (/privacidade, /privacy, /suporte,
+     /support) with the sections listed in its LEGAL and the text from here,
+     and drops this block. Values are trusted HTML (written here, never user
+     input). test/site.test.js checks that pt and en have the same keys. -->
 <script type="application/json" id="strings">
 {
   "pt": {
@@ -88,33 +88,33 @@
     "privacy.title": "Privacidade · ohmigo",
     "privacy.desc": "O que o ohmigo recebe quando o teu assistente o usa, o que guarda e a quem pedir o quê: sem contas, sem anúncios, sem cookies.",
     "privacy.h1": "Privacidade",
-    "privacy.lede": "Sem contas, sem anúncios, sem cookies e sem base de dados de utilizadores. O ohmigo responde à pergunta e esquece-a.",
+    "privacy.lede": "Sem contas, sem anúncios, sem cookies e sem base de dados de utilizadores. O ohmigo responde à pergunta e não a liga a ti.",
 
     "p1.h": "Quem é responsável",
     "p1.p": "O ohmigo é mantido pela comunidade d'<a href=\"https://ocarroeletrico.com/\" target=\"_blank\" rel=\"noopener\">O Carro Elétrico</a>. Para qualquer pedido sobre os teus dados, escreve para <a href=\"mailto:info@ocarroeletrico.com\">info@ocarroeletrico.com</a>.",
 
     "p2.h": "O que o ohmigo recebe",
-    "p2.p1": "Quando o teu assistente (o ChatGPT, o Claude…) usa o ohmigo, envia os dados da pergunta: um sítio, umas coordenadas ou um percurso, a bateria do teu carro e a potência de carregamento, a percentagem de bateria, a hora de início e os tarifários que usas. Se o assistente enviar a tua localização, o ohmigo recebe-a.",
-    "p2.p2": "Estes dados servem só para calcular a resposta. Ficam na memória do servidor enquanto o pedido dura. Não os guardamos, não os ligamos a ti e não temos contas nem base de dados de utilizadores.",
-    "p2.p3": "O ohmigo não vê o teu nome, o teu email nem a tua conta no assistente. O que o assistente se lembra de ti (o carro, os cartões) fica com o assistente e segue a política dele.",
+    "p2.p1": "Quando o teu assistente (o ChatGPT, o Claude…) usa o ohmigo, envia os dados da pergunta: um sítio, umas coordenadas, um percurso ou o destino, a bateria do teu carro e a potência de carregamento, a percentagem de bateria, a hora de início, filtros (como a potência ou o tipo de ficha), os tarifários que usas, os kWh que já carregaste este mês em cada tarifário e se tens direito a um preço reservado a um público (colaboradores de uma empresa, motoristas Uber). Só chega o que o assistente enviar. Se enviar a tua localização, o ohmigo recebe-a.",
+    "p2.p2": "Estes dados servem só para calcular a resposta. Não os ligamos a ti, não vão para disco e não temos contas nem base de dados de utilizadores. Fica uma coisa na memória do servidor depois do pedido: para não repetir cálculos iguais, o ohmigo guarda as respostas do ceme-v2 junto com o que lhe perguntou (o perfil da sessão, a região e os kWh do mês por tarifário, ver abaixo). Reutiliza-as durante 5 minutos, e podem ficar em memória mais tempo, até entradas mais recentes as substituírem ou o servidor reiniciar. Não incluem coordenadas nem nomes de sítios.",
+    "p2.p3": "O ohmigo não te pede o nome, o email nem a conta no assistente. O que o assistente se lembra de ti (o carro, os cartões) fica com o assistente e segue a política dele.",
 
     "p3.h": "Para onde vão os dados",
-    "p3.li1": "Para calcular o preço da energia, o ohmigo pergunta ao <a href=\"https://ceme.ocarroeletrico.com\" target=\"_blank\" rel=\"noopener\">ceme-v2</a> (também nosso) só os kWh, a hora (arredondada ao quarto de hora) e a região. Sem local exato, sem identificação.",
+    "p3.li1": "Para calcular o preço da energia, o ohmigo envia ao <a href=\"https://ceme.ocarroeletrico.com\" target=\"_blank\" rel=\"noopener\">ceme-v2</a> (também nosso) a sessão estimada, cortada em fatias de um quarto de hora: quando começa cada fatia (a primeira na hora de início, ao minuto) e os kWh de cada uma, com o total. Envia também a região (continente, Madeira ou Açores) e, se os indicaste, os kWh do mês por tarifário, com os identificadores desses tarifários. Sem coordenadas, sem nome do sítio, sem identificação.",
     "p3.li2": "O estado dos postos vem do feed público do Ponto de Acesso Nacional (PAN) e a lista de postos do nosso conjunto de dados. Nestes pedidos não vai nada teu.",
-    "p3.li3": "O serviço corre no <a href=\"https://zerops.io/\" target=\"_blank\" rel=\"noopener\">Zerops</a> (Praga, UE), com a <a href=\"https://www.cloudflare.com/privacypolicy/\" target=\"_blank\" rel=\"noopener\">Cloudflare</a> à frente para HTTPS e proteção contra abusos. Como em qualquer site, o teu endereço IP (ou o do assistente) chega a estes serviços, que o tratam por nossa conta. A Cloudflare é uma empresa dos EUA, aderente ao Quadro de Privacidade de Dados UE-EUA.",
-    "p3.p": "Os pedidos vêm dos servidores do assistente, não do teu dispositivo, por isso o IP que vemos costuma ser o deles.",
+    "p3.li3": "O serviço corre no <a href=\"https://zerops.io/\" target=\"_blank\" rel=\"noopener\">Zerops</a>, com a <a href=\"https://www.cloudflare.com/privacypolicy/\" target=\"_blank\" rel=\"noopener\">Cloudflare</a> à frente para HTTPS e proteção contra ataques. Cada pedido passa pela Cloudflare e pelo balanceador do Zerops antes de chegar ao ohmigo, com o conteúdo e o endereço IP de quem liga. O Zerops também recolhe os registos descritos abaixo.",
+    "p3.p": "Com o ChatGPT e o Claude na web, os pedidos vêm dos servidores do assistente, não do teu dispositivo, por isso o IP que chega é o deles. Um assistente que corre no teu computador liga-se com o teu IP, e o mesmo acontece quando abres estas páginas no browser. O ohmigo não usa esse IP.",
 
     "p4.h": "Registos e cookies",
-    "p4.p1": "O ohmigo não regista as perguntas nem os IP. Só escreve mensagens de arranque e erros técnicos. Existe um modo de teste que regista as perguntas; está desligado no serviço público.",
+    "p4.p1": "O ohmigo não regista os dados das perguntas nem os IP. Por cada chamada a uma ferramenta escreve uma linha técnica: a hora, a ferramenta, quanto demorou, se deu erro, o código do erro e o tamanho da resposta. Escreve também mensagens de arranque, de atualização dos dados e erros técnicos, e soma contadores por ferramenta, públicos em <a href=\"/healthz\">/healthz</a>. Existe um modo de teste que regista os dados das perguntas; está desligado no serviço público.",
     "p4.p2": "Não usamos cookies nem analytics. A página inicial só grava no teu browser a língua que escolheste (<code>localStorage</code>, chave <code>ohmigo.lang</code>), para a lembrar. Podes apagá-la nas definições do browser.",
     "p4.p3": "A base legal é o interesse legítimo em manter o serviço seguro e a funcionar (art. 6.º, n.º 1, alínea f) do RGPD).",
 
     "p5.h": "Os teus direitos",
-    "p5.p": "Podes pedir acesso, correção ou apagamento dos teus dados, ou opor-te ao tratamento, por <a href=\"mailto:info@ocarroeletrico.com\">email</a>. Como não guardamos dados sobre ti, na prática não há muito a apagar, mas respondemos na mesma. Se achares que não respondemos bem, podes queixar-te à <a href=\"https://www.cnpd.pt/\" target=\"_blank\" rel=\"noopener\">CNPD</a>.",
+    "p5.p": "Podes pedir acesso, correção ou apagamento dos teus dados, ou opor-te ao tratamento, por <a href=\"mailto:info@ocarroeletrico.com\">email</a>. Como não guardamos nada que possamos ligar a ti, na prática não há muito a apagar, mas respondemos na mesma. Se achares que não respondemos bem, podes queixar-te à <a href=\"https://www.cnpd.pt/\" target=\"_blank\" rel=\"noopener\">CNPD</a>.",
 
     "p6.h": "Mudanças",
-    "p6.p": "Se o ohmigo passar a guardar alguma coisa nova, esta página muda primeiro. O histórico completo está no <a href=\"https://github.com/CarregaErvilhas/ohmigo-mcp/commits/main/site/legal.html\" target=\"_blank\" rel=\"noopener\">GitHub</a>.",
-    "p6.updated": "<small>Última atualização: 28 de outubro de 2026.</small>",
+    "p6.p": "Se o ohmigo passar a guardar ou a enviar alguma coisa nova, esta página muda primeiro. O histórico completo está no <a href=\"https://github.com/CarregaErvilhas/ohmigo-mcp/commits/main/site/legal.html\" target=\"_blank\" rel=\"noopener\">GitHub</a>.",
+    "p6.updated": "<small>Última atualização: 31 de outubro de 2026.</small>",
 
     "support.title": "Suporte · ohmigo",
     "support.desc": "Como falar com a equipa do ohmigo: problemas, sugestões e dúvidas sobre preços de carregamento.",
@@ -136,11 +136,11 @@
     "s3.h": "Dúvidas comuns",
     "s3.li1": "<b>Não consigo adicionar o ohmigo ao ChatGPT.</b> A conta gratuita não permite conectores, e alguns planos pagos também não. Os passos estão <a href=\"/#instalar\">na página inicial</a>, e o Claude é a alternativa.",
     "s3.li2": "<b>O preço é diferente do que paguei.</b> Os valores são estimativas e cada resposta diz o que assumiu. Os preços diretos dos operadores são lidos de uma lista pública semanal e podem estar desatualizados.",
-    "s3.li3": "<b>O estado do posto está errado.</b> O estado ao vivo pode ter até 5 minutos, e o primeiro pedido depois de uma pausa pode demorar cerca de 25 segundos.",
+    "s3.li3": "<b>O estado do posto está errado.</b> A nossa cópia do estado ao vivo pode ter 15 minutos ou mais, e o primeiro pedido depois de uma pausa pode demorar cerca de 25 segundos.",
     "s3.li4": "<b>O serviço está a funcionar?</b> <a href=\"/healthz\">/healthz</a> mostra se está no ar e quão frescos estão os dados.",
 
     "s4.h": "Um aviso",
-    "s4.p": "O ohmigo é uma ferramenta da comunidade, mantida no tempo livre por pessoas que também carregam o carro na mesma rede que tu. Não é um comercializador de energia nem um operador de postos, não tem anúncios e não guarda dados sobre ti. Não prometemos um prazo de resposta, mas lemos tudo."
+    "s4.p": "O ohmigo é uma ferramenta da comunidade, mantida no tempo livre por pessoas que também carregam o carro na mesma rede que tu. Não é um comercializador de energia nem um operador de postos, não tem anúncios e não guarda nada que possamos ligar a ti. Não prometemos um prazo de resposta, mas lemos tudo."
   },
   "en": {
     "nav.home": "Home",
@@ -150,33 +150,33 @@
     "privacy.title": "Privacy · ohmigo",
     "privacy.desc": "What ohmigo receives when your assistant uses it, what it keeps and who to ask: no accounts, no ads, no cookies.",
     "privacy.h1": "Privacy",
-    "privacy.lede": "No accounts, no ads, no cookies and no user database. ohmigo answers the question and forgets it.",
+    "privacy.lede": "No accounts, no ads, no cookies and no user database. ohmigo answers the question and doesn't tie it to you.",
 
     "p1.h": "Who is responsible",
     "p1.p": "ohmigo is kept by the <a href=\"https://ocarroeletrico.com/\" target=\"_blank\" rel=\"noopener\">O Carro Elétrico</a> community. For any request about your data, write to <a href=\"mailto:info@ocarroeletrico.com\">info@ocarroeletrico.com</a>.",
 
     "p2.h": "What ohmigo receives",
-    "p2.p1": "When your assistant (ChatGPT, Claude…) uses ohmigo, it sends the details of your question: a place, coordinates or a route, your car's battery size and charging power, the battery percentage, the start time and the tariffs you use. If the assistant sends your location, ohmigo receives it.",
-    "p2.p2": "These details are used only to work out the answer. They stay in the server's memory while the request lasts. We don't store them, don't link them to you, and have no accounts or user database.",
-    "p2.p3": "ohmigo never sees your name, your email or your account with the assistant. What the assistant remembers about you (your car, your cards) stays with the assistant and follows its policy.",
+    "p2.p1": "When your assistant (ChatGPT, Claude…) uses ohmigo, it sends the details of your question: a place, coordinates, a route or your destination, your car's battery size and charging power, the battery percentage, the start time, filters (such as power or plug type), the tariffs you use, the kWh you already charged this month on each tariff, and whether you qualify for a price kept for one group (a company's staff, Uber drivers). Only what the assistant sends arrives. If it sends your location, ohmigo receives it.",
+    "p2.p2": "These details are used only to work out the answer. We don't link them to you, they don't go to disk, and we have no accounts or user database. One thing stays in the server's memory after the request: to avoid repeating the same calculation, ohmigo keeps ceme-v2's answers together with what it asked (the session profile, the region and the month's kWh per tariff, see below). It reuses them for 5 minutes, and they can stay in memory longer, until newer entries replace them or the server restarts. They include no coordinates or place names.",
+    "p2.p3": "ohmigo doesn't ask for your name, your email or your account with the assistant. What the assistant remembers about you (your car, your cards) stays with the assistant and follows its policy.",
 
     "p3.h": "Where the data goes",
-    "p3.li1": "To price the energy, ohmigo asks <a href=\"https://ceme.ocarroeletrico.com\" target=\"_blank\" rel=\"noopener\">ceme-v2</a> (also ours) for the kWh, the time (rounded to the quarter-hour) and the region only. No exact place, no identity.",
+    "p3.li1": "To price the energy, ohmigo sends <a href=\"https://ceme.ocarroeletrico.com\" target=\"_blank\" rel=\"noopener\">ceme-v2</a> (also ours) the estimated session, cut into quarter-hour slices: when each slice starts (the first at the start time, to the minute) and its kWh, with the total. It also sends the region (mainland, Madeira or the Azores) and, if you gave them, the month's kWh per tariff, with those tariffs' ids. No coordinates, no place name, no identity.",
     "p3.li2": "Charger status comes from the public feed of Portugal's National Access Point (NAP) and the charger list from our dataset. Nothing of yours goes with these requests.",
-    "p3.li3": "The service runs on <a href=\"https://zerops.io/\" target=\"_blank\" rel=\"noopener\">Zerops</a> (Prague, EU), with <a href=\"https://www.cloudflare.com/privacypolicy/\" target=\"_blank\" rel=\"noopener\">Cloudflare</a> in front for HTTPS and abuse protection. As with any website, your IP address (or the assistant's) reaches these services, which process it on our behalf. Cloudflare is a US company certified under the EU-US Data Privacy Framework.",
-    "p3.p": "Requests come from the assistant's servers, not from your device, so the IP we see is usually theirs.",
+    "p3.li3": "The service runs on <a href=\"https://zerops.io/\" target=\"_blank\" rel=\"noopener\">Zerops</a>, with <a href=\"https://www.cloudflare.com/privacypolicy/\" target=\"_blank\" rel=\"noopener\">Cloudflare</a> in front for HTTPS and protection against attacks. Every request goes through Cloudflare and the Zerops load balancer before it reaches ohmigo, with its content and the IP address of whoever connects. Zerops also collects the logs described below.",
+    "p3.p": "With ChatGPT and Claude on the web, requests come from the assistant's servers, not from your device, so the IP that arrives is theirs. An assistant running on your computer connects with your IP, and so does your browser when you open these pages. ohmigo doesn't use that IP.",
 
     "p4.h": "Logs and cookies",
-    "p4.p1": "ohmigo doesn't log questions or IP addresses. It writes only start-up messages and technical errors. A test mode that logs questions exists; it is off on the public service.",
+    "p4.p1": "ohmigo doesn't log the details of your questions or IP addresses. For each tool call it writes one technical line: the time, the tool, how long it took, whether it failed, the error code and the size of the answer. It also writes start-up messages, data refresh messages and technical errors, and adds up per-tool counters, public at <a href=\"/healthz\">/healthz</a>. A test mode that logs the details of questions exists; it is off on the public service.",
     "p4.p2": "We use no cookies and no analytics. The home page only saves the language you picked in your browser (<code>localStorage</code>, key <code>ohmigo.lang</code>), to remember it. You can clear it in your browser settings.",
     "p4.p3": "The legal basis is our legitimate interest in keeping the service safe and working (GDPR art. 6(1)(f)).",
 
     "p5.h": "Your rights",
-    "p5.p": "You can ask for access, correction or erasure of your data, or object to its processing, by <a href=\"mailto:info@ocarroeletrico.com\">email</a>. Since we keep no data about you there is little to erase, but we answer anyway. If you think we did not answer properly, you can complain to the Portuguese data protection authority, <a href=\"https://www.cnpd.pt/\" target=\"_blank\" rel=\"noopener\">CNPD</a>.",
+    "p5.p": "You can ask for access, correction or erasure of your data, or object to its processing, by <a href=\"mailto:info@ocarroeletrico.com\">email</a>. Since we keep nothing we can link to you there is little to erase, but we answer anyway. If you think we did not answer properly, you can complain to the Portuguese data protection authority, <a href=\"https://www.cnpd.pt/\" target=\"_blank\" rel=\"noopener\">CNPD</a>.",
 
     "p6.h": "Changes",
-    "p6.p": "If ohmigo starts storing anything new, this page changes first. The full history is on <a href=\"https://github.com/CarregaErvilhas/ohmigo-mcp/commits/main/site/legal.html\" target=\"_blank\" rel=\"noopener\">GitHub</a>.",
-    "p6.updated": "<small>Last updated: 28 October 2026.</small>",
+    "p6.p": "If ohmigo starts storing or sending anything new, this page changes first. The full history is on <a href=\"https://github.com/CarregaErvilhas/ohmigo-mcp/commits/main/site/legal.html\" target=\"_blank\" rel=\"noopener\">GitHub</a>.",
+    "p6.updated": "<small>Last updated: 31 October 2026.</small>",
 
     "support.title": "Support · ohmigo",
     "support.desc": "How to reach the ohmigo team: problems, suggestions and questions about charging prices.",
@@ -198,80 +198,13 @@
     "s3.h": "Common questions",
     "s3.li1": "<b>I can't add ohmigo to ChatGPT.</b> Free accounts can't add connectors, and some paid plans can't either. The steps are <a href=\"/#instalar\">on the home page</a>, and Claude is the alternative.",
     "s3.li2": "<b>The price differs from what I paid.</b> Values are estimates, and every answer says what it assumed. Operators' direct prices are read from a public weekly list and may be out of date.",
-    "s3.li3": "<b>The charger status is wrong.</b> Live status can be up to 5 minutes old, and the first request after a quiet spell can take about 25 seconds.",
+    "s3.li3": "<b>The charger status is wrong.</b> Our copy of the live status can be 15 minutes old or more, and the first request after a quiet spell can take about 25 seconds.",
     "s3.li4": "<b>Is the service up?</b> <a href=\"/healthz\">/healthz</a> shows whether it is running and how fresh the data is.",
 
     "s4.h": "One note",
-    "s4.p": "ohmigo is a community tool, kept in spare time by people who also charge their car on the same network as you. It is not an energy retailer or a charger operator, has no ads and keeps no data about you. We don't promise a reply time, but we read everything."
+    "s4.p": "ohmigo is a community tool, kept in spare time by people who also charge their car on the same network as you. It is not an energy retailer or a charger operator, has no ads and keeps nothing we can link to you. We don't promise a reply time, but we read everything."
   }
 }
-</script>
-<script>
-(() => {
-  const S = JSON.parse(document.getElementById('strings').textContent);
-  // Which page: the path decides (the server sends this file for all four).
-  const page = /^\/(suporte|support)\/?$/.test(location.pathname) ? 'support' : 'privacy';
-  const PAGES = {
-    privacy: [
-      ['p1.h', 'p1.p'],
-      ['p2.h', 'p2.p1', 'p2.p2', 'p2.p3'],
-      ['p3.h', ['p3.li1', 'p3.li2', 'p3.li3'], 'p3.p'],
-      ['p4.h', 'p4.p1', 'p4.p2', 'p4.p3'],
-      ['p5.h', 'p5.p'],
-      ['p6.h', 'p6.p', 'p6.updated'],
-    ],
-    support: [
-      ['s1.h', 's1.p1', 'CTA'],
-      ['s2.h', ['s2.li1', 's2.li2', 's2.li3', 's2.li4']],
-      ['s3.h', ['s3.li1', 's3.li2', 's3.li3', 's3.li4']],
-      ['s4.h', 's4.p'],
-    ],
-  };
-  const store = {
-    get() { try { return localStorage.getItem('ohmigo.lang'); } catch { return null; } },
-    set(v) { try { localStorage.setItem('ohmigo.lang', v); } catch {} },
-  };
-  // Same order as the home page: ?lang=, the earlier pick, the browser, English.
-  function detect() {
-    const q = new URLSearchParams(location.search).get('lang');
-    if (q === 'pt' || q === 'en') return q;
-    const saved = store.get();
-    if (saved === 'pt' || saved === 'en') return saved;
-    for (const l of navigator.languages || [navigator.language || '']) {
-      if (/^pt\b/i.test(l)) return 'pt';
-      if (/^en\b/i.test(l)) return 'en';
-    }
-    return 'en';
-  }
-  const el = id => document.getElementById(id);
-  function apply(lang) {
-    const t = S[lang];
-    document.documentElement.lang = lang === 'pt' ? 'pt-PT' : 'en';
-    document.title = t[page + '.title'];
-    document.querySelector('meta[name="description"]').content = t[page + '.desc'];
-    el('h1').textContent = t[page + '.h1'];
-    el('lede').textContent = t[page + '.lede'];
-    el('body').innerHTML = PAGES[page].map(([h, ...rest]) => {
-      const inner = rest.map(k => {
-        if (Array.isArray(k)) return '<ul>' + k.map(x => `<li>${t[x]}</li>`).join('') + '</ul>';
-        if (k === 'CTA') {
-          return '<div class="cta">'
-            + `<a href="https://github.com/CarregaErvilhas/ohmigo-mcp/issues" target="_blank" rel="noopener">${t['s1.cta1']}</a>`
-            + `<a class="sec" href="mailto:info@ocarroeletrico.com">${t['s1.cta2']}</a>`
-            + `<a class="sec" href="https://m.me/OCarroEletricoDotCom" target="_blank" rel="noopener">${t['s1.cta3']}</a></div>`;
-        }
-        return `<p>${t[k]}</p>`;
-      }).join('');
-      return `<article><h2>${t[h]}</h2>${inner}</article>`;
-    }).join('');
-    for (const n of document.querySelectorAll('[data-i]')) n.innerHTML = t[n.dataset.i];
-    for (const b of document.querySelectorAll('[data-lang]')) b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
-  }
-  apply(detect());
-  for (const b of document.querySelectorAll('[data-lang]')) {
-    b.addEventListener('click', () => { store.set(b.dataset.lang); apply(b.dataset.lang); });
-  }
-})();
 </script>
 </body>
 </html>

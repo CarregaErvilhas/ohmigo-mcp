@@ -22,21 +22,26 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
 
 Progress messages go to stderr, the JSON result to stdout.
 
-`GET /` is the landing page for people (`site/index.html`): what ohmigo is
-and how to add it to each assistant. It's one static file, read once at boot,
-so restart the server to see edits. It picks Portuguese or English from the
-browser (a `?lang=pt|en` link or the flag buttons override it), and its
+`GET /` is the landing page for people, in Portuguese, and `GET /en` the same
+page in English: what ohmigo is and how to add it to each assistant.
+`src/site.js` renders `site/index.html` once at boot, one copy per language with
+the text already in the HTML, so restart the server to see edits. The language
+comes from the URL, not from the browser, and an old `?lang=` link redirects to
+the right URL. The flag links go to the other URL; on `/` a browser that picked
+English before is sent to `/en` (the page's script, `localStorage`). The
 sentences live in the `#strings` block at the bottom, both languages with the
 same keys (`test/site.test.js` checks). A browser that opens `/mcp` is sent to
 `/#instalar`, since people paste the address there by mistake; MCP clients
 never ask for HTML, so they're unaffected.
 
-`GET /privacidade` and `GET /suporte` (English aliases `/privacy`, `/support`)
-are the privacy and support pages that the assistants' directories ask for.
-They're one static file, `site/legal.html`, whose script picks the page from
-the path and has the same two-language strings block and parity test. If the
-server starts keeping or sending anything new about the user, update the
-privacy page first.
+`GET /privacidade` and `GET /suporte` are the privacy and support pages that the
+assistants' directories ask for, in Portuguese; `GET /privacy` and
+`GET /support` are their English copies. They work the same way: one source,
+`site/legal.html`, with the same two-language strings block and parity test, and
+`src/site.js` renders one copy per URL at boot (`LEGAL` lists each page's
+sections). These pages send no script: the language buttons are plain links, and
+an old `?lang=` link redirects too. If the server starts keeping or sending
+anything new about the user, update the privacy page first.
 
 `GET /healthz` shows how the server is doing: `status` is `ok`, or
 `degraded` with the reasons in `problems` (the last live feed refresh failed,
