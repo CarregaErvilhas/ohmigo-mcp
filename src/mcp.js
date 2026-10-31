@@ -328,6 +328,11 @@ function siteCard(h, live, t, audiences = [], notes = []) {
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
+// A cost answer leads with one price, and assistants tend to stop there: the
+// evals caught them leaving out every other way to pay. When a charger has
+// more than its best, the result itself says so.
+const moreWays = (results, t) => results.some(q => q.options?.length > 1) ? [t('note.moreWays')] : [];
+
 // What a support question needs to reproduce an answer: which server, which
 // data, which live copy.
 const meta = (ds, live, lang) => ({ version: VERSION, lang, dataAsOf: ds.generatedAt, live: liveMeta(live), ...(QA && { qa: true }) });
@@ -666,6 +671,7 @@ export function createServer(getDataset, live) {
       ...voltageNotes(ds, a, t),
       ...(truncated ? [t('note.truncated', { n: candidates.length, total })] : []),
       ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
+      ...moreWays(top, t),
     ];
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
@@ -701,8 +707,9 @@ export function createServer(getDataset, live) {
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${q.kw} kW ${q.connector} [${q.pointId}]`);
-    return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true, notes: [t('note.noCeme')] }), results },
-      [...(cemeDown ? [t('note.noCeme')] : []), ...lines].join('\n'));
+    const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...moreWays(results, t)];
+    return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
+      [...notes, ...lines].join('\n'));
   });
 
   registerAppResource(server, 'Charging results', VIEW_URI, {
