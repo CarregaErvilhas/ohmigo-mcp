@@ -97,6 +97,10 @@ test('http: the plug filter offers the plugs the dataset has, not an unknown one
   const { tools } = await call('tools/list');
   const { enum: plugs } = tools.find(t => t.name === 'find_chargers').inputSchema.properties.connectors.items;
   assert.deepEqual(plugs, ['T2', 'CCS', 'CHADEMO', 'iec60309x2single16']);
+  // Every tool with the filter says what a domestic plug maps to.
+  const filtered = tools.filter(t => t.inputSchema.properties.connectors);
+  assert.equal(filtered.length, 5);
+  for (const t of filtered) assert.match(t.inputSchema.properties.connectors.description, /iec60309x2single16.*Schuko/, t.name);
 });
 
 test('http: with tariff_ids, a tariff the user lacks is a tip in both cost tools', async () => {

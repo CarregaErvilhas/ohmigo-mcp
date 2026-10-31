@@ -162,13 +162,13 @@ function placeLine(pl) {
 }
 
 const Filter = {
-  min_kw: z.number().positive().optional().describe('Minimum charger power, kW'),
-  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'iec60309x2single16'])).optional().describe('Acceptable plug types'),
+  min_kw: z.number().positive().optional().describe('Minimum power, kW'),
+  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'iec60309x2single16'])).optional().describe('Plug types. Domestic plug: filter iec60309x2single16 (blue CEE, needs adapter; no Schuko)'),
   dc_only: z.boolean().optional().describe('Only DC (fast) chargers'),
-  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum socket voltage, V (e.g. 800 for an 800 V car)'),
-  card_payment: z.boolean().optional().describe('Only chargers where a bank card works at the charger (terminal or contactless)'),
+  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum voltage, V (e.g. 800 for an 800 V car)'),
+  card_payment: z.boolean().optional().describe('Only where a bank card works at the charger (terminal or contactless)'),
   cable_attached: z.boolean().optional().describe('true: fixed cable only; false: only where the user brings one'),
-  open_now: z.boolean().optional().describe('Leave out chargers closed now (or at `at`) by their opening hours'),
+  open_now: z.boolean().optional().describe('Leave out chargers closed now (or at `at`)'),
 };
 
 // The Filter arguments, as Dataset.pointFilter takes them.
@@ -575,7 +575,7 @@ export function createServer(getDataset, live) {
 
   server.registerTool('find_chargers', {
     title: 'Find chargers',
-    description: 'Lists public EV chargers in Portugal near a place, along a route, or in the whole country when a filter is given (every 800 V charger, every IONITY site, card_payment), with power, voltage, plug, fixed cable, opening hours, bank card payment and live status per socket. Domestic plug: filter iec60309x2single16 (blue CEE, needs adapter; none is Schuko). No prices: for costs use find_cheapest_charging; for one charger the user names, lookup_charger.',
+    description: 'Lists public EV chargers in Portugal near a place, along a route, or in the whole country when a filter is given (every 800 V charger, every IONITY site, card_payment), with power, voltage, plug, fixed cable, opening hours, bank card payment and live status per socket. No prices: for costs use find_cheapest_charging; for one charger the user names, lookup_charger.',
     inputSchema: z.object({ ...Where, ...Filter, ...Region, ...Lang, limit: z.number().int().positive().max(100).default(15) }),
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, async (a, ctx) => {

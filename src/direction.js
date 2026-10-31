@@ -39,27 +39,39 @@ export const PAIR_KM = 2;
 // A motorway or expressway in the address or OSM name: "A1", "IC2", "IP3",
 // "área de serviço". Not a bare "km": national roads ("EN1 km 152") have no
 // separate carriageways, you just cross.
-const MOTORWAY = /\ba-?\d{1,2}\b|\bi[cp][\s-]?\d{1,2}\b|\barea de servic[oi]\b/;
+const MOTORWAY = /\b(?:a|ic|ip)\d{1,2}\b|\bi[cp]\s\d{1,2}\b|\barea de servic[oi]\b/;
 // "A 22" with a space also reads as a door number: "40 a 48" (a range, lower
-// case or after a number) or "Avenida das Laranjeiras A 2" (a door on a
-// street). So it counts in capitals, outside a street address.
-const SPACED_A = /(?<!\d\s)\bA \d{1,2}\b/;
-const STREET = /^(?:rua|r\.|avenida|av\.|travessa|largo|praca|alameda|estrada)\s/;
-const namesMotorway = text => MOTORWAY.test(fold(text)) || (SPACED_A.test(text) && !STREET.test(fold(text)));
+// case or after a number), "Avenida das Laranjeiras A 2", "Lote 12, A 14". So
+// it takes capitals, nothing before it that gives the text a door, and a sign
+// that it's a road: it stands alone, or comes with a km, a "sentido", "junto
+// à", "acesso", brackets or the A22's name. Unfolded text, so the boundary
+// has to know "Ç" is a letter ("PRAÇA 25").
+const SPACED_A = /(?<![\p{L}\d])(?<!\d\s)A \d{1,2}(?![\p{L}\d])/u;
+const HAS_DOOR = /\b(?:rua|av|avenida|travessa|tv|largo|praca|praceta|alameda|lote|lt|bloco|bairro|urbanizacao|urb)\b|\br\./;
+const ROAD_SIGN = /\bkm\s?\d|\bsentido\b|\bjunto\b|\bacesso\b|\(|\bvia do infante\b/;
+function namesMotorway(text) {
+  const folded = fold(text);
+  if (MOTORWAY.test(folded)) return true;
+  const m = text.match(SPACED_A);
+  return !!m && !HAS_DOOR.test(fold(text.slice(0, m.index))) && (ROAD_SIGN.test(folded) || folded === fold(m[0]));
+}
 export const onMotorway = site => [site.address, site.osm?.name].some(t => t && namesMotorway(t));
 
 // The direction a site says it serves, as published: "N/S", "S-N", "sentido
-// Lisboa". null when it doesn't say. Off a motorway a compass pair is almost
-// always "S/N", sem número (no door number), so it only counts on one, and
-// only in capitals: nobody writes the directions in lower case, "s/n" is
-// always the door. "sentido" says what it means anywhere, in any case.
-const SENTIDO = /\b(?i:sentido)\s+(?<town>[^,;()]+)/;
-const LABEL = new RegExp(`\\b(?<from>[NSEO])\\s?[-/]\\s?(?<to>[NSEO])\\b|${SENTIDO.source}`);
+// Lisboa". null when it doesn't say. Compass pairs only in capitals: nobody
+// writes them in lower case. "S/N" is also sem número (no door number), the
+// usual ending of a Portuguese address, so it only counts as south to north
+// when the address itself is on a motorway: an OSM name saying "A1" doesn't
+// explain a door in the address.
+const LABEL = /\b(?<from>[NSEO])\s?[-/]\s?(?<to>[NSEO])\b|\b(?:[Ss]entido|SENTIDO)\s+(?<town>[^,;()]+)/g;
 function parseLabel(site) {
-  const label = onMotorway(site) ? LABEL : SENTIDO;
+  const doors = !site.address || !namesMotorway(site.address);
   for (const text of [site.osm?.name, site.address]) {
-    const m = text?.match(label);
-    if (m) return { text: m[0].trim(), from: m.groups.from, to: m.groups.to, town: m.groups.town?.trim() };
+    for (const m of text?.matchAll(LABEL) ?? []) {
+      const { from, to, town } = m.groups;
+      if (doors && from === 'S' && to === 'N') continue;
+      return { text: m[0].trim(), from, to, town: town?.trim() };
+    }
   }
   return null;
 }

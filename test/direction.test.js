@@ -96,17 +96,22 @@ test('direction: a route keeps only the side it drives past', () => {
 });
 
 test('onMotorway: a road number in any spelling, not a door number', () => {
-  for (const address of ['A1 km 100', 'A 1 km 100', 'A-1 km 100', '(A22)KM62', 'CEPSA A 22, VIA DO INFANTE SAGRES', 'IC 19 - Alto do Forte', 'Variante de Beja IP8-EN260'])
+  for (const address of ['A1 km 100', 'A 1 km 100', 'A 1', '(A 22)', '(acesso A 22)', 'Estrada Nacional 125 junto à A 22', '(A22)KM62', 'CEPSA A 22, VIA DO INFANTE SAGRES', 'IC 19 - Alto do Forte', 'Variante de Beja IP8-EN260'])
     assert.equal(onMotorway({ address }), true, address);
-  for (const address of ['Rua de Campolide, 31 a 31 C', 'Rua das Portas Verdes 40 a 48', 'Avenida DAS LARANJEIRAS A 2', 'R. do Sol A 3', 'Zona Industrial, Lote 40 A 48'])
+  for (const address of ['Rua de Campolide, 31 a 31 C', 'Rua das Portas Verdes 40 a 48', 'Avenida DAS LARANJEIRAS A 2', 'R. do Sol A 3', 'Zona Industrial, Lote 40 A 48',
+    'PRAÇA 25', 'OLIVENÇA 20', 'AV DA LIBERDADE A 2', 'Praceta A 3', 'Lote 12, A 14', 'Bloco A 1 km 3', 'Largo da Feira A 2', 'Casa A 5', 'A-1'])
     assert.equal(onMotorway({ address }), false, address);
-  assert.equal(onMotorway({ address: 'Rua do Posto', osm: { name: 'Cepsa A 22' } }), true, 'the OSM name can say it');
+  assert.equal(onMotorway({ address: 'Rua do Posto', osm: { name: 'Cepsa (A 22)' } }), true, 'the OSM name can say it');
 });
 
 test('directionLabel: S/N is sem número off a motorway, a direction on one', () => {
   for (const address of ['CAMPO DOS MARTIRES DA PATRIA S/N', 'Campo Mártires da Pátria, s/n', 'R. Senra de Baixo S-N 1'])
     assert.equal(directionLabel({ address }), null, address);
   assert.equal(directionLabel({ address: 'A2 - KM 31,2 (S/N)' }), 'S/N');
+  assert.equal(directionLabel({ address: 'Posto Galp - EN 235 KM 13,400 (E-O)' }), 'E-O', 'only S/N looks like a door');
+  assert.equal(directionLabel({ address: 'E.N. 1 km 3 (N/S)' }), 'N/S');
+  assert.equal(directionLabel({ address: 'Rua Direita S/N', osm: { name: 'Posto A1' } }), null, 'the address is the one with the door number');
+  assert.equal(directionLabel({ address: 'Área de Serviço de Almodôvar, A2', osm: { name: 'IONITY Almodovar S-N' } }), 'S-N', 'a motorway address: the OSM name can say it');
   assert.equal(directionLabel({ address: 'A1 s/n' }), null, 'lowercase is always sem número');
   assert.equal(directionLabel({ address: 'A1 km 843 sentido Sul-Norte' }), 'sentido Sul-Norte');
   assert.equal(directionLabel({ address: '(A2) KM 148 (SENTIDO N/S)' }), 'SENTIDO N/S');
