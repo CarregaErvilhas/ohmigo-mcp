@@ -16,6 +16,7 @@ process.env.CEME_API_URL = 'http://ceme.test';
 process.env.CEME_API_KEY = 'k';
 const { MAX_RANKINGS, MAX_RANKINGS_QUEUED, MAX_SIMS_PER_CALL, RANK_CHUNK, rank, rankingSlot } = await import('../src/quote.js');
 const { translator } = await import('../src/i18n.js');
+const { simulate } = await import('../src/ceme.js');
 
 const REPLY = b => ({ at: b.at, kwh: b.kwh, profile: { slices: b.profile.length, withSpot: 0 }, data: [
   { id: 'a-bt-x', ceme: 'A', name: 'X', voltage: 'BT', kind: 'FIXED', period: 'FORA_VAZIO', totalEur: b.kwh * 0.2, vat: 1.23, popular: true, bundle: false },
@@ -188,6 +189,16 @@ test('a ranking that fails gives its place back', async () => {
   assert.equal(await rankingSlot(undefined, async () => 'free'), 'free');
 });
 
+test('a given month_kwh that could not be used is said, in both languages', async () => {
+  counting();
+  for (const lang of ['en', 'pt']) {
+    const [q] = await rank(speeds(1), car, { at: when(), lang, monthKwhLost: true });
+    assert.ok(q.assumptions.includes(translator(lang)('assume.monthKwhLost')));
+    const [plain] = await rank(speeds(1), car, { at: when(), lang });
+    assert.ok(!plain.assumptions.includes(translator(lang)('assume.monthKwhLost')));
+  }
+});
+
 test('a price served from the last good answer says so, with its age', async () => {
   const seven = Date.now() - 6.5 * 60_000; // rounded up: "7 min"
   globalThis.fetch = async (url, init) => { const b = JSON.parse(init.body); return new Response(JSON.stringify({ ...REPLY(b), staleSince: seven }), { status: 200 }); };
@@ -211,6 +222,20 @@ test('the cut note says only what happened', () => {
   assert.doesNotMatch(t('note.truncated', { n: 5, total: 10, sockets: 0 }), /left out/);
 });
 
+test('with the quota spent the cap is off: every socket stays listed, flagged', async () => {
+  // Last of the tests here that use the module's copy: it spends its quota.
+  globalThis.fetch = async () => new Response('', { status: 429, headers: { 'retry-after': '120' } });
+  await assert.rejects(simulate({ kwh: 1, at: when() }));
+  let asked = 0;
+  globalThis.fetch = async () => { asked++; return new Response('{}'); };
+  const n = MAX_SIMS_PER_CALL + 25;
+  const ranked = await rank(speeds(n), car, { at: when(), lang: 'en' });
+  assert.equal(asked, 0);
+  assert.equal(ranked.socketsLeftOut, 0);
+  assert.equal(ranked.length, n);
+  assert.ok(ranked.every(q => q.cemeUnavailable && q.cemeHeldBack));
+});
+
 // End to end: the cut and the refusal as the assistant sees them.
 const tmp = mkdtempSync(join(tmpdir(), 'ohmigo-rank-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -222,6 +247,7 @@ async function serve() {
     let raw = '';
     req.on('data', c => { raw += c; });
     req.on('end', async () => {
+      if (!raw) { res.writeHead(500); return res.end('no tariff list'); }
       state.simulates++;
       if (state.hold) await new Promise(r => held.push(r));
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -269,7 +295,16 @@ test('end to end: the ranking reports the cut through the existing note', async 
     assert.equal(d.quoted, MAX_SIMS_PER_CALL);
     assert.equal(d.searched, MAX_SIMS_PER_CALL + 10);
     assert.equal(d.socketsLeftOut, 10);
-    assert.ok(d.notes.includes(translator('pt')('note.truncated', { n: MAX_SIMS_PER_CALL + 10, total: MAX_SIMS_PER_CALL + 10, sockets: 10 })));
+    assert.ok(d.notes.includes(translator('pt')('note.truncated', { n: MAX_SIMS_PER_CALL, total: MAX_SIMS_PER_CALL + 10, sockets: 10 })));
+  } finally { s.stop(); }
+});
+
+test('end to end: without the tariff list, month_kwh is not silently dropped', async () => {
+  globalThis.fetch = realFetch;
+  const s = await serve();
+  try {
+    const { structuredContent: d } = await s.call({ ...ARGS, radius_km: 0.3, month_kwh: { 'a-bt-x': 3 } });
+    assert.ok(d.results[0].assumptions.includes(translator('pt')('assume.monthKwhLost')));
   } finally { s.stop(); }
 });
 

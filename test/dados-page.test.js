@@ -119,7 +119,7 @@ test('dados page: a failed operator load replaces "A carregar…", and closing a
 
 test('dados page: an old copy of the ceme-v2 data says so', async () => {
   const old = dump({ staleSince: '2026-10-31T10:00:00.000Z' });
-  assert.match((await load({ answer: () => ok(old) })).app(), /Dados do ceme-v2 de 2026-10-31T10:00:00.000Z/);
+  for (const hash of ['', '#tarifas', '#promos']) assert.match((await load({ hash, answer: () => ok(old) })).app(), /Dados do ceme-v2 de 2026-10-31T10:00:00.000Z/, hash);
   assert.doesNotMatch((await load({ answer: () => ok(dump()) })).app(), /Dados do ceme-v2 de/);
 });
 

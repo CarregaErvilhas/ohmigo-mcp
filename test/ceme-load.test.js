@@ -66,6 +66,8 @@ test('Retry-After is bounded, and reads either form', async () => {
   assert.equal(await until('-5'), RETRY_AFTER_MIN_MS);
   assert.equal(await until(null), RETRY_AFTER_DEFAULT_MS);
   assert.equal(await until('soon'), RETRY_AFTER_DEFAULT_MS);
+  assert.equal(await until('12 apples'), RETRY_AFTER_DEFAULT_MS, 'Date.parse would read that as a date');
+  assert.equal(await until('2.5'), 2500);
   assert.equal(await until(new Date(NOW + 20_000).toUTCString()), 20_000);
 });
 
@@ -320,6 +322,81 @@ test('a call abandoned in line leaves it and never goes out', async () => {
   while (g.waiting.length) { g.release(); await settle(); await settle(); }
   await Promise.all(running);
   assert.equal(g.calls.length, MAX_CONCURRENT);
+});
+
+test('a call refused by a full line also gets the last good answer', async () => {
+  const { simulate, TTL_MS, MAX_CONCURRENT, MAX_QUEUED } = await fresh();
+  stub(() => json(SIM));
+  await simulate({ kwh: 500, at: at(0) });
+  mock.timers.enable({ apis: ['Date'], now: Date.now() + TTL_MS + 1000 });
+  const g = gated();
+  const room = Array.from({ length: MAX_CONCURRENT + MAX_QUEUED }, (_, i) => simulate({ kwh: i + 1, at: at(0) }));
+  await settle();
+  const served = await simulate({ kwh: 500, at: at(0) });
+  assert.deepEqual(served.data, SIM.data);
+  assert.ok(served.staleSince);
+  while (g.waiting.length) { g.release(); await settle(); await settle(); }
+  await Promise.all(room);
+});
+
+test('an abandoned call does not get the last good answer: nobody is waiting for it', async () => {
+  const { simulate, TTL_MS, MAX_CONCURRENT } = await fresh();
+  stub(() => json(SIM));
+  await simulate({ kwh: 500, at: at(0) });
+  mock.timers.enable({ apis: ['Date'], now: Date.now() + TTL_MS + 1000 });
+  const g = gated();
+  const running = Array.from({ length: MAX_CONCURRENT }, (_, i) => simulate({ kwh: i + 1, at: at(0) }));
+  const stop = new AbortController();
+  const waiting = simulate({ kwh: 500, at: at(0), signal: stop.signal });
+  await settle();
+  stop.abort();
+  await assert.rejects(waiting, e => e.refused === true);
+  while (g.waiting.length) { g.release(); await settle(); await settle(); }
+  await Promise.all(running);
+});
+
+test('one abandoned waiter leaves a shared call alone', async () => {
+  const { simulate, MAX_CONCURRENT } = await fresh();
+  const g = gated();
+  const running = Array.from({ length: MAX_CONCURRENT }, (_, i) => simulate({ kwh: i + 1, at: at(0) }));
+  const stop = new AbortController();
+  const gone = simulate({ kwh: 99, at: at(0), signal: stop.signal });
+  const stays = simulate({ kwh: 99, at: at(0) });
+  await settle();
+  stop.abort();
+  await settle();
+  while (g.waiting.length) { g.release(); await settle(); await settle(); }
+  await Promise.all(running);
+  assert.deepEqual(await stays, SIM, 'still answered, not told a limit was reached');
+  await gone;
+  assert.equal(g.calls.length, MAX_CONCURRENT + 1);
+});
+
+test('a shared call is dropped once its last waiter has gone', async () => {
+  const { simulate, MAX_CONCURRENT } = await fresh();
+  const g = gated();
+  const running = Array.from({ length: MAX_CONCURRENT }, (_, i) => simulate({ kwh: i + 1, at: at(0) }));
+  const stops = [new AbortController(), new AbortController()];
+  const both = stops.map(s => simulate({ kwh: 99, at: at(0), signal: s.signal }));
+  await settle();
+  stops[0].abort();
+  stops[1].abort();
+  for (const p of both) await assert.rejects(p, e => e.refused === true);
+  while (g.waiting.length) { g.release(); await settle(); await settle(); }
+  await Promise.all(running);
+  assert.equal(g.calls.length, MAX_CONCURRENT);
+});
+
+test('cemeOff is true while the quota is spent or the breaker open', async () => {
+  const quota = await fresh();
+  assert.equal(quota.cemeOff(), false);
+  stub(() => tooMany({ 'retry-after': '30' }));
+  await assert.rejects(quota.simulate({ kwh: 1, at: at(0) }));
+  assert.equal(quota.cemeOff(), true);
+  const breaker = await fresh();
+  stub(() => new Response('oops', { status: 503 }));
+  for (let i = 0; i < 3; i++) await assert.rejects(breaker.simulate({ kwh: i + 1, at: at(0) }));
+  assert.equal(breaker.cemeOff(), true);
 });
 
 test('a last good list keeps its shape and still says how old it is', async () => {
