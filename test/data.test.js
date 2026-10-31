@@ -2,7 +2,9 @@
 // dataset with and without voltages.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { estimateSession } from '../src/charging.js';
 import { cardPayment, Dataset } from '../src/data.js';
+import { offersAt } from '../src/offers.js';
 
 const site = (id, points) => ({ id, code: id, lat: 39.7, lon: -8.8, region: 'CONT', city: 'Leiria', operator: 'X', operatorId: 'XX', points });
 
@@ -49,4 +51,21 @@ test('data: bank card at the charger, from the NAP and OpenStreetMap', () => {
   assert.deepEqual(cardPayment({ payment: ['apps'], osm: { cards: true } }), { value: true, nap: false, osm: true, disagree: true });
   assert.deepEqual(cardPayment({ payment: ['apps'], osm: { cards: false } }), { value: false, nap: false, osm: false, disagree: false });
   assert.equal(cardPayment({}).value, null);
+});
+
+test('data: a socket with 0 kW or less is unknown power, and OpenStreetMap only replaces it with a real figure', () => {
+  const ds = new Dataset({ sites: [site('A', [
+    { id: '1', kw: 0, dc: true }, { id: '2', kw: -5 }, { id: '3', kw: 0, dc: true, osm: { kw: 150 } }, { id: '4', kw: 22, osm: { kw: 0 } },
+  ])] });
+  assert.deepEqual(ds.sites[0].points.map(p => p.kw), [null, null, 150, 22]);
+  assert.equal(ds.sites[0].points[3].napKw, undefined);
+  assert.equal(ds.sites[0].points[2].napKw, null, 'the NAP\'s 0 kW was a blank');
+  const [p] = ds.sites[0].points;
+  // No power, no band: the same socket at 50 kW has offers on the same network.
+  const at = { operatorId: 'XX' };
+  assert.ok(offersAt(at, { kw: 50, dc: true, regime: 'mobie' }).length > 0);
+  assert.deepEqual(offersAt(at, p), []);
+  const s = estimateSession(p, { batteryKwh: 60, startPct: 20, targetPct: 80 });
+  assert.ok(Number.isFinite(s.minutes) && s.minutes > 0);
+  assert.deepEqual(s.assumptions, estimateSession({ kw: null, dc: true }, { batteryKwh: 60, startPct: 20, targetPct: 80 }).assumptions);
 });
