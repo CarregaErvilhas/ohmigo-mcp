@@ -297,7 +297,11 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: hoursText }));
   const closes = hours.open ? closesDuring(site, start, end) : null;
   if (closes) base.assumptions.push(t('assume.closesDuring', { hours: hoursText, at: localTime(closes, site.region), days: daysLater(start, closes, site.region), end: base.session.endLocal }));
-  const direct = offersAt(site, point, audiences);
+  // An offer only a CEME tariff's holders get (manual.json `holdersOnly`, e.g.
+  // myAtlante Business's DC price) is left out for everyone else.
+  const mine = new Set((tariffIds || []).map(cardKey));
+  const direct = offersAt(site, point, audiences)
+    .filter(x => !x.offer.holdersOnly || x.offer.cemeTariffs?.some(k => mine.has(k)));
 
   if (point.regime === 'sem_ceme') {
     // Outside MOBI.E: no CEME, the operator bills directly. The NAP has one
@@ -381,7 +385,6 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   const quotes = eligible(sim.data, audiences, tariffIds);
   const picked = pickTariffs(quotes, point, tariffIds, shown);
   const ceme = picked.headline;
-  const mine = new Set((tariffIds || []).map(cardKey));
   const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region, mine)];
   if (!ceme) {
     // None of the user's CEME tariffs prices this socket, but one of them may

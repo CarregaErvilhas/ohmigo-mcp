@@ -136,7 +136,9 @@ driver's `tariff_ids` hold one of those tariffs, the offer is their own
 price: it's `listed` and `viaTariff`, and it becomes the total when none of
 their CEME tariffs applies at the socket. The entries are card keys, the
 tariff id without the voltage or cycle (`atlante-myatlanteac` for
-`atlante-mt-myatlanteac`); `npm test` checks that.
+`atlante-mt-myatlanteac`); `npm test` checks that. Add `"holdersOnly": true`
+when only those tariffs' holders get the price (myAtlante Business on DC):
+the offer is then hidden from every other driver.
 
 An override or `disable` whose `id` isn't in the scrape (a typo, or the blog
 renamed the slug) is skipped with a warning at boot, and `npm test` fails

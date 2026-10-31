@@ -54,6 +54,28 @@ test('DC: myAtlante Business is not tied to the app price (it has its own)', asy
   assert.ok(!q.options.find(o => o.offerId === APP).viaTariff);
 });
 
+const BUS = 'atlante-app-myatlante-business-';
+const other = { ...site, id: 'PRIO-1', operatorId: 'PRIO', operator: 'Prio' };
+
+test('DC: a Business holder gets 0.45 at Atlante and 0.49 elsewhere, as their total', async () => {
+  const opts = { at, lang: 'en', tariffIds: ['atlante-mt-myatlantebus'] };
+  const own = await quotePoint({ site, point: dc }, car, opts);
+  const bus = own.options.find(o => o.offerId === `${BUS}atlante`);
+  assert.equal(bus.eurPerKwh, 0.45);
+  assert.equal(bus.viaTariff, true);
+  assert.equal(own.total.eur, bus.total);
+  assert.ok(!own.options.some(o => o.offerId === `${BUS}rede-mobi-e`), "the network's own row replaces the MOBI.E-wide one");
+  const away = await quotePoint({ site: other, point: dc }, car, opts);
+  assert.equal(away.options.find(o => o.offerId === `${BUS}rede-mobi-e`).eurPerKwh, 0.49);
+});
+
+test('DC: the Business price is hidden from drivers who do not hold it', async () => {
+  for (const tariffIds of [undefined, ['atlante-mt-myatlanteac']]) {
+    const q = await quotePoint({ site, point: dc }, car, { at, lang: 'en', tariffIds });
+    assert.ok(!q.options.some(o => o.offerId?.startsWith(BUS)), String(tariffIds));
+  }
+});
+
 test('DC: a driver without myAtlante sees the app price as just another offer', async () => {
   const q = await quotePoint({ site, point: dc }, car, { at, lang: 'en', tariffIds: ['edp-mt-cartoedp'] });
   const app = q.options.find(o => o.offerId === APP);
