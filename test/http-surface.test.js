@@ -8,7 +8,10 @@ import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { chargers } from '../src/dump.js';
+
+// This process only calls dump.js directly; nothing here may reach the real ceme-v2.
+process.env.CEME_API_URL = 'http://127.0.0.1:9';
+const { chargers, dump, forgetDump } = await import('../src/dump.js');
 
 const TOKEN = 'a-long-random-token';
 const CEME_BODY = 'stack trace from db-internal-7 at /srv/ceme';
@@ -128,6 +131,16 @@ test('dados: postos are built once per operator and dataset', () => {
   assert.notEqual(chargers({ sites: ds.sites }, 'A'), first, 'a new dataset starts over');
 });
 
+test('dados: a new dataset drops the memo that held the old one', async () => {
+  const ds = { sites: [], generatedAt: '2026-01-01T00:00:00Z' };
+  const first = dump(ds);
+  assert.equal(dump(ds), first);
+  forgetDump();
+  const second = dump(ds);
+  assert.notEqual(second, first);
+  await Promise.all([first, second]);
+});
+
 const HTML_PATHS = ['/', '/en', '/privacidade', '/privacy', '/suporte', '/support', '/dados'];
 const IMAGES = ['/og.png', '/favicon.ico', '/icon.svg', '/icon-512.png', '/apple-touch-icon.png'];
 
@@ -151,8 +164,8 @@ test('headers: images stay loadable from an assistant\'s app', async () => {
   }
 });
 
-test('headers: the landing page allows exactly its own inline script', async () => {
-  for (const path of ['/', '/en']) {
+test('headers: the landing page and /dados allow exactly their own inline script', async () => {
+  for (const path of ['/', '/en', '/dados']) {
     const r = await fetch(`${noToken.base}${path}`);
     const page = await r.text();
     const scriptSrc = r.headers.get('content-security-policy').match(/script-src ([^;]*)/)[1];
@@ -197,7 +210,7 @@ test('security.txt: RFC 9116 fields, with the contact on the privacy page', asyn
   const email = text.match(/^Contact: mailto:(\S+)$/m)[1];
   assert.ok(readFileSync(new URL('../site/legal.html', import.meta.url), 'utf8').includes(`mailto:${email}`));
   const days = (Date.parse(text.match(/^Expires: (\S+)$/m)[1]) - Date.now()) / 86_400_000;
-  assert.ok(days > 30 && days <= 366, `${days} days`);
+  assert.ok(days > 179 && days <= 180, `${days} days`);
   assert.match(text, /^Canonical: https:\/\/\S+\/\.well-known\/security\.txt$/m);
   assert.equal((await fetch(`${noToken.base}/.well-known/security.txt`, { method: 'POST' })).status, 404);
 });

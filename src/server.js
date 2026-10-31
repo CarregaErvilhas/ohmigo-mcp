@@ -21,7 +21,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { cemeHealth } from './ceme.js';
 import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
-import { chargers, dump } from './dump.js';
+import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
 import { PAGES, SITEMAP, SITE_URL } from './site.js';
 import { statsSummary } from './stats.js';
@@ -65,7 +65,7 @@ if (!process.env.DATASET_PATH && ds.etag !== undefined) {
   setInterval(async () => {
     try {
       const next = await Dataset.load({ etag: ds.etag });
-      if (next) { ds = next; console.log(`[ohmigo] new dataset, data as of ${ds.generatedAt}`); }
+      if (next) { ds = next; forgetDump(); console.log(`[ohmigo] new dataset, data as of ${ds.generatedAt}`); }
     } catch (e) { console.warn('[ohmigo] dataset check failed, keeping the current one:', e.message); }
   }, DATASET_CHECK_MS).unref();
 }
@@ -124,7 +124,7 @@ const SITE_HEADERS = {
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
-  'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  'content-security-policy': csp("'unsafe-inline'"),
 };
 
 const send = (res, status, body, type = 'application/json') => {
@@ -149,20 +149,22 @@ const corsOpen = path => path === '/mcp' || path === '/og.png' || path === '/dad
 // be embedded elsewhere.
 const IMAGE_HEADERS = { 'cache-control': 'public, max-age=86400', 'cross-origin-resource-policy': 'cross-origin' };
 
-// The landing page's script, allowed by hash instead of 'unsafe-inline'. It's
-// the same in both languages; <script> with no attributes skips the JSON
-// blocks, which browsers don't run. Change the script and the hash follows.
-const SCRIPT_HASHES = [...new Set(Object.values(PAGES).flatMap(page => [...page.toString().matchAll(/<script>([\s\S]*?)<\/script>/g)]
-  .map(m => `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`)))];
-const LANDING_HEADERS = {
-  ...SITE_HEADERS,
-  'content-security-policy': SITE_HEADERS['content-security-policy'].replace("script-src 'unsafe-inline'", `script-src ${SCRIPT_HASHES.join(' ')}`),
-};
+// Hoisted: SITE_HEADERS above uses it too.
+function csp(scriptSrc) {
+  return `default-src 'self'; script-src ${scriptSrc}; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+}
+// Inline scripts allowed by hash instead of 'unsafe-inline'. <script> with no
+// attributes skips the JSON blocks, which browsers don't run. Change a script
+// and its hash follows. The landing page's script is the same in both languages.
+const inlineScripts = html => [...new Set([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+  .map(m => `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`))].join(' ');
+const LANDING_HEADERS = { ...SITE_HEADERS, 'content-security-policy': csp(inlineScripts(Object.values(PAGES).join(''))) };
+const DADOS_PAGE_HEADERS = { ...SITE_HEADERS, ...DADOS_CACHE, 'content-security-policy': csp(inlineScripts(DADOS.toString())) };
 
-// RFC 9116. Expires is required and a fixed date would rot, so it's a year
-// from boot; every deploy moves it.
-const SECURITY_TXT = `Contact: mailto:info@ocarroeletrico.com
-Expires: ${new Date(Date.now() + 365 * 86_400_000).toISOString()}
+// RFC 9116. Expires is required and a fixed date would rot, so each answer
+// counts from today.
+const securityTxt = () => `Contact: mailto:info@ocarroeletrico.com
+Expires: ${new Date(Date.now() + 180 * 86_400_000).toISOString()}
 Canonical: ${SITE_URL}/.well-known/security.txt
 Preferred-Languages: pt, en
 `;
@@ -236,7 +238,7 @@ const httpServer = createHttp(async (req, res) => {
     return res.end(req.method === 'HEAD' ? undefined : LEGAL);
   }
   if (url.pathname === '/dados' && (req.method === 'GET' || req.method === 'HEAD')) {
-    res.writeHead(200, { ...SITE_HEADERS, ...DADOS_CACHE });
+    res.writeHead(200, DADOS_PAGE_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : DADOS);
   }
   // A broken dump page must not take the MCP server down with it.
@@ -251,7 +253,7 @@ const httpServer = createHttp(async (req, res) => {
     }
   }
   if (url.pathname === '/robots.txt') return send(res, 200, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
-  if (url.pathname === '/.well-known/security.txt' && get) return send(res, 200, SECURITY_TXT, 'text/plain; charset=utf-8');
+  if (url.pathname === '/.well-known/security.txt' && get) return send(res, 200, securityTxt(), 'text/plain; charset=utf-8');
   if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
   // Someone pasted the MCP address into a browser. MCP clients never ask for
   // text/html, so send the person to the page that explains what to do.

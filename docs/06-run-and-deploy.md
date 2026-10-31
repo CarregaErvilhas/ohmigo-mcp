@@ -39,8 +39,8 @@ server starts keeping or sending anything new about the user, update the
 privacy page first.
 
 `GET /.well-known/security.txt` is the RFC 9116 file with the contact for
-reporting a security problem. It's generated at boot (`SECURITY_TXT` in
-`src/server.js`), so `Expires` is always a year after the last deploy.
+reporting a security problem. It's generated per request (`securityTxt` in
+`src/server.js`), so `Expires` is always ahead of today.
 
 `GET /healthz` shows how the server is doing: `status` is `ok`, or
 `degraded` with the reasons in `problems` (the last live feed refresh failed,
@@ -120,7 +120,7 @@ Production is `https://ohmigo.ocarroeletrico.com/mcp`, Zerops project
   ceme-v2's `docs/04-api-auth.md`). A secret: set it on the service in the
   Zerops console.
 - `HEALTHZ_TOKEN`: a long random value (`openssl rand -hex 32`), also a secret.
-  Any monitor that reads more than `status` needs it in its requests.
+  A monitor only needs it to read `live`, `ceme`, `tools` or `memoryMb`.
 
 The readiness check is `/healthz`, which only needs the 200 of the summary. Boot loads the dataset (a few seconds) and
 answers before the live feed finishes downloading. If the dataset download

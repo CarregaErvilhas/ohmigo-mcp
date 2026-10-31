@@ -121,7 +121,52 @@ test('dados page: with ceme-v2 out, the page says so in Portuguese without quoti
   const partial = dump({ ceme: { error: 'unavailable' }, promos: { error: 'unavailable' } });
   for (const hash of ['', '#tarifarios', '#promos']) {
     const a = (await load({ hash, answer: () => ok(partial) })).app();
-    assert.match(a, /ceme-v2 indisponível|<span class=err>erro<\/span>/, hash);
+    assert.match(a, /ceme-v2 indisponível de momento\./, hash);
     assert.doesNotMatch(a, /unavailable/, hash);
   }
+  // The summary's cards have their own mark for a count it doesn't have.
+  assert.equal((await load({ answer: () => ok(partial) })).app().match(/<span class=err>erro<\/span>/g).length, 2);
+});
+
+// A fetch the test answers by hand, to control the order of the answers.
+function deferred() {
+  const pending = [];
+  const answer = url => (String(url).startsWith('/dados/postos') ? new Promise(resolve => pending.push(resolve)) : ok(dump()));
+  return { answer, pending };
+}
+const site = city => ({ city, address: 'A', code: 'C', points: [{ id: 'x', kw: 50, connector: 'T2', regime: 'mobie', offers: [] }] });
+
+test('dados page: closing an operator mid-load keeps it closed when the answer arrives', async () => {
+  const { answer, pending } = deferred();
+  const p = await load({ hash: '#operadores', answer });
+  await p.open('K');
+  assert.match(p.app(), /A carregar/);
+  await p.open('K'); // close
+  pending[0](ok([site('Late')]));
+  await tick();
+  assert.doesNotMatch(p.app(), /Late|A carregar/);
+  assert.match(p.app(), />postos</);
+});
+
+test('dados page: after close and reopen, only the latest request can answer', async () => {
+  for (const order of [[0, 1], [1, 0]]) {
+    const { answer, pending } = deferred();
+    const p = await load({ hash: '#operadores', answer });
+    await p.open('K');
+    await p.open('K');
+    await p.open('K');
+    assert.equal(pending.length, 2);
+    const answers = [() => pending[0](fail(500)), () => pending[1](ok([site('Latest')]))];
+    for (const i of order) { answers[i](); await tick(); }
+    assert.match(p.app(), /Latest/, `order ${order}`);
+    assert.doesNotMatch(p.app(), /Não foi possível|A carregar/, `order ${order}`);
+  }
+});
+
+test('dados page: chargers that fail to render show the message, not "A carregar…"', async () => {
+  const answer = url => ok(String(url).startsWith('/dados/postos') ? [{ city: 'L' }] : dump());
+  const p = await load({ hash: '#operadores', answer });
+  await p.open('K');
+  assert.match(p.app(), /Não foi possível carregar os postos/);
+  assert.doesNotMatch(p.app(), /A carregar/);
 });

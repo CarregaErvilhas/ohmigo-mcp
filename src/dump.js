@@ -74,6 +74,9 @@ function operators(ds) {
 // Memoized per dataset for 5 min (ceme.js's own cache TTL): the CDN is the
 // main cache, this one is for requests that reach the origin directly.
 let memo = null; // { ds, at, value }
+// The server calls this when a new dataset replaces the old one, so the memo
+// doesn't keep the old one alive until the next request here.
+export const forgetDump = () => { memo = null; };
 export function dump(ds) {
   if (memo && memo.ds === ds && Date.now() - memo.at < 5 * 60_000) return memo.value;
   // A result with a ceme-v2 error isn't kept: the next request tries again.

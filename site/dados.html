@@ -70,6 +70,7 @@ const PERIODS = ['VAZIO', 'FORA_VAZIO', 'CHEIAS', 'PONTA', 'SIMPLES'];
 const REGIME = { mobie: 'MOBI.E', mobie_sem_tarifa: 'MOBI.E sem tarifa OPC', sem_ceme: 'fora MOBI.E' };
 let D, tab = location.hash.slice(1) || 'resumo', q = '';
 const opOpen = new Map(); // operator key -> chargers (loaded on demand)
+const opLoad = new Map(); // operator key -> the latest request, so a late answer can't win
 
 // Each tab: count for the nav, and a render(filter) that returns HTML.
 const TABS = {
@@ -249,13 +250,24 @@ document.addEventListener('click', async e => {
   if (b) {
     const id = b.dataset.op;
     if (opOpen.has(id)) { opOpen.delete(id); return draw(); }
+    const load = {};
+    opLoad.set(id, load);
     opOpen.set(id, null); draw();
+    // Closed since, or closed and reopened: this answer is no longer wanted.
+    const wanted = () => opLoad.get(id) === load && opOpen.has(id);
     try {
       const r = await fetch(`/dados/postos.json?op=${encodeURIComponent(id)}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      opOpen.set(id, await r.json());
-    } catch (e) { console.error(e); opOpen.set(id, false); }
-    draw();
+      const sites = await r.json();
+      if (!wanted()) return;
+      opOpen.set(id, sites);
+      draw();
+    } catch (e) {
+      console.error(e);
+      if (!wanted()) return;
+      opOpen.set(id, false);
+      draw();
+    }
   }
 });
 document.addEventListener('input', e => { if (e.target.id === 'q') { q = e.target.value; draw(); } });
