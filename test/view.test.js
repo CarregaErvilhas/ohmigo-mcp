@@ -65,8 +65,8 @@ test('view: a socket with no published power or plug reads "?"', () => {
 
 test('view: with ceme-v2 down a banner sits above the rows, in the answer\'s language', () => {
   const outside = row({ regime: 'sem_ceme', best: noCard, options: [noCard] });
-  assert.match(renderView({ lang: 'en', cemeUnavailable: true, results: [outside] }).above, /class="banner">CEME prices are unavailable/);
-  assert.match(renderView({ lang: 'pt', cemeUnavailable: true, results: [outside] }).above, /class="banner">Os preços CEME não estão disponíveis/);
+  assert.match(renderView({ lang: 'en', cemeUnavailable: true, results: [outside] }).above, /class="banner">Some CEME prices are unavailable/);
+  assert.match(renderView({ lang: 'pt', cemeUnavailable: true, results: [outside] }).above, /class="banner">Alguns preços CEME não estão disponíveis/);
   assert.equal(renderView({ lang: 'en', results: [outside] }).above, '');
 });
 

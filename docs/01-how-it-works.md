@@ -87,8 +87,9 @@ it applies:
   `src/i18n.js`): what holds only for some answers (a peak price, a promotion
   for new customers, a missing direction). It shows up exactly when it
   applies, and every client passes it on. `ui/results.html` puts some of these
-  in front of the driver with no assistant in between: each result's `note`,
-  the `note` of the non-CEME options, and each promotion's `note`. A result or
+  in front of the driver with no assistant in between: each result's
+  `assumptions` and `note`, the `note` of the non-CEME options, and each
+  promotion's `note`. A result or
   promotion whose `note` is written for the assistant also carries a
   `driverNote`, and the page shows that instead. The top-level `notes` list
   isn't shown there, so it's free to give the assistant orders.
