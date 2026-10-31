@@ -30,3 +30,11 @@ test('i18n: plans and assumptions come out in Portuguese', () => {
   const s = estimateSession({ kw: 50, dc: true }, { batteryKwh: 60, startPct: 20 }, t);
   assert.match(s.assumptions[0], /perdas/);
 });
+
+test('i18n: kW in the Portuguese summaries has a decimal comma, and "?" stays', () => {
+  const t = translator('pt');
+  assert.equal(t('summary.sockets', { n: 2, kw: 7.4 }), '2 tomadas, máx. 7,4 kW');
+  assert.equal(t('summary.sockets', { n: 1, kw: '?' }), '1 tomada, máx. ? kW');
+  assert.equal(t('summary.operatorSize', { sites: 2, points: 3, dc: 1, kw: 22.5 }), '2 locais, 3 tomadas (1 DC), máx. 22,5 kW');
+  assert.equal(t('summary.operatorSize', { sites: 1, points: 1, dc: 0, kw: '?' }), '1 local, 1 tomada (0 DC), máx. ? kW');
+});

@@ -18,9 +18,6 @@ const PRINT_MAX = 20_000;
 
 const [dirArg, tool, json] = process.argv.slice(2);
 if (!dirArg || !tool) { console.error('usage: node evals/call.mjs <case dir> <tool> \'<json arguments>\''); process.exit(2); }
-// It ends up in a file name below, so it can't be allowed to walk out of the
-// case directory.
-if (!/^[a-z_]+$/.test(tool)) { console.error(`${tool} isn't a tool name`); process.exit(2); }
 const dir = caseDir(dirArg);
 const { url } = readJson(join(dirname(dir), 'manifest.json'));
 
@@ -49,7 +46,9 @@ try {
 }
 
 appendFileSync(join(dir, 'calls.jsonl'), `${JSON.stringify({ n, tool, args, isError, ...(code && { code }), chars: text.length })}\n`);
-const file = join(dir, 'results', `${String(n).padStart(2, '0')}-${tool}.txt`);
+// The server gets the name as it came (an unknown tool is part of what an
+// eval sees); the file name can't be allowed to walk out of the case directory.
+const file = join(dir, 'results', `${String(n).padStart(2, '0')}-${tool.replace(/[^a-z_]/g, '_').slice(0, 60)}.txt`);
 writeFileSync(file, pretty(text));
 
 if (text.length <= PRINT_MAX) console.log(text);

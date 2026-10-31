@@ -29,7 +29,7 @@ import { siteOpen } from './hours.js';
 import { COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
 import { describePlan } from './opc.js';
 import { byBest, quotePoint, rank, tariffKey } from './quote.js';
-import { fold } from './lookup.js';
+import { fold } from './text.js';
 import { MAX_SESSION_HOURS } from './profile.js';
 import { logged } from './stats.js';
 import { SITE_URL } from './site.js';

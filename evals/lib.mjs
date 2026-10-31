@@ -100,12 +100,13 @@ export function checkCase(expect = {}, calls, answer) {
   return out;
 }
 
-// Judge answers: "yes" and "n/a" pass, anything else fails ("no, it omits...").
-// No answer yet is null.
+// Judge answers: a plain "yes" or "n/a" passes ("yes." too), anything else
+// fails, hedges included ("no, it omits...", "yes - but..."). No answer yet is
+// null.
 export function checkJudge(questions = [], verdicts) {
   return questions.map((q, i) => {
     const v = String(verdicts?.[String(i + 1)] ?? '').trim().toLowerCase();
-    return { check: `judge: ${q}`, pass: v ? v === 'yes' || v === 'n/a' : null, ...(v && { got: v }) };
+    return { check: `judge: ${q}`, pass: v ? /^(yes|n\/a)\W*$/i.test(v) : null, ...(v && { got: v }) };
   });
 }
 

@@ -22,7 +22,7 @@
 // offerProblems() throw, so a change in the blog's layout (or a typo in it)
 // fails the weekly job loudly instead of quietly publishing wrong prices.
 
-import { fold } from './lookup.js';
+import { fold } from './text.js';
 
 // Where every scraped offer must come from.
 export const BLOG_HOST = 'custofinal.blogspot.com';
