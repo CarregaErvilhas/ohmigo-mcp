@@ -4,8 +4,9 @@
 // NAP, and anyone with an OpenStreetMap account can edit a node, which the
 // weekly dataset then carries to the assistant. A bad edit can't be spotted,
 // but it can be kept small: a known set of OSM fields, each with a shape and a
-// length. Values that fit pass exactly as published. A contact or a URL that
-// doesn't fit is dropped (the field is absent, never repaired by a guess).
+// length. Text that fits passes as published, and a website comes out as the
+// URL parser writes it. A contact or a URL that doesn't fit is dropped (the
+// field is absent, never repaired by a guess).
 //
 // Dataset's constructor calls cleanSite before anything reads the site, so the
 // search index, every tool and the sentences in assumptions and notes all see
@@ -27,24 +28,32 @@ const CAPACITY_MAX = 200; // cars charging at once
 // U+FEFF (an invisible format character) into one and skips NEL (U+0085).
 const SPACES = /[\t\n\v\f\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+/g;
 // What can't be seen: \p{C} is control and format characters, private-use and
-// unassigned code points and lone surrogates. They hide words from a reader
-// (zero-width spaces, right-to-left overrides). Variation selectors too, bar
-// U+FE0F, the one that turns a symbol into its emoji.
-const INVISIBLE = /[[\p{C}\p{Variation_Selector}]--\uFE0F]/gv;
+// unassigned code points and lone surrogates; Default_Ignorable is what fonts
+// draw as nothing (variation selectors, soft hyphens), and the three others
+// are blank letters that aren't in either. They hide words from a reader.
+// U+FE0F stays: it turns a symbol into its emoji.
+const INVISIBLE = /[[\p{C}\p{Default_Ignorable_Code_Point}⠀ㅤﾠ]--️]/gv;
 
 // A cut ends on a word when one ends near it, and shows with "…". The "…" also
 // keeps opening hours honest: parseHours can't read it, so hours that were cut
 // read as unknown, not as a week with its last days missing.
-export function cleanText(value, max) {
+// onCut: called when the text didn't fit.
+export function cleanText(value, max, onCut) {
   if (typeof value !== 'string') return undefined;
   const text = value.replace(SPACES, ' ').replace(INVISIBLE, '').replace(/ +/g, ' ').trim();
   if (text.length <= max) return text || undefined;
+  onCut?.();
   const cut = text.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, ''); // not half an emoji
   const space = cut.lastIndexOf(' ');
   return `${space > max * 2 / 3 ? cut.slice(0, space) : cut}…`;
 }
 
-const text = max => value => cleanText(value, max);
+const text = max => (value, onCut) => cleanText(value, max, onCut);
+// A short code that can't be dropped: operatorId, regime. Absent, an operatorId
+// would make a site look unnamed to lendOperators, and a regime would price it
+// as MOBI.E with no assumption saying so. Capped, it stays what it was: a code
+// nothing here knows, handled as today.
+const code = max => (value, onCut) => cleanText(String(value), max, onCut) ?? '?';
 
 // One value, or a few with ';' between them, which is how OSM lists a second
 // phone or email. All of them have to fit, or none is passed on.
@@ -58,26 +67,24 @@ const phone = contact(PHONE, PHONE_MAX);
 const email = contact(EMAIL, EMAIL_MAX);
 
 // Only http(s), without a login in it ("https://bank.pt@evil.example/" goes to
-// evil.example). /dados links to it, and the assistant may offer it as a link.
+// evil.example) or characters that could close the markup it lands in. /dados
+// links to it, and the assistant may offer it as a link. Normalised by URL, so
+// what passes is what a browser would open.
 function website(value) {
   const s = cleanText(value, Infinity);
-  if (!s || s.length > WEBSITE_MAX || /\s/.test(s) || !URL.canParse(s)) return undefined;
-  const { protocol, username, password } = new URL(s);
-  return (protocol === 'http:' || protocol === 'https:') && !username && !password ? s : undefined;
+  if (!s || s.length > WEBSITE_MAX || /[\s<>"`]/.test(s) || !URL.canParse(s)) return undefined;
+  const { protocol, username, password, href } = new URL(s);
+  return (protocol === 'http:' || protocol === 'https:') && !username && !password ? href : undefined;
 }
 
-// The NAP's short codes ("GLPP", "MT") and the regimes nap-dashboard assigns.
-// No cap here: something else isn't a longer code, it isn't a code.
-const shaped = test => v => typeof v === 'string' && test(v) ? v : undefined;
-const operatorId = shaped(v => /^[A-Z0-9]{1,10}$/.test(v));
-const gridLevel = shaped(v => /^[A-Z]{2,3}$/.test(v));
-const REGIMES = new Set(['mobie', 'mobie_sem_tarifa', 'sem_ceme']);
-const regime = shaped(v => REGIMES.has(v));
+// The grid level picks a tariff version ("MT"): blank is fine, the quote says so.
+const OPERATOR_ID_MAX = 12; // real ones have 4 characters
+const gridLevel = v => typeof v === 'string' && /^[A-Z]{2,3}$/.test(v) ? v : undefined;
 
 const NAP_FIELDS = {
   name: text(NAME_MAX), operator: text(NAME_MAX), city: text(NAME_MAX),
   address: text(PLACE_MAX), locationDescription: text(PLACE_MAX),
-  hours: text(HOURS_MAX), phone, website, operatorId,
+  hours: text(HOURS_MAX), phone, website, operatorId: code(OPERATOR_ID_MAX),
 };
 
 // What the code reads or a driver acts on. Anything else OSM has (a `note`, a
@@ -99,9 +106,8 @@ const count = (report, what) => { report[what] = (report[what] ?? 0) + 1; };
 // A field through its check: the value to keep, or undefined, and the count.
 function checked(clean, value, field, report) {
   if (value == null) return value;
-  const v = clean(value);
+  const v = clean(value, () => count(report, `cut ${field}`));
   if (v === undefined) count(report, `dropped ${field}`);
-  else if (typeof v === 'string' && v.endsWith('…') && !value.trimEnd().endsWith('…')) count(report, `cut ${field}`);
   return v;
 }
 
@@ -126,10 +132,7 @@ function saneOsmNumber(key, value, nap) {
 function cleanPoint(p, report) {
   // A blank level is how the NAP's blanks already arrive; the quote says so.
   if (p.level != null) p.level = checked(gridLevel, p.level, 'point.level', report) ?? null;
-  if (p.regime != null) {
-    p.regime = checked(regime, p.regime, 'point.regime', report);
-    if (p.regime === undefined) delete p.regime;
-  }
+  if (p.regime != null) p.regime = checked(code(TAG_MAX), p.regime, 'point.regime', report);
   if (p.osm == null) return;
   const osm = {};
   for (const k of Object.keys(OSM_NUMBERS)) {
@@ -150,7 +153,12 @@ export function cleanSite(s, report = {}) {
     else s[k] = v;
   }
   // The NAP's own vocabulary (apps, rfid, creditCard...): words, not sentences.
-  s.payment = Array.isArray(s.payment) ? s.payment.filter(m => typeof m === 'string' && /^\w{1,30}$/.test(m)) : [];
+  if (s.payment != null && !Array.isArray(s.payment)) count(report, 'dropped payment');
+  s.payment = (Array.isArray(s.payment) ? s.payment : []).filter(m => {
+    const word = typeof m === 'string' && /^\w{1,30}$/.test(m);
+    if (!word) count(report, 'dropped payment');
+    return word;
+  });
   if (s.osm != null) {
     const osm = {};
     for (const [k, clean] of Object.entries(OSM_FIELDS)) {
