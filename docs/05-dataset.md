@@ -62,7 +62,7 @@ Monday.
     "osm": { "name": "IONITY Albergaria", "brand": "IONITY", "operator": "IONITY",
              "openingHours": "24/7", "access": "yes", "parkingFee": "no" },
     "points": [{
-      "id": "ALB-00019-01", "kw": 350, "connector": "CCS", "dc": true, "phases": null,
+      "id": "ALB-00019-01", "kw": 350, "v": 920, "a": 500, "connector": "CCS", "dc": true, "phases": null,
       "level": "MT", "regime": "mobie",
       "opc": { "REGULAR": { "energy": [0.51], "time": [{ "eur": 0.0813, "from": 60, "to": 560 }] },
                "AD_HOC_PAYMENT": { "energy": [0.51] } }
@@ -72,8 +72,15 @@ Monday.
 ```
 
 - `region`: `CONT`, `MAD` or `AZO`; it decides VAT and off-peak hours in ceme-v2.
-- `level`: the socket's voltage level (`BTN`, `BTE`, `MT`), which picks the
-  BT or MT version of each CEME tariff.
+- `v`, `a`: the connector's voltage (V) and max current (A), as the operator
+  declares them on the NAP. Optional: datasets built before nap-dashboard
+  published them have neither, and then ohmigo ignores `min_voltage` and says
+  so. Declared, not measured: some DC sockets carry a placeholder (750 or
+  600 V), which is why every answer filtered by voltage carries a sentence
+  saying so.
+- `level`: the voltage level of the site's grid connection (`BTN`, `BTE`,
+  `MT`), which picks the BT or MT version of each CEME tariff. Not the
+  socket's voltage (that's `v`).
 - `regime`: `mobie` (on MOBI.E, fee in the file), `mobie_sem_tarifa` (on
   MOBI.E, missing from the file; ohmigo uses the NAP's fees), `sem_ceme`
   (outside MOBI.E).

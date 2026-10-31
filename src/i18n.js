@@ -109,6 +109,11 @@ export const MESSAGES = {
     'assume.bothSides': ({ to }) => `both sides of the motorway service area are listed: the data can't tell which one serves driving towards ${to}; the signs will`,
     'credit.osm': () => '"osm" data © OpenStreetMap contributors (ODbL), openstreetmap.org/copyright',
     'note.partial': ({ words }) => `No charger matches every word; the best ones lack: ${words}. Don't present them as the charger the user meant without saying so.`,
+    'assume.voltage': () => 'Voltage is what each operator declares on the NAP for the socket, not measured; some DC sockets declare a placeholder (750 or 600 V) instead of the real value. Sockets with no declared voltage are left out.',
+    'note.noVoltage': () => 'The charger data loaded now has no socket voltages yet, so min_voltage was ignored: these results are not filtered by voltage.',
+    'err.whereOrFilter': () => 'Give lat+lon, place or route, or, to search the whole country, at least one filter (query, min_kw, min_voltage, connectors, dc_only).',
+    'note.nationwide': ({ shown, total }) => `No place given, so all of Portugal (or the region asked) was searched: ${total} sites match, most powerful first; showing ${shown}. For a full list, narrow with region or query, or raise limit.`,
+    'note.operators': () => 'Operators as the NAP publishes them (every public charger in Portugal, on MOBI.E and outside it), grouped by NAP operatorId. Not the DGEG registry: an operator registered with the DGEG but with no charger on the NAP is not here.',
   },
   pt: {
     'progress.live': () => 'A obter o estado dos postos em tempo real no PAN…',
@@ -198,6 +203,11 @@ export const MESSAGES = {
     'assume.bothSides': ({ to }) => `estão os dois lados da área de serviço: os dados não dizem qual serve quem vai para ${to}; as placas dizem`,
     'credit.osm': () => 'Dados "osm" © contribuidores do OpenStreetMap (ODbL), openstreetmap.org/copyright',
     'note.partial': ({ words }) => `Nenhum posto tem todas as palavras; aos melhores falta: ${words}. Não os apresentes como o posto que o utilizador queria sem o dizer.`,
+    'assume.voltage': () => 'A tensão é a que cada operador declara no PAN para a tomada, não é medida; algumas tomadas DC declaram um valor de reserva (750 ou 600 V) em vez do real. As tomadas sem tensão declarada ficam de fora.',
+    'note.noVoltage': () => 'Os dados de postos carregados agora ainda não têm a tensão das tomadas, por isso o min_voltage foi ignorado: estes resultados não estão filtrados por tensão.',
+    'err.whereOrFilter': () => 'Indica lat+lon, place ou route, ou, para pesquisar o país todo, pelo menos um filtro (query, min_kw, min_voltage, connectors, dc_only).',
+    'note.nationwide': ({ shown, total }) => `Sem sítio indicado, pesquisou-se Portugal todo (ou a região pedida): ${total} locais servem, os mais potentes primeiro; a mostrar ${shown}. Para a lista completa, restringe com region ou query, ou aumenta o limit.`,
+    'note.operators': () => 'Operadores tal como o PAN os publica (todos os postos públicos em Portugal, na MOBI.E e fora dela), agrupados pelo operatorId do PAN. Não é o registo da DGEG: um operador registado na DGEG sem postos no PAN não aparece.',
   },
 };
 

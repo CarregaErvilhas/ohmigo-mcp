@@ -64,7 +64,7 @@ const car = { battery_kwh: 58, start_pct: 20 };
 
 test('http: every tool is read-only and talks to the outside world', async () => {
   const { tools } = await call('tools/list');
-  assert.equal(tools.length, 5);
+  assert.equal(tools.length, 6);
   for (const t of tools) assert.deepEqual(t.annotations, { readOnlyHint: true, openWorldHint: true }, t.name);
 });
 
@@ -97,6 +97,41 @@ test('http: a business error carries structuredContent for the view', async () =
   assert.equal(r.structuredContent.kind, 'error');
   assert.equal(r.structuredContent.code, 'place');
   assert.equal(r.structuredContent.message, r.content[0].text);
+});
+
+test('http: find_chargers filters by declared voltage and says the values are declared', async () => {
+  const r = await call('find_chargers', { place: 'Leiria', min_voltage: 800, lang: 'en' });
+  const d = r.structuredContent;
+  const points = d.sites.flatMap(s => s.points);
+  assert.ok(points.length > 0);
+  assert.ok(points.every(p => p.volts >= 800 && p.dc), JSON.stringify(points));
+  assert.ok(d.notes.some(n => /declares/.test(n)));
+});
+
+test('http: find_chargers searches the whole country only when a filter keeps the list meaningful', async () => {
+  const r = await call('find_chargers', { min_voltage: 900 });
+  const d = r.structuredContent;
+  assert.equal(d.wholeCountry, true);
+  // Sockets with no declared voltage (the Lisbon T2) never pass.
+  assert.deepEqual(d.sites.map(s => s.siteId), ['CNT-9648PR0002', 'GLP-LRA-00156']);
+  const none = await call('find_chargers', {});
+  assert.equal(none.isError, true);
+  assert.equal(none.structuredContent.code, 'where');
+  // A cost ranking still needs a place.
+  const cheap = await call('find_cheapest_charging', { min_voltage: 900, ...car });
+  assert.equal(cheap.structuredContent.code, 'where');
+});
+
+test('http: list_operators groups the NAP operators and narrows by filter and name', async () => {
+  const all = (await call('list_operators', {})).structuredContent;
+  // Same size: by name (Galp before Modelo Continente).
+  assert.deepEqual(all.operators.map(o => [o.operatorId, o.sites]), [['GLPP', 2], ['CONT', 2]]);
+  assert.equal(all.operators[1].maxVoltage, 1000);
+  assert.ok(all.notes.length >= 1);
+  const dc = (await call('list_operators', { min_voltage: 950 })).structuredContent;
+  assert.deepEqual(dc.operators.map(o => o.operatorId), ['CONT']);
+  const galp = (await call('list_operators', { query: 'galp' })).structuredContent;
+  assert.deepEqual(galp.operators.map(o => o.operatorId), ['GLPP']);
 });
 
 test('http: at outside the window is refused', async () => {

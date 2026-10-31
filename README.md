@@ -65,7 +65,8 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
 | `find_cheapest_charging` | ranks chargers near a place or along a route by session cost (with inline view) |
 | `estimate_charging_cost` | one charger (by site, code or name), full breakdown, every way to pay (with inline view) |
 | `lookup_charger` | finds the charger the user names ("Continente Leiria", "LRA-00156", "o Lidl de Coimbra") and returns everything the data has on it |
-| `find_chargers` | chargers near a place or along a route, with live status, no prices |
+| `find_chargers` | chargers near a place, along a route, or in the whole country by filter (power, declared voltage, plug, operator), with live status, no prices |
+| `list_operators` | the companies that operate chargers on the NAP, biggest first, with their sites, sockets, power, voltage and regions |
 | `list_ceme_tariffs` | turns "EDP" or "Via Verde" into tariff ids |
 
 ## Known limits

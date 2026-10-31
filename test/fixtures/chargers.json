@@ -65,6 +65,8 @@
     {
      "id": "LRA-00156-01",
      "kw": 22,
+     "v": 400,
+     "a": 32,
      "connector": "T2",
      "dc": false,
      "phases": 1,
@@ -106,6 +108,8 @@
     {
      "id": "LRA-00156-02",
      "kw": 50,
+     "v": 920,
+     "a": 125,
      "connector": "CCS",
      "dc": true,
      "phases": null,
@@ -147,6 +151,8 @@
     {
      "id": "LRA-00156-03",
      "kw": 50,
+     "v": 500,
+     "a": 125,
      "connector": "CHADEMO",
      "dc": true,
      "phases": null,
@@ -205,6 +211,8 @@
     {
      "id": "9648PL0001.01",
      "kw": 22,
+     "v": 400,
+     "a": 32,
      "connector": "T2",
      "dc": false,
      "phases": 3,
@@ -215,6 +223,8 @@
     {
      "id": "9648PL0001.02",
      "kw": 22,
+     "v": 400,
+     "a": 32,
      "connector": "T2",
      "dc": false,
      "phases": 3,
@@ -242,6 +252,8 @@
     {
      "id": "9648PR0002.01",
      "kw": 120,
+     "v": 1000,
+     "a": 200,
      "connector": "CCS",
      "dc": true,
      "phases": null,
@@ -252,6 +264,8 @@
     {
      "id": "9648PR0002.02",
      "kw": 50,
+     "v": 500,
+     "a": 125,
      "connector": "CHADEMO",
      "dc": true,
      "phases": null,
@@ -262,6 +276,8 @@
     {
      "id": "9648PR0002.03",
      "kw": 120,
+     "v": 1000,
+     "a": 200,
      "connector": "CCS",
      "dc": true,
      "phases": null,

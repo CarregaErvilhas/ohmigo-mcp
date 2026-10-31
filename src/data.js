@@ -8,7 +8,10 @@
 //
 // Shape (one JSON file, ~6 MB):
 //   { schema, generatedAt, sites: [{ id, code, lat, lon, region, city, address,
-//     operator, osm?, points: [{ id, kw, connector, dc, phases, level, regime, opc }] }] }
+//     operator, osm?, points: [{ id, kw, v, a, connector, dc, phases, level, regime, opc }] }] }
+// `v`/`a` are the connector's voltage and max current as the operator
+// declares them on the NAP; `level` is the grid's voltage level (BTN/BTE/MT),
+// which picks the TAR, not the socket's voltage.
 // `osm` is what OpenStreetMap adds about the site (its name, brand, opening
 // hours...), when the community mapped it with the MOBI.E code.
 //
@@ -57,6 +60,10 @@ export class Dataset {
     // ~150 ms, so it's built here (at boot and on the weekly swap), not on
     // somebody's first question.
     this.index = new Index(this.sites);
+    // Datasets built before nap-dashboard published v/a have no voltages:
+    // there, a voltage filter would drop every charger, so it's ignored (and
+    // the tools say so).
+    this.hasVoltage = this.sites.some(s => s.points.some(p => p.v != null));
   }
 
   // "SITE/POINT", or a bare point id when it's unique. null when unknown or
@@ -168,27 +175,33 @@ export class Dataset {
     return { total, town: town ?? undefined, results: out };
   }
 
-  pointFilter({ minKw, connectors, dcOnly } = {}) {
+  // A socket with no declared voltage fails a voltage filter: unknown is not
+  // "above 500 V".
+  pointFilter({ minKw, connectors, dcOnly, minVoltage } = {}) {
     const cs = connectors?.length ? new Set(connectors.map(c => c.toUpperCase())) : null;
+    const minV = this.hasVoltage ? minVoltage : null;
     return p => (minKw == null || (p.kw ?? 0) >= minKw)
       && (!cs || cs.has(p.connector))
-      && (!dcOnly || p.dc);
+      && (!dcOnly || p.dc)
+      && (minV == null || (p.v ?? 0) >= minV);
   }
 
   // Sites near a point or along a route, nearest first (or in route order),
-  // each with only the points that pass the filter.
+  // each with only the points that pass the filter. With neither, the whole
+  // country ("every charger above 500 V"), most powerful first.
   // `only`: a Set of site ids to keep (a text filter, from lookup()).
-  search({ near, radiusKm = 5, route, corridorKm = 2, limit = 20, only, ...filter }) {
+  search({ near, radiusKm = 5, route, corridorKm = 2, limit = 20, only, region, ...filter }) {
     const ok = this.pointFilter(filter);
     const out = [];
     for (const s of this.sites) {
       if (only && !only.has(s.id)) continue;
+      if (region && s.region !== region) continue;
       let dist;
       if (route) {
         const d = routeDistance(s, route);
         if (d.km > corridorKm) continue;
         dist = { offRouteKm: d.km, alongKm: d.alongKm, seg: d.seg };
-      } else {
+      } else if (near) {
         const km = haversineKm(near, s);
         if (km > radiusKm) continue;
         dist = { km };
@@ -196,10 +209,50 @@ export class Dataset {
       const points = s.points.filter(ok);
       if (points.length) out.push({ site: s, points, ...dist });
     }
-    out.sort(route ? (a, b) => a.alongKm - b.alongKm : (a, b) => a.km - b.km);
+    const maxKw = r => Math.max(...r.points.map(p => p.kw ?? 0));
+    out.sort(route ? (a, b) => a.alongKm - b.alongKm
+      : near ? (a, b) => a.km - b.km
+      : (a, b) => maxKw(b) - maxKw(a) || a.site.id.localeCompare(b.site.id));
     const kept = route ? this.ourSide(out) : out;
     for (const r of kept) delete r.seg;
     return { total: kept.length, results: kept.slice(0, limit) };
+  }
+
+  // Who operates the network (the OPCs, plus the operators outside MOBI.E),
+  // as the NAP publishes it, biggest first. Grouped by operatorId: the name
+  // is not a key (Atlante appears with 7 spellings), so each operator gets
+  // its most common spelling and the others in `otherNames`. Sites without
+  // an operatorId group by name.
+  operators({ region, ...filter } = {}) {
+    const ok = this.pointFilter(filter);
+    const by = new Map();
+    for (const s of this.sites) {
+      if (region && s.region !== region) continue;
+      const points = s.points.filter(ok);
+      if (!points.length) continue;
+      const key = s.operatorId || `name:${s.operator ?? '?'}`;
+      let o = by.get(key);
+      if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {} });
+      o.names.set(s.operator ?? '?', (o.names.get(s.operator ?? '?') || 0) + 1);
+      if (s.website) o.websites.add(s.website);
+      o.sites++;
+      o.regions[s.region] = (o.regions[s.region] || 0) + 1;
+      for (const p of points) {
+        o.points++;
+        if (p.dc) o.dcPoints++;
+        o.maxKw = Math.max(o.maxKw, p.kw ?? 0);
+        o.maxV = Math.max(o.maxV, p.v ?? 0);
+        o.regimes[p.regime] = (o.regimes[p.regime] || 0) + 1;
+      }
+    }
+    return [...by.values()].map(o => {
+      const names = [...o.names].sort((x, y) => y[1] - x[1]).map(([n]) => n);
+      return {
+        operatorId: o.operatorId, name: names[0], otherNames: names.length > 1 ? names.slice(1) : undefined,
+        website: [...o.websites][0], sites: o.sites, points: o.points, dcPoints: o.dcPoints,
+        maxKw: o.maxKw || undefined, maxVoltage: o.maxV || undefined, regions: o.regions, regimes: o.regimes,
+      };
+    }).sort((x, y) => y.sites - x.sites || x.name.localeCompare(y.name));
   }
 
   // Along a route the direction of travel is known, so the far side of a
