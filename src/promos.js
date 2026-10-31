@@ -124,6 +124,8 @@ export function withPromos(promos, { energyEur, opc, vat }) {
 //   applied    took effect in the total of this tariff's option
 //   beaten     it doesn't add to what's already in this tariff's price, so
 //              it changes nothing there (the rest of its notes would mislead)
+//   driverNote the note for ui/results.html, when `note` tells the assistant
+//              what to do
 export function promoOut(p, { quote, total, saving, applied, beaten }, t) {
   const amount = AMOUNT[p.target](p, t);
   const tariff = `${quote.ceme} · ${quote.name}`;
@@ -132,7 +134,9 @@ export function promoOut(p, { quote, total, saving, applied, beaten }, t) {
     : t(p.network ? 'promo.note.all' : 'promo.note.allAny', { until: p.to, tariff })];
   if (beaten) notes.push(t('promo.note.beaten'));
   if (p.target === 'FINAL' && !beaten) notes.push(t('promo.note.final'));
+  let driverNote;
   if (p.target === 'KWH_GRATIS' && !beaten) {
+    if (!p.monthKwhKnown) driverNote = [...notes, t('promo.note.freeUnknown.driver', { free: t.num(p.freeKwh, 1) })].join('; ');
     notes.push(!p.monthKwhKnown ? t('promo.note.freeUnknown', { free: t.num(p.freeKwh, 1) })
       : p.freeKwhLeft === 0 ? t('promo.note.freeSpent', { free: t.num(p.freeKwh, 1) })
       : t('promo.note.freeLeft', { left: t.num(p.freeKwhLeft, 2), free: t.num(p.freeKwh, 1) }));
@@ -146,6 +150,7 @@ export function promoOut(p, { quote, total, saving, applied, beaten }, t) {
     total, saving, newCustomers: !!p.newCustomers, maxHours: p.maxHours ?? null,
     from: p.from, until: p.to ?? null, url: p.url, checked: p.checked, applied,
     note: notes.join('; '),
+    ...(driverNote && { driverNote }),
   };
 }
 

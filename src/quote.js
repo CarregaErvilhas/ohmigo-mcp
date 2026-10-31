@@ -37,12 +37,16 @@
 //             they didn't list never does: that's a tip (notYours). Chargers
 //             are ranked by it, so an IONITY whose own app beats every CEME
 //             ranks where it should.
+//
+// `note` talks to the assistant. Where its wording only fits the assistant,
+// `driverNote` says the same to the driver, for ui/results.html, which the
+// driver reads with no assistant in between.
 
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
 import { cardPayment } from './data.js';
 import { siteOpen } from './hours.js';
-import { localOffset, localTime, REGION_TZ, sessionProfile } from './profile.js';
+import { localOffset, localTime, MAX_SESSION_HOURS, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
@@ -252,9 +256,11 @@ export const directOptionsForTest = (direct, session, lang, region) => directOpt
 //           ceme-v2 and what came back).
 //   monthKwh: { ceme-v2 tariff id: kWh the user already charged with it this
 //           month }, for free-kWh promotions (see ceme.js expandMonthKwh).
+// -> the quote, or null when the session would run past MAX_SESSION_HOURS.
 export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, detail = false, qa = false, monthKwh = null, audiences = [], simCache = new Map() } = {}) {
   const t = translator(lang);
   const session = estimateSession(point, car, t);
+  if (!(session.minutes <= MAX_SESSION_HOURS * 60)) return null;
   // The session starts at `at` (or now), to the minute so points share the
   // ceme-v2 call, and runs for `minutes`.
   const start = new Date(Math.floor((at ?? new Date()).getTime() / 60_000) * 60_000);
@@ -354,6 +360,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     base.total = null;
     base.cemeUnavailable = true;
     base.note = t('note.noCeme');
+    base.driverNote = t('note.noCeme.driver');
     base.options.push(...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region));
     base.options.sort((a, b) => a.total - b.total);
     base.best = bestOption(base.options, null);
@@ -370,6 +377,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (!ceme) {
     base.total = null;
     base.note = picked.missing ? t('note.noUserTariff') : t('note.noTariff');
+    if (picked.missing) base.driverNote = t('note.noUserTariff.driver');
     base.options.push(...extras);
     base.best = bestOption(base.options, null);
     return base;
@@ -468,11 +476,17 @@ export const byBest = (a, b) => sortKey(a) - sortKey(b);
 
 // Ranks sites by `best` (see sortKey), one row per site (its cheapest
 // point). MOBI.E and the networks outside it share one list: no network is
-// preferred, the price decides.
+// preferred, the price decides. `tooLong` on the list counts the kinds of
+// socket the session limit left out, among those that passed the filters;
+// `nonePriced` says no socket had a quote, filters or not.
 export async function rank(candidates, car, opts = {}) {
   const simCache = new Map();
+  // A socket with no quote still goes through the filters below, as a session
+  // just past the limit: if the driver's own filters drop it, the limit
+  // didn't, and the note shouldn't say it did.
+  const noQuote = (site, point) => ({ tooLong: true, session: { minutes: MAX_SESSION_HOURS * 60 + 1 }, status: opts.live?.get(site.id, point.id)?.status ?? null });
   const all = await Promise.all(candidates.flatMap(({ site, points, ...dist }) =>
-    points.map(point => quotePoint({ site, point }, car, { ...opts, simCache }).then(q => ({ ...q, ...dist })))));
+    points.map(point => quotePoint({ site, point }, car, { ...opts, simCache }).then(q => q ? { ...q, ...dist } : noQuote(site, point)))));
   let quotes = opts.maxMinutes ? all.filter(q => q.session.minutes <= opts.maxMinutes) : all;
   if (opts.availableOnly) quotes = quotes.filter(q => USABLE.has(q.status));
   const best = list => {
@@ -483,5 +497,5 @@ export async function rank(candidates, car, opts = {}) {
     }
     return [...bySite.values()].sort((a, b) => sortKey(a) - sortKey(b));
   };
-  return best(quotes);
+  return Object.assign(best(quotes.filter(q => !q.tooLong)), { tooLong: quotes.filter(q => q.tooLong).length, nonePriced: all.every(q => q.tooLong) });
 }
