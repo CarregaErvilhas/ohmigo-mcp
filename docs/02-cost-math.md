@@ -168,17 +168,27 @@ ones that hold there. Each has a `target`:
 
 Then:
 - a promotion for **every customer** of the tariff goes into that option's
-  total (free kWh only with a count). The option carries `promos`, and an
-  assumption names the promotion. With a promotion in, another of the user's
-  tariffs can become the headline;
+  total (free kWh only with a count). Promotions on one tariff don't all
+  add up: two on the energy don't stack (the lowest total wins), two on the
+  operator fee neither (the biggest wins), and `FINAL` replaces the rest. The
+  option's `promos` and the assumptions name only the ones that took effect.
+  With a promotion in, another of the user's tariffs can become the headline;
 - a promotion for **new customers only** never changes a price: almost
   nobody who asks qualifies. It goes in the plug's `promos` list as a tip,
   with what this session would cost with it (`total`) and the `saving`.
 
 `promos` on the plug lists every promotion that holds here for any tariff
 that fits the socket and saves something, one row each, with `applied`
-saying whether it's already in a shown total (those are always listed, even
-when they cost more, so the user sees why). It's absent when there are none.
+saying whether it took effect in a shown total (those are always listed, even
+when they cost more, so the user sees why, as are free kWh run out on a shown
+tariff, with `applied: false`). An applied row's `total` is the option's price
+and its `saving` what that promotion alone takes off, so stacked rows add up.
+A promotion that doesn't add to what's already in its tariff's price (it lost,
+or a new-customer tip wouldn't stack with it) stays listed, unapplied, with
+that price as `total`, `saving: 0` and a note saying so. The list is absent
+when there are none. A `target` this code doesn't know is skipped, with one
+warning in the log per target and an assumption on each option whose total it
+could change.
 
 **`adhoc`** — bank card / QR at the charger: MOBI.E's `AD_HOC_PAYMENT` price
 × the region's VAT (MOBI.E publishes it without VAT, like the operator fee).
@@ -242,5 +252,5 @@ Two summary fields:
 | Two values published for one fee | a price range |
 | Price outside MOBI.E | an assumption line: the NAP's price taken as the whole €/kWh, plus the region's VAT |
 | Direct offers from a price list | the source and the date it was checked; "may be out of date" after 90 days |
-| A CEME promotion in the price | an assumption naming it and its end date |
+| A CEME promotion in the price | an assumption naming it and its end date, if it has one |
 | Live status stale | `live.fresh: false`, said in the footer |
