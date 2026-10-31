@@ -81,6 +81,13 @@ function readJson(req) {
 // The landing page, one copy per language rendered at boot (src/site.js),
 // and its link-preview image.
 const OG_IMAGE = readFileSync(new URL('../site/og.png', import.meta.url));
+// The mascot as an icon. Assistants (ChatGPT's app list, Claude's connector
+// list) show the one the MCP server declares in serverInfo.icons (src/mcp.js)
+// or, failing that, the site's favicon, so every URL must answer with an image.
+const ICONS = Object.fromEntries([
+  ['/icon.svg', 'image/svg+xml'], ['/icon-512.png', 'image/png'],
+  ['/apple-touch-icon.png', 'image/png'], ['/favicon.ico', 'image/x-icon'],
+].map(([path, type]) => [path, { type, body: readFileSync(new URL(`../site${path}`, import.meta.url)) }]));
 // Privacy and support share one file; its script picks the page from the path.
 // Directories and assistants' review forms want a stable URL for each.
 const LEGAL = readFileSync(new URL('../site/legal.html', import.meta.url));
@@ -177,6 +184,10 @@ const httpServer = createHttp(async (req, res) => {
     res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' });
     return res.end(req.method === 'HEAD' ? undefined : OG_IMAGE);
   }
+  if (ICONS[url.pathname] && get) {
+    res.writeHead(200, { 'content-type': ICONS[url.pathname].type, 'cache-control': 'public, max-age=86400' });
+    return res.end(req.method === 'HEAD' ? undefined : ICONS[url.pathname].body);
+  }
   if (url.pathname === '/sitemap.xml') return send(res, 200, SITEMAP, 'application/xml; charset=utf-8');
   if (LEGAL_PATHS.has(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, SITE_HEADERS);
@@ -197,7 +208,6 @@ const httpServer = createHttp(async (req, res) => {
     }
   }
   if (url.pathname === '/robots.txt') return send(res, 200, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
-  if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
   if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
   // Someone pasted the MCP address into a browser. MCP clients never ask for
   // text/html, so send the person to the page that explains what to do.

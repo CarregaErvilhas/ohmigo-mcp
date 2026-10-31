@@ -26,6 +26,7 @@ import { AUDIENCES, forAudiences, napNote, offersAt } from './offers.js';
 import { describePlan } from './opc.js';
 import { byBest, quotePoint, rank, tariffKey } from './quote.js';
 import { logged } from './stats.js';
+import { SITE_URL } from './site.js';
 import { VERSION } from './version.js';
 import { viewHtml } from './view.js';
 
@@ -403,7 +404,9 @@ function rankCandidates(results, live, route) {
 // `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
 // every few hours, and each request should see the current one.
 export function createServer(getDataset, live) {
-  const server = new McpServer({ name: 'ohmigo', title: 'Ohmigo: EV charging costs in Portugal', version: VERSION }, { instructions: INSTRUCTIONS + (QA ? QA_NOTE : '') });
+  const server = new McpServer({ name: 'ohmigo', title: 'Ohmigo: EV charging costs in Portugal', version: VERSION, websiteUrl: SITE_URL,
+    icons: [{ src: `${SITE_URL}/icon-512.png`, mimeType: 'image/png', sizes: ['512x512'] }, { src: `${SITE_URL}/icon.svg`, mimeType: 'image/svg+xml', sizes: ['any'] }] },
+  { instructions: INSTRUCTIONS + (QA ? QA_NOTE : '') });
   // Every tool (registerAppTool goes through registerTool too) is timed and
   // counted, see stats.js.
   const register = server.registerTool.bind(server);
