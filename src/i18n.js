@@ -78,6 +78,7 @@ export const MESSAGES = {
     'promo.note.all': ({ until, tariff }) => `for every ${tariff} customer at this network, until ${until}`,
     'promo.note.allAny': ({ until, tariff }) => `for every ${tariff} customer at any MOBI.E charger, until ${until}`,
 
+    'note.liveAge': ({ min }) => `Charger status last checked ${min} min ago, so it may have changed: a charger shown free may be taken, one shown busy may be free. Tell the user how old it is.`,
     'note.outside': () => 'Outside MOBI.E: pay the operator directly, no CEME.',
     'note.noUserTariff': () => "None of the user's tariffs apply at this socket.",
     'note.noTariff': () => 'No CEME tariff applies to this socket.',
@@ -192,6 +193,7 @@ export const MESSAGES = {
     'promo.note.all': ({ until, tariff }) => `para todos os clientes ${tariff} nesta rede, até ${until}`,
     'promo.note.allAny': ({ until, tariff }) => `para todos os clientes ${tariff} em qualquer posto MOBI.E, até ${until}`,
 
+    'note.liveAge': ({ min }) => `Estado dos postos verificado há ${min} min, por isso pode ter mudado: um posto dado como livre pode estar ocupado, e um dado como ocupado pode estar livre. Diz ao utilizador a idade desta informação.`,
     'note.outside': () => 'Fora da MOBI.E: paga-se directamente ao operador, sem CEME.',
     'note.noUserTariff': () => 'Nenhum dos tarifários do utilizador se aplica a esta tomada.',
     'note.noTariff': () => 'Nenhum tarifário CEME se aplica a esta tomada.',

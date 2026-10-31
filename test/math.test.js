@@ -229,7 +229,7 @@ test('live: fetched on demand, shared by concurrent callers, cached within the T
 
 test('live: past the TTL, revalidates with the ETag', async () => {
   const f = fakeFetch();
-  const live = new LiveStatus({ ttlMs: 0, waitMs: 1000, fetchImpl: f.impl });
+  const live = new LiveStatus({ ttlMs: 0, maxStaleMs: 0, waitMs: 1000, fetchImpl: f.impl });
   await live.ensure();
   await live.ensure();
   assert.equal(f.calls.length, 2);

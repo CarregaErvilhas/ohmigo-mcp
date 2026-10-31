@@ -346,10 +346,11 @@ export const moreWays = (results, t) => results.some(q => waysToPay(q) > 1) ? [t
 const meta = (ds, live, lang) => ({ version: VERSION, lang, dataAsOf: ds.generatedAt, live: liveMeta(live), ...(QA && { qa: true }) });
 const liveMeta = live => { const { publishedAt, checkedAt, fresh, refreshing, points, error } = live.info(); return { publishedAt, checkedAt, fresh, refreshing, points, error }; };
 
-// Brings live status up to date before answering. If that means downloading
-// the feed, tell the client why the answer is taking a while: a progress
-// notification, which chat apps show as a status line (only when the client
-// asked for progress by sending a progressToken).
+// Gets the live status to answer with, which is all a tool should read from
+// then on (see LiveStatus.snapshot). If that means waiting for the feed, tell
+// the client why the answer is taking a while: a progress notification, which
+// chat apps show as a status line (only when the client asked for progress by
+// sending a progressToken).
 async function withLive(live, ctx, t) {
   const token = ctx?.mcpReq?._meta?.progressToken;
   await live.ensure({
@@ -358,21 +359,32 @@ async function withLive(live, ctx, t) {
       params: { progressToken: token, progress: 0, message: t('progress.live') },
     }).catch(() => {}),
   });
+  return live.snapshot();
 }
 
-// The sockets estimate_charging_cost prices: the one point_id, or one of each
-// kind at the place (same power, plug and fee price the same, so 10 identical
-// T2s are quoted once; MAX_KINDS cheapest are returned). Live status picks
-// which of the identical ones shows: a free one if there is one.
+// A status past the TTL is answered with on purpose (src/live.js), so the
+// result says how old it is. With no copy there are no statuses to doubt.
+export const liveNotes = (live, t) => {
+  const { fresh, checkedAt } = live.info();
+  return fresh || !checkedAt ? [] : [t('note.liveAge', { min: Math.ceil((Date.now() - new Date(checkedAt)) / 60_000) })];
+};
+
+// What estimate_charging_cost prices, in two steps. targetsFor settles which
+// place (or the one point_id) from the words alone, with every error the
+// request can get, so an error doesn't wait for the live feed. socketsFor then
+// keeps one of each kind there (same power, plug and fee price the same, so 10
+// identical T2s are quoted once; MAX_KINDS cheapest are returned), and that
+// takes live status: it picks which of the identical ones shows, a free one if
+// there is one.
 const MAX_KINDS = 8;
 // JSON with object keys sorted: the dataset lists a socket's plans in no
 // fixed order, and two sockets with the same fees must give the same key.
 const canonical = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x)
   ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x);
-function pointsFor(ds, live, a, t) {
+function targetsFor(ds, a, t) {
   if (a.point_id) {
     const hit = ds.findPoint(a.point_id);
-    if (hit) return [hit];
+    if (hit) return { point: hit };
     if (!a.site) return { error: t('err.point', { id: a.point_id }), code: 'point' };
   }
   if (!a.site) return { error: t('err.which'), code: 'which' };
@@ -416,6 +428,10 @@ function pointsFor(ds, live, a, t) {
     }
   }
   if (sites.length > 1) assumptions.push(t('assume.sites', { n: sites.length }));
+  return { sites, assumptions };
+}
+function socketsFor({ point, sites }, live) {
+  if (point) return [point];
   const free = (site, p) => live.get(site.id, p.id)?.status === 'available';
   const kinds = new Map();
   for (const h of sites) {
@@ -432,7 +448,7 @@ function pointsFor(ds, live, a, t) {
       if (!cur || (!free(cur.site, cur.point) && free(h.site, point))) kinds.set(key, { site: h.site, point });
     }
   }
-  return Object.assign([...kinds.values()], { assumptions });
+  return [...kinds.values()];
 }
 
 // month_kwh needs the tariff list; without ceme-v2 the free kWh just don't
@@ -560,11 +576,12 @@ export function createServer(getDataset, live) {
     if (directionNeeded) notes.push(t('note.direction'));
     notes.push(...voltageNotes(ds, a, t));
     if (results[0].missing?.length) notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
-    await withLive(live, ctx, t);
-    const cards = results.slice(0, a.limit).map(h => siteCard(h, live, t, a.audiences, notes));
+    const status = await withLive(live, ctx, t);
+    notes.push(...liveNotes(status, t));
+    const cards = results.slice(0, a.limit).map(h => siteCard(h, status, t, a.audiences, notes));
     if (results.slice(0, a.limit).some(h => napNote(h.site)?.timeOfUse)) notes.push(t('assume.napTimeOfUse'));
     return ok({
-      ...meta(ds, live, lang), query: a.query, total: results.length,
+      ...meta(ds, status, lang), query: a.query, total: results.length,
       notes: notes.length ? [...new Set(notes)] : undefined, directionNeeded: directionNeeded || undefined,
       orderedFrom: near ? undefined : r.town,
       sites: cards,
@@ -586,8 +603,9 @@ export function createServer(getDataset, live) {
     const { everywhere, ...where } = w;
     const { total, results } = ds.search({ ...where, ...filterOf(a), region: a.region, limit: a.limit });
     if (!results.length) return err(t('err.noMatch'), 'noMatch');
-    await withLive(live, ctx, t);
+    const status = await withLive(live, ctx, t);
     const notes = [
+      ...liveNotes(status, t),
       ...(everywhere ? [t('note.nationwide', { shown: results.length, total })] : []),
       ...voltageNotes(ds, a, t),
     ];
@@ -597,7 +615,7 @@ export function createServer(getDataset, live) {
     const maxOf = (r, k) => Math.max(...r.points.map(p => p[k] ?? 0)) || '?';
     const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${r.points.length} sockets, max ${maxOf(r, 'kw')} kW${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
     return ok({
-      ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, wholeCountry: everywhere || undefined, total,
+      ...meta(ds, status, lang), resolvedPlace: w.resolvedPlace, wholeCountry: everywhere || undefined, total,
       ...(notes.length && { notes: [...new Set(notes)] }),
       credit: results.some(r => r.site.osm) ? t('credit.osm') : undefined,
       sites: results.map((r, i) => ({
@@ -608,7 +626,7 @@ export function createServer(getDataset, live) {
         access: r.site.osm?.access, parkingFee: r.site.osm?.parkingFee,
         points: r.points.map(p => ({
           pointId: `${r.site.id}/${p.id}`, ...socketFields(p), connector: p.connector, dc: p.dc, regime: p.regime,
-          status: live.get(r.site.id, p.id)?.status ?? null, adHocPayment: !!p.opc?.AD_HOC_PAYMENT,
+          status: status.get(r.site.id, p.id)?.status ?? null, adHocPayment: !!p.opc?.AD_HOC_PAYMENT,
         })),
       })),
     }, [...new Set(notes), `${total} sites:`, text].join('\n'));
@@ -660,12 +678,12 @@ export function createServer(getDataset, live) {
     const w = resolveWhere(ds, a, t);
     if (w.error) return err(w.error, w.code);
     if (a.target_pct <= a.start_pct) return err(t('err.target'), 'target');
-    await withLive(live, ctx, t);
+    const status = await withLive(live, ctx, t);
     const { total, results } = ds.search({ ...w, ...filterOf(a), limit: Infinity });
     if (!results.length) return err(t('err.noMatch'), 'noMatch');
-    const { candidates, truncated } = rankCandidates(results, live, w.route != null);
+    const { candidates, truncated } = rankCandidates(results, status, w.route != null);
     const ranked = await rank(candidates, car(a), {
-      at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences,
+      at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live: status, lang, audiences: a.audiences,
       monthKwh: await monthKwh(a),
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
@@ -686,13 +704,14 @@ export function createServer(getDataset, live) {
       }
     }
     const notes = [
+      ...liveNotes(status, t),
       ...(cemeDown ? [t('note.noCeme')] : []),
       ...voltageNotes(ds, a, t),
       ...(truncated ? [t('note.truncated', { n: candidates.length, total })] : []),
       ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
       ...moreWays(top, t),
     ];
-    const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
+    const data = { kind: 'ranking', ...meta(ds, status, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // Summary lines on top of the JSON in the text (see ok).
     const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` (+${waysToPay(q) - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q)}) [${q.pointId}]`);
@@ -713,11 +732,12 @@ export function createServer(getDataset, live) {
     const ds = getDataset();
     const lang = langOf(a, ctx), t = translator(lang);
     if (a.target_pct <= a.start_pct) return err(t('err.target'), 'target');
-    await withLive(live, ctx, t);
-    const targets = pointsFor(ds, live, a, t);
-    if (targets.error) return err(targets.error, targets.code);
-    const assumptions = [...(targets.assumptions ?? []), ...voltageNotes(ds, a, t)];
-    const opts = { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences, detail: !!a.detail, qa: QA, simCache: new Map(),
+    const where = targetsFor(ds, a, t);
+    if (where.error) return err(where.error, where.code);
+    const status = await withLive(live, ctx, t);
+    const targets = socketsFor(where, status);
+    const assumptions = [...(where.assumptions ?? []), ...voltageNotes(ds, a, t)];
+    const opts = { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live: status, lang, audiences: a.audiences, detail: !!a.detail, qa: QA, simCache: new Map(),
       monthKwh: await monthKwh(a) };
     // Quoting is cheap once the first one has called ceme-v2 (simCache), so
     // every kind is priced and the cheapest are kept.
@@ -726,8 +746,8 @@ export function createServer(getDataset, live) {
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
-    const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...moreWays(results, t)];
-    return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
+    const notes = [...liveNotes(status, t), ...(cemeDown ? [t('note.noCeme')] : []), ...moreWays(results, t)];
+    return ok({ kind: 'single', ...meta(ds, status, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));
   });
 

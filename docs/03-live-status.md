@@ -23,14 +23,27 @@ question. Then:
    TTL meant three times the traffic for a status that's best-effort anyway. Results carry
    `live.publishedAt`, so the assistant can say how old the status is.
 2. Otherwise we start **one** download. If ten users ask at the same moment,
-   they all wait on that same download (`refresh()` hands back the one
-   already running).
-3. A request waits **at most 25 seconds** (`LIVE_WAIT_SECONDS`). If the
-   download takes longer, the request answers with the previous copy (marked
-   `fresh: false`), or with no status if there's no copy yet. The download
-   keeps going for whoever asks next.
-4. While it waits, the user sees "Getting live charger status from the NAP…"
+   they all share it (`refresh()` hands back the one already running).
+3. If our copy is **less than an hour old** (`LIVE_MAX_STALE_SECONDS`), nobody
+   waits for that download: the request answers at once with the copy it has,
+   marked `fresh: false` and `refreshing: true`, and the download runs behind
+   it. A status a bit old beats 25 seconds of silence, because a charger's
+   status is best-effort anyway.
+4. With no copy at all, or one older than that, the request waits, **at most
+   25 seconds** (`LIVE_WAIT_SECONDS`). If the download takes longer, the
+   request answers with what there is (the old copy, marked `fresh: false`,
+   or no status), and the download keeps going for whoever asks next.
+5. While it waits, the user sees "Getting live charger status from the NAP…"
    (in their language), if their chat app shows progress messages.
+
+**So a status can be up to an hour old**, and older while the feed is down
+(see the backoff below). The answer never hides it: whenever `live.fresh` is
+false and there's a copy, the result carries a note with how many minutes ago
+it was checked, for the assistant to pass on, because `available_only` and
+the choice among identical sockets went by that status. The flags and statuses
+in one answer all come from the same copy: a tool takes a
+`LiveStatus.snapshot()` once, so a refresh landing while it prices can't label
+an answer built on the old copy as fresh.
 
 **Cheap re-checks.** Every download sends the `ETag` of the copy we have
 (`If-None-Match`). When the file hasn't changed, MOBI.E answers `304 Not
@@ -59,8 +72,9 @@ random 0-20 s after start so two instances don't download together.
 A background job downloading the feed every few minutes would make every
 answer instant. It would also pull ~38 MB twelve times an hour, all day,
 mostly for nobody. While traffic is low, on demand is the better trade: the
-first user after a quiet spell waits up to ~25 s, and everyone in the next 5
-minutes gets an instant answer.
+first user after a quiet spell of over an hour waits up to ~25 s, and after a
+shorter one gets an instant answer with an older status while the copy
+refreshes for the next user.
 
 If traffic grows, add a poller back (a `setInterval(() => live.refresh(), ...)`
 in `server.js`). Nothing else needs to change.
