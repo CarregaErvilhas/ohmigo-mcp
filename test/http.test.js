@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { moreWays } from '../src/mcp.js';
+import { moreWays, socketKindKey } from '../src/mcp.js';
 
 let ceme, cemeDown = false, cheapTip = false, server, base;
 // Enough rows to pass list_ceme_tariffs' cut, under a name with an accent.
@@ -329,6 +329,16 @@ test('http: a site the NAP left nameless is its id prefix\'s operator everywhere
   assert.ok(!ops.notes.some(n => n.includes('(operatorInferred)')));
   const glp = (await call('list_operators', { query: 'galp', lang: 'en' })).structuredContent;
   assert.ok(!glp.notes.some(n => /inferred/.test(n)));
+});
+
+test('socketKindKey: sockets at sites with different hours stay apart, so a closing warning is not lost or invented', () => {
+  const point = { kw: 22, dc: false, connector: 'T2', regime: 'mobie' };
+  const site = (hours, osm) => ({ operatorId: 'X', hours, osm: osm && { openingHours: osm } });
+  const key = socketKindKey(site('Mo-Su 09:00-21:00'), point);
+  assert.equal(key, socketKindKey(site('Mo-Su 09:00-21:00'), point));
+  assert.notEqual(key, socketKindKey(site('24/7'), point));
+  assert.notEqual(key, socketKindKey(site(undefined, 'Mo-Su 09:00-21:00'), point), 'which source says it matters: the warning quotes it');
+  assert.notEqual(socketKindKey(site('24/7'), point), socketKindKey(site('24/7', 'Mo-Su 09:00-21:00'), point));
 });
 
 test('http: an inferred socket stays apart from its named sibling, so its assumption survives', async () => {

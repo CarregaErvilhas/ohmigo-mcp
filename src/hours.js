@@ -13,7 +13,7 @@
 // day), "Su off", ranges past midnight ("22:00-02:00"). Anything else (public
 // holidays, months, "sunrise") makes the answer unknown (null), never a guess.
 
-import { REGION_TZ } from './profile.js';
+import { QUARTER_MS, REGION_TZ } from './profile.js';
 
 const DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 const DAY = '(?:Mo|Tu|We|Th|Fr|Sa|Su)';
@@ -94,15 +94,39 @@ export function siteOpen(site, at = new Date()) {
   return { open, nap, osm, disagree: answers.length === 2 && answers[0] !== answers[1] };
 }
 
-// Does the site's hours say it's closed at some moment of a session? Checking
-// only the end isn't enough: a slow AC session from 20:00 to 10:00 is open at
-// both ends of a car park shut all night. Every quarter of an hour is plenty,
-// opening hours don't have shorter gaps. Unreadable hours answer false, like
-// siteOpen's null: never a guess.
-const STEP_MS = 15 * 60_000;
+// How many calendar days after `from` is `to`, in the site's time zone. Weekday
+// arithmetic: a closure the assumption talks about is under a week away.
+export function daysLater(from, to, region) {
+  return (localDayMinute(to, region).day - localDayMinute(from, region).day + 7) % 7;
+}
+
+// A session is [start, end): one that ends exactly at closing time fits, the
+// driver just has to leave. Returns the first minute of it the site's hours
+// call closed, or null. Checking only the end isn't enough: a slow AC session
+// from 20:00 to 10:00 is open at both ends of a car park shut all night.
+//
+// This samples every quarter of an hour, then finds the exact minute. A gap
+// shorter than 15 minutes between two samples can be missed; opening hours
+// with one that short are not expected. Intersecting the parsed ranges would
+// be exact, but has to carry two sources, spill past midnight and clock
+// changes. 24/7 and unreadable hours can't close a session: never a guess, and
+// the common case skips the walk.
+const MINUTE_MS = 60_000;
+const neverCloses = text => text === '24/7' || !parseHours(text);
 export function closesDuring(site, start, end) {
-  for (let at = start.getTime(); at < end.getTime(); at += STEP_MS) {
-    if (siteOpen(site, new Date(at)).open === false) return true;
+  if (neverCloses(site.hours) && neverCloses(site.osm?.openingHours)) return null;
+  const first = start.getTime(), last = end.getTime() - 1;
+  if (last < first) return null;
+  const closed = t => siteOpen(site, new Date(t)).open === false;
+  let open = null; // the last sample seen open
+  for (let t = first; ; t = Math.min(t + QUARTER_MS, last)) {
+    if (closed(t)) {
+      for (let m = open === null ? t : open + MINUTE_MS; m < t; m += MINUTE_MS) {
+        if (closed(m)) { t = m; break; }
+      }
+      return new Date(Math.floor(t / MINUTE_MS) * MINUTE_MS);
+    }
+    if (t === last) return null;
+    open = t;
   }
-  return siteOpen(site, end).open === false;
 }

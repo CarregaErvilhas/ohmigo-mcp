@@ -15,7 +15,7 @@
 // worked out by ceme-v2 in the region's time zone, so clock changes need no
 // special case here.
 
-const QUARTER_MS = 15 * 60_000;
+export const QUARTER_MS = 15 * 60_000;
 
 // Time zone of each region, for showing local times to the driver.
 export const REGION_TZ = { CONT: 'Europe/Lisbon', MAD: 'Atlantic/Madeira', AZO: 'Atlantic/Azores' };

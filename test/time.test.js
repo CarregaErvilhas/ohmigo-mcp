@@ -115,7 +115,7 @@ test('quote: sends the session as quarter-hour slices from the start', async () 
 
 // 60 % of 60 kWh on 11 kW AC takes just under 4 h.
 const closing = { ...site, hours: 'Mo-Su 09:00-21:00' };
-const closes = q => q.assumptions.filter(a => /closes before|fecha antes de/.test(a));
+const closes = q => q.assumptions.filter(a => /, before the session ends|, antes de o carregamento acabar/.test(a));
 const closedAtStart = q => q.assumptions.filter(a => /closed when the session starts|fechado à hora de início/.test(a));
 
 test('quote: a site that closes before the session ends says so', async () => {
@@ -123,9 +123,28 @@ test('quote: a site that closes before the session ends says so', async () => {
   const q = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'en' });
   assert.equal(q.session.startLocal, '20:00');
   assert.deepEqual(closedAtStart(q), [], 'open when it starts');
-  assert.match(closes(q)[0], /Mo-Su 09:00-21:00.*closes before the session ends \(expected at 23:\d\d/);
+  assert.match(closes(q)[0], /Mo-Su 09:00-21:00.*closes at 21:00, before the session ends \(expected at 23:\d\d/);
   const pt = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'pt' });
-  assert.match(closes(pt)[0], /Mo-Su 09:00-21:00.*fecha antes de o carregamento acabar \(previsto para as 23:\d\d/);
+  assert.match(closes(pt)[0], /Mo-Su 09:00-21:00.*fecha às 21:00, antes de o carregamento acabar \(previsto para as 23:\d\d/);
+});
+
+test('quote: a closure on a later day says which day', async () => {
+  fakeCeme();
+  const late = { ...site, hours: 'Mo-Su 22:00-02:00' };
+  const slow = { ...car, batteryKwh: 80 }; // about 5 h on 11 kW, from 23:00
+  const en = await quotePoint({ site: late, point }, slow, { at: new Date('2026-11-10T23:00:00Z'), lang: 'en' });
+  assert.match(closes(en)[0], /closes at 02:00 the next day, before/);
+  const pt = await quotePoint({ site: late, point }, slow, { at: new Date('2026-11-10T23:00:00Z'), lang: 'pt' });
+  assert.match(closes(pt)[0], /fecha às 02:00 do dia seguinte, antes/);
+  const today = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'en' });
+  assert.doesNotMatch(closes(today)[0], /next day/);
+});
+
+test('quote: a session ending exactly at closing time adds nothing', async () => {
+  fakeCeme();
+  const s = estimateSession(point, car);
+  const q = await quotePoint({ site: closing, point }, car, { at: new Date(Date.parse('2026-11-10T21:00:00Z') - Math.ceil(s.minutes) * 60_000), lang: 'en' });
+  assert.deepEqual(closes(q), []);
 });
 
 test('quote: a slow session open at both ends still crosses the closed night', async () => {

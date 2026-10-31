@@ -21,7 +21,7 @@ import { z } from 'zod';
 import { expandMonthKwh, promos, tariffs } from './ceme.js';
 import { clusterPlaces, directionLabel, sameStation, serviceAreas, sideFor } from './direction.js';
 import { pickLang, translator } from './i18n.js';
-import { napPlan } from './live.js';
+import { napEurPerKwh, napPlan } from './live.js';
 import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt } from './offers.js';
 import { cardPayment } from './data.js';
 import { siteOpen } from './hours.js';
@@ -296,7 +296,7 @@ function siteCard(h, live, t, audiences = [], notes = []) {
     const lp = live.get(site.id, p.id);
     const fee = p.opc?.REGULAR ?? (lp && napPlan(lp.fees));
     const fromNap = !p.opc?.REGULAR;
-    const napPrice = p.regime === 'sem_ceme' ? (lp?.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur ?? p.napPrice) : undefined;
+    const napPrice = p.regime === 'sem_ceme' ? napEurPerKwh(lp, p.napPrice) : undefined;
     const card = {
       ...socketFields(p), connector: p.connector, dc: p.dc, level: p.level ?? undefined, regime: p.regime,
       operatorFee: fee ? describePlan(fee, t, { vatIncluded: fromNap && vatIn }) : undefined,
@@ -367,6 +367,12 @@ async function withLive(live, ctx, t) {
 const MAX_KINDS = 8;
 // JSON with object keys sorted: the dataset lists a socket's plans in no
 // fixed order, and two sockets with the same fees must give the same key.
+// Sockets with the same key are one line in an estimate. operatorInferred: a
+// socket on a lent site must not merge into a named sibling's, or its
+// assumption goes with it. Hours likewise: merged across sites with different
+// hours, a closing warning would be lost or invented.
+export const socketKindKey = (site, point) => canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, site.operatorId, !!site.operatorInferred, site.hours ?? null, site.osm?.openingHours ?? null]);
+
 const canonical = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x)
   ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x);
 function pointsFor(ds, live, a, t) {
@@ -425,9 +431,7 @@ function pointsFor(ds, live, a, t) {
       if (named.length) points = named;
     }
     for (const point of points) {
-      // operatorInferred: a socket on a lent site must not merge into a named
-      // sibling's, or its assumption goes with it.
-      const key = canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, h.site.operatorId, !!h.site.operatorInferred]);
+      const key = socketKindKey(h.site, point);
       const cur = kinds.get(key);
       if (!cur || (!free(cur.site, cur.point) && free(h.site, point))) kinds.set(key, { site: h.site, point });
     }

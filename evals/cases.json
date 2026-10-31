@@ -674,6 +674,30 @@
       }
     },
     {
+      "id": "closes-mid-session",
+      "why": "Open when the session starts, closed before it ends (the site says Mo-Su 09:00-21:00, a slow AC session from 20:00 runs for hours): pass on the warning, with the closing time.",
+      "message": "Posso carregar amanhã às 20h no posto da Powerdot na Avenida da Estação, em Viana do Castelo? Quanto me custa? Peugeot e-208 de 50 kWh, AC até 7,4 kW, de 20% a 80%.",
+      "requires": [
+        {
+          "site": "HRZ-VCT-00062"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "at": "T(19|20):"
+            },
+            "ok": true
+          }
+        ],
+        "judge": [
+          "Does the reply warn that the charger closes at about 21:00, before the session would end, so the car can't finish charging there or the user should check the hours?"
+        ]
+      }
+    },
+    {
       "id": "card-payment-near",
       "why": "\"Pay with a bank card at the charger\" is the card_payment filter.",
       "message": "Onde é que posso carregar perto de Leiria pagando com o cartão multibanco no próprio posto, sem apps nem cartões de carregamento?",

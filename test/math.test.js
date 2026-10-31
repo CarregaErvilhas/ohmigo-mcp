@@ -104,7 +104,7 @@ test('applicable: voltage variant per socket, AC-only tariffs dropped on DC', ()
 });
 
 import { eligible, pickTariffs } from '../src/quote.js';
-import { napPlan, parseStatus } from '../src/live.js';
+import { napEurPerKwh, napPlan, parseStatus } from '../src/live.js';
 
 test('estimateSession: dc_10_80_minutes sets the DC average, capped by the charger', () => {
   // 70 % of 60 kWh in 30 min = 84 kW at the battery: on a fast enough charger
@@ -176,6 +176,14 @@ test('pickTariffs: a new-sign-ups-only tariff is never best or headline by defau
   // Passed by the user: they have it, so it can lead.
   const mine = pickTariffs(quotes, { level: 'BTN', dc: false }, ['l-bt-promo', 'c-bt-z']);
   assert.equal(mine.headline.id, 'l-bt-promo');
+});
+
+test('napEurPerKwh: the live per-kWh fee, the static price only when the live entry has no fees', () => {
+  assert.equal(napEurPerKwh({ fees: [{ policy: 'pricePerDeliveryUnit', eur: 0.4 }] }, 0.3), 0.4);
+  assert.equal(napEurPerKwh({ fees: [] }, 0.3), 0.3);
+  assert.equal(napEurPerKwh(null, 0.3), 0.3);
+  assert.equal(napEurPerKwh({ fees: [{ policy: 'pricePerChargingTime', eur: 0.1 }] }, 0.3), undefined);
+  assert.equal(napEurPerKwh({ fees: [{ policy: 'flatRate', eur: 1 }] }, 0.3), undefined);
 });
 
 test('napPlan maps NAP policies to the MOBI.E plan shape', () => {

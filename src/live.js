@@ -95,6 +95,15 @@ export function napPlan(fees) {
   return Object.keys(plan).length ? plan : null;
 }
 
+// The NAP's €/kWh for a socket outside MOBI.E (lp: its live entry, if any).
+// The live per-kWh fee wins. The static price from the dataset stands in only
+// when the live feed has no fees for the socket: when it has fees and none is
+// per kWh (a per-minute or flat price), the static one no longer describes it.
+export function napEurPerKwh(lp, staticPrice) {
+  if (!lp?.fees.length) return staticPrice;
+  return lp.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur;
+}
+
 const sleep = ms => new Promise(r => setTimeout(r, ms).unref());
 // ±10 %, so two instances started together drift apart instead of
 // downloading in lockstep.
