@@ -267,7 +267,7 @@ function resolveWhere(ds, a, t, { everywhere = false } = {}) {
   }
   if (!everywhere) return { error: t('err.where'), code: 'where' };
   const filtered = a.query || a.region || a.min_kw != null || a.min_voltage != null || a.connectors?.length || a.dc_only
-    || a.card_payment != null || a.cable_attached != null || a.open_now;
+    || a.card_payment === true || a.cable_attached != null || a.open_now;
   return filtered ? { only, everywhere: true } : { error: t('err.whereOrFilter'), code: 'where' };
 }
 
@@ -325,6 +325,10 @@ function siteCard(h, live, t, audiences = [], notes = []) {
     sockets: [...groups.values()].sort((a, b) => (b.named ? 1 : 0) - (a.named ? 1 : 0) || (b.kw ?? 0) - (a.kw ?? 0)),
   };
 }
+
+// A socket in a summary line. The NAP leaves power and plug blank on some
+// sockets: kw arrives as null and connector as the text "nan".
+const socketLine = q => `${q.kw ?? '?'} kW ${q.connector === 'nan' ? '?' : q.connector ?? '?'}`;
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
@@ -456,6 +460,10 @@ function rankCandidates(results, live, route) {
   return { candidates, truncated: candidates.length < results.length };
 }
 
+// Rows list_ceme_tariffs returns: the assistant is looking for one card, not
+// reading a catalogue. The result says when this cut bit.
+const MAX_TARIFFS = 60;
+
 // `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
 // every few hours, and each request should see the current one.
 export function createServer(getDataset, live) {
@@ -478,13 +486,13 @@ export function createServer(getDataset, live) {
     let all, current;
     try { [all, current] = await Promise.all([tariffs(), promos().catch(() => ({ data: [] }))]); }
     catch (e) { if (e.ceme) return err(t('err.tariffs'), 'ceme'); throw e; }
-    const q = (query || '').toLowerCase();
+    const q = fold(query);
     // One row per tariff, not per voltage: the BT/MT variant is picked per charger.
     const seen = new Map();
     for (const t of all.data ?? all) {
       const key = tariffKey(t.id);
       const name = `${t.ceme_name ?? t.ceme} ${t.name}`;
-      if (q && !name.toLowerCase().includes(q)) continue;
+      if (q && !fold(name).includes(q)) continue;
       if (!forAudiences(t, audiences)) continue;
       // ceme-v2's valid_to is exclusive (the day the campaign is gone).
       const until = t.version?.valid_to ? new Date(Date.parse(t.version.valid_to) - 864e5).toISOString().slice(0, 10) : null;
@@ -501,9 +509,10 @@ export function createServer(getDataset, live) {
         ...(p.eurKwh != null && { eurKwh: p.eurKwh }), ...(p.pct != null && { pct: p.pct }),
         ...(p.freeKwh != null && { freeKwhPerMonth: p.freeKwh }),
       from: p.from, until: p.to, active: p.active, newCustomers: p.newCustomers, tariffIds: p.tariffs, url: p.url }));
-    const shown = rows.slice(0, 60);
-    return ok({ version: VERSION, count: rows.length, tariffs: shown, ...(promoRows.length && { promos: promoRows }) },
-      `${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}${r.newCustomersOnly ? ' (new sign-ups only)' : ''}${r.until ? ` (until ${r.until})` : ''}`).join('\n')}`);
+    const shown = rows.slice(0, MAX_TARIFFS);
+    const notes = rows.length > shown.length ? [t('note.tariffsCut', { n: shown.length, total: rows.length, narrowed: !!q })] : [];
+    return ok({ version: VERSION, count: rows.length, ...(notes.length && { notes }), tariffs: shown, ...(promoRows.length && { promos: promoRows }) },
+      `${[...notes, ''].join('\n')}${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}${r.newCustomersOnly ? ' (new sign-ups only)' : ''}${r.until ? ` (until ${r.until})` : ''}`).join('\n')}`);
   });
 
   server.registerTool('lookup_charger', {
@@ -555,7 +564,7 @@ export function createServer(getDataset, live) {
       sites: cards,
       // OpenStreetMap's licence (ODbL) asks for this wherever its data shows.
       credit: r.results.some(h => h.site.osm) ? t('credit.osm') : undefined,
-    }, [...notes, ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${g.kw ?? '?'} kW ${g.connector}`).join(', ')}`)].join('\n'));
+    }, [...notes, ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g)}`).join(', ')}`)].join('\n'));
   });
 
   server.registerTool('find_chargers', {
@@ -676,7 +685,7 @@ export function createServer(getDataset, live) {
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // Summary lines on top of the JSON in the text (see ok).
-    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
+    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q)}) [${q.pointId}]`);
     return ok(data, [...notes, ...lines].join('\n'));
   });
 
@@ -706,7 +715,7 @@ export function createServer(getDataset, live) {
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
-    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${q.kw} kW ${q.connector} [${q.pointId}]`);
+    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
     const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...moreWays(results, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));

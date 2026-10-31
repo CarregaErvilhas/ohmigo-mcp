@@ -81,6 +81,9 @@ export const MESSAGES = {
     'note.noTariff': () => 'No CEME tariff applies to this socket.',
     'note.noCeme': () => "CEME energy prices are unavailable right now (the pricing service didn't answer), so this socket has no CEME total; the other ways to pay are listed. Say so, and suggest trying again in a few minutes for the CEME price.",
     'note.truncated': ({ n, total }) => `Only the ${n} nearest of the ${total} sites found were priced, to keep the answer fast; narrow the search (radius_km, corridor_km, filters) to see the rest.`,
+    'note.tariffsCut': ({ n, total, narrowed }) => narrowed
+      ? `Only the first ${n} of the ${total} matching tariffs are listed.`
+      : `Only the first ${n} of the ${total} tariffs are listed; if the user's isn't here, call again with query (the CEME or tariff name) instead of saying it doesn't exist.`,
     'note.detailTop': ({ n }) => `The timeline (detail) is only included for the first ${n} results; for one charger's breakdown, use estimate_charging_cost.`,
     'note.moreWays': () => 'Each charger has more ways to pay in options than its best (other CEMEs, bank card at the charger, apps, subscriptions): tell the user there are more and offer to list them.',
     'err.tariffs': () => "The CEME tariff list can't be fetched right now (the pricing service didn't answer). Try again in a few minutes.",
@@ -122,7 +125,7 @@ export const MESSAGES = {
     'assume.osmKw': ({ kw, nap }) => `charger power ${fmt('en', kw, 1)} kW as mapped on OpenStreetMap (the NAP declares ${nap == null ? 'none' : `${fmt('en', nap, 1)} kW`})`,
     'assume.closedAt': ({ hours }) => `by its opening hours (${hours}) this charger is closed when the session starts; check before going`,
     'note.noVoltage': () => 'The charger data loaded now has no socket voltages yet, so min_voltage was ignored: these results are not filtered by voltage.',
-    'err.whereOrFilter': () => 'Give lat+lon, place or route, or, to search the whole country, at least one filter (query, region, min_kw, min_voltage, connectors, dc_only, card_payment, cable_attached, open_now).',
+    'err.whereOrFilter': () => 'Give lat+lon, place or route, or, to search the whole country, at least one filter (query, region, min_kw, min_voltage, connectors, dc_only, card_payment: true, cable_attached, open_now).',
     'note.nationwide': ({ shown, total }) => `No place given, so all of Portugal (or the region asked) was searched: ${total} sites match, most powerful first; showing ${shown}. For a full list, narrow with region or query, or raise limit.`,
     'note.operators': () => 'Operators as the NAP publishes them (every public charger in Portugal, on MOBI.E and outside it), grouped by NAP operatorId. Not the DGEG registry: an operator registered with the DGEG but with no charger on the NAP is not here.',
   },
@@ -186,6 +189,9 @@ export const MESSAGES = {
     'note.noTariff': () => 'Nenhum tarifário CEME se aplica a esta tomada.',
     'note.noCeme': () => 'Os preços de energia dos CEME não estão disponíveis neste momento (o serviço de preços não respondeu), por isso esta tomada não tem total CEME; estão as outras formas de pagar. Diz isso ao utilizador e sugere tentar daqui a uns minutos para o preço CEME.',
     'note.truncated': ({ n, total }) => `Só foram cotados os ${n} locais mais próximos dos ${total} encontrados, para a resposta ser rápida; restringe a pesquisa (radius_km, corridor_km, filtros) para ver os restantes.`,
+    'note.tariffsCut': ({ n, total, narrowed }) => narrowed
+      ? `Só estão listados os primeiros ${n} dos ${total} tarifários que correspondem.`
+      : `Só estão listados os primeiros ${n} dos ${total} tarifários; se o do utilizador não estiver aqui, volta a chamar com query (o nome do CEME ou do tarifário) em vez de dizer que não existe.`,
     'note.detailTop': ({ n }) => `A timeline (detail) só vem nos primeiros ${n} resultados; para o detalhe de um posto, usa estimate_charging_cost.`,
     'note.moreWays': () => 'Cada posto tem mais formas de pagar em options do que a melhor (outros CEME, cartão bancário no posto, apps, subscrições): diz ao utilizador que há mais e oferece-te para as listar.',
     'err.tariffs': () => 'Não é possível obter a lista de tarifários CEME neste momento (o serviço de preços não respondeu). Tenta daqui a alguns minutos.',
@@ -227,7 +233,7 @@ export const MESSAGES = {
     'assume.osmKw': ({ kw, nap }) => `potência do posto ${fmt('pt', kw, 1)} kW, como está no OpenStreetMap (o PAN declara ${nap == null ? 'nenhuma' : `${fmt('pt', nap, 1)} kW`})`,
     'assume.closedAt': ({ hours }) => `pelo horário (${hours}), este posto está fechado à hora de início da sessão; confirma antes de ir`,
     'note.noVoltage': () => 'Os dados de postos carregados agora ainda não têm a tensão das tomadas, por isso o min_voltage foi ignorado: estes resultados não estão filtrados por tensão.',
-    'err.whereOrFilter': () => 'Indica lat+lon, place ou route, ou, para pesquisar o país todo, pelo menos um filtro (query, region, min_kw, min_voltage, connectors, dc_only, card_payment, cable_attached, open_now).',
+    'err.whereOrFilter': () => 'Indica lat+lon, place ou route, ou, para pesquisar o país todo, pelo menos um filtro (query, region, min_kw, min_voltage, connectors, dc_only, card_payment: true, cable_attached, open_now).',
     'note.nationwide': ({ shown, total }) => `Sem sítio indicado, pesquisou-se Portugal todo (ou a região pedida): ${total} locais servem, os mais potentes primeiro; a mostrar ${shown}. Para a lista completa, restringe com region ou query, ou aumenta o limit.`,
     'note.operators': () => 'Operadores tal como o PAN os publica (todos os postos públicos em Portugal, na MOBI.E e fora dela), agrupados pelo operatorId do PAN. Não é o registo da DGEG: um operador registado na DGEG sem postos no PAN não aparece.',
   },
