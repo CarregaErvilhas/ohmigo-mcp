@@ -4,9 +4,9 @@
 // The pricing of each slice is ceme-v2's job and is tested there.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sessionProfile, localTime, localOffset } from '../src/profile.js';
+import { MAX_SESSION_HOURS, sessionProfile, localTime, localOffset } from '../src/profile.js';
 import { estimateSession } from '../src/charging.js';
-import { quotePoint } from '../src/quote.js';
+import { quotePoint, rank } from '../src/quote.js';
 
 const sum = (xs, k) => xs.reduce((a, x) => a + x[k], 0);
 const near = (a, b, eps = 1e-3) => Math.abs(a - b) < eps;
@@ -138,4 +138,50 @@ test('quote: an older ceme-v2 that ignores the profile is flagged, not trusted',
   const q = await quotePoint({ site, point }, car, { at: new Date('2026-11-10T21:30:00Z'), lang: 'en' });
   assert.match(q.assumptions.join(' | '), /as if the whole session happened at 21:30/);
   assert.equal(q.options[0].kwhByPeriod, undefined);
+});
+
+test('sessionProfile: a session past the limit, or with no end, is refused before any slice is made', () => {
+  const start = new Date('2026-11-10T21:30:00Z');
+  const limit = MAX_SESSION_HOURS * 60;
+  assert.ok(sessionProfile([{ minutes: limit, kwh: 10 }], start).length <= limit / 15 + 1);
+  for (const minutes of [limit + 1, Infinity, NaN]) {
+    assert.throws(() => sessionProfile([{ minutes, kwh: 10 }], start), RangeError, String(minutes));
+  }
+  assert.throws(() => sessionProfile([{ minutes: limit, kwh: 5 }, { minutes: limit, kwh: 5 }], start), RangeError);
+});
+
+test('quote: a session past the limit gets no quote and costs no ceme-v2 call, on every path', async () => {
+  const sent = fakeCeme();
+  const big = { batteryKwh: 250, startPct: 0, targetPct: 100 };
+  const slow = [
+    [point, { ...big, acKw: 1 }],
+    [{ ...point, kw: 50, dc: true }, { ...big, dcKw: 1 }],
+    [{ ...point, kw: 50, dc: true }, { ...big, dc10to80Minutes: 300 * 20, dcKw: 1 }],
+    [{ ...point, kw: 50, dc: true }, { ...big, curve: [{ soc: 0, kw: 0.001 }, { soc: 100, kw: 0.001 }] }],
+  ];
+  for (const [p, c] of slow) assert.equal(await quotePoint({ site, point: p }, c, { lang: 'en' }), null, JSON.stringify(c));
+  assert.equal(sent.length, 0);
+});
+
+test('rank: leaves out what would take too long, counts it, and still ranks the rest', async () => {
+  fakeCeme();
+  const slowAc = { ...point, id: 'P2', kw: 3.7 };
+  const fast = { ...point, id: 'P3', kw: 50, dc: true };
+  const r = await rank([{ site, points: [slowAc, fast] }], { batteryKwh: 250, startPct: 0, targetPct: 100 }, { lang: 'en' });
+  assert.deepEqual(r.map(q => q.pointId), ['S1/P3']);
+  assert.equal(r.tooLong, 1);
+});
+
+test('rank: what the driver\'s own filters drop does not count as too long', async () => {
+  fakeCeme();
+  const slowAc = { ...point, id: 'P2', kw: 3.7 };
+  const fast = { ...point, id: 'P3', kw: 50, dc: true };
+  const big = { batteryKwh: 250, startPct: 0, targetPct: 100 };
+  const inTime = await rank([{ site, points: [slowAc, fast] }], big, { lang: 'en', maxMinutes: 10 });
+  assert.deepEqual([inTime.length, inTime.tooLong], [0, 0]);
+  const busy = { get: () => ({ status: 'charging', fees: [] }) };
+  const free = await rank([{ site, points: [slowAc] }], big, { lang: 'en', live: busy, availableOnly: true });
+  assert.deepEqual([free.length, free.tooLong], [0, 0]);
+  const longer = await rank([{ site, points: [slowAc, fast] }], big, { lang: 'en', maxMinutes: 100_000 });
+  assert.deepEqual([longer.length, longer.tooLong], [1, 1]);
 });
