@@ -209,9 +209,13 @@ Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the
   cheapest popular one that needs no other contract);
 - **`best`**: the cheapest option anyone can use right now, meaning no
-  subscription and no other contract. **The ranking sorts by
-  `best`.** That's how an IONITY whose own app beats every CEME ends up where
-  it belongs.
+  subscription and no other contract. With `tariff_ids`, a tariff the user
+  listed counts even with conditions (`listed`: they have it), and a cheaper
+  CEME tariff they didn't list is never `best`: it stays in `options` as a tip
+  (`cheaperElsewhere`, `notYours`) with a note saying so. Direct offers aren't
+  affected, since `tariff_ids` says nothing about which apps the user has.
+  **The ranking sorts by `best`.** That's how an IONITY whose own app beats
+  every CEME ends up where it belongs.
 
 ## 4. Ranking (`quote.js`, `rank`)
 

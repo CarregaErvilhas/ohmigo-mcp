@@ -7,8 +7,9 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { moreWays } from '../src/mcp.js';
 
-let ceme, cemeDown = false, server, base;
+let ceme, cemeDown = false, cheapTip = false, server, base;
 // Enough rows to pass list_ceme_tariffs' cut, under a name with an accent.
 const manyTariffs = Array.from({ length: 70 }, (_, i) => ({ id: `luzigas-bt-${i}`, ceme: 'LZG', ceme_id: 'LZG', ceme_name: 'Luzigás', name: `Plano ${i}`, kind: 'FIXED' }));
 
@@ -26,7 +27,14 @@ before(async () => {
       const b = JSON.parse(body || '{}');
       send({
         at: b.at, kwh: b.kwh, region: b.region, omieSpot: null,
-        data: [{ id: 'edp-bt-x', ceme: 'EDP', name: 'Stub', voltage: 'BT', popular: true, bundle: false, totalEur: b.kwh * 0.2, vat: 1.23, period: 'UNICO', kind: 'FIXED' }],
+        data: [
+          // The fixture's MOBI.E sockets are medium voltage.
+          ...(cheapTip ? [
+            { id: 'nope-mt-y', ceme: 'Nope', name: 'Cheap', voltage: 'MT', popular: false, bundle: false, totalEur: 0.01, vat: 1.23, period: 'UNICO', kind: 'FIXED' },
+            { id: 'edp-mt-x', ceme: 'EDP', name: 'Stub', voltage: 'MT', popular: true, bundle: false, totalEur: b.kwh * 0.2, vat: 1.23, period: 'UNICO', kind: 'FIXED' },
+          ] : []),
+          { id: 'edp-bt-x', ceme: 'EDP', name: 'Stub', voltage: 'BT', popular: true, bundle: false, totalEur: b.kwh * 0.2, vat: 1.23, period: 'UNICO', kind: 'FIXED' },
+        ],
         ...(b.profile && { profile: { slices: b.profile.length, withSpot: 0 } }),
       });
     });
@@ -83,6 +91,38 @@ test('http: the tool list stays small, and every tool says what it is for so too
   // Clients that load tools on demand match the user's request against names
   // and descriptions: each one names the domain in its own words.
   for (const t of tools) assert.match(t.description, /\bEV\b.*\bPortugal\b|\bPortugal\b.*\bEV\b/s, t.name);
+});
+
+test('http: with tariff_ids, a tariff the user lacks is a tip in both cost tools', async () => {
+  cheapTip = true;
+  try {
+    // A battery no other test uses: ceme.js caches by time and kWh.
+    const args = { battery_kwh: 61, start_pct: 20, tariff_ids: ['edp-bt-x'], lang: 'en' };
+    const asked = [await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...args }), await call('find_cheapest_charging', { place: 'Leiria', limit: 20, ...args })];
+    for (const r of asked) {
+      const q = r.structuredContent.results.find(x => x.options.some(o => o.tariffId === 'nope-mt-y'));
+      const tip = q.options.find(o => o.tariffId === 'nope-mt-y');
+      assert.equal(tip.cheaperElsewhere, true);
+      assert.equal(tip.notYours, true);
+      assert.match(tip.note, /switch to it first/);
+      assert.notEqual(q.best?.tariffId, 'nope-mt-y');
+    }
+    // The summary line counts ways to pay, and the tip isn't one yet.
+    const ranked = asked[1];
+    const q = ranked.structuredContent.results.find(x => x.options.some(o => o.notYours));
+    const line = ranked.content[0].text.split('\n').find(l => l.includes(`[${q.pointId}]`));
+    assert.ok(line.includes(`(+${q.options.length - 2} more ways to pay)`), line);
+    const open = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...args, tariff_ids: undefined, battery_kwh: 62 });
+    const options = open.structuredContent.results.flatMap(q => q.options);
+    assert.ok(options.some(o => o.cheaperElsewhere), 'the tip is there');
+    assert.ok(!options.some(o => o.notYours), 'without tariff_ids nothing is tagged');
+  } finally { cheapTip = false; }
+});
+
+test('the more-ways note does not count a tariff the user would have to switch to', () => {
+  const t = key => key;
+  assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2, notYours: true }] }], t), []);
+  assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2 }] }], t), ['note.moreWays']);
 });
 
 test('http: estimate_charging_cost answers with structuredContent, and the text carries it too for text-only clients', async () => {

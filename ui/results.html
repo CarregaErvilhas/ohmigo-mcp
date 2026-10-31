@@ -69,7 +69,7 @@
       waiting: 'Waiting for results…', none: 'No results.', away: 'km away',
       route: (km, off) => `km ${km} of route, ${off} km off`, range: 'range',
       outside: 'outside MOBI.E, pay the operator',
-      adhoc: 'Card / QR at charger', direct: 'Operator direct', contract: 'needs another contract', cheapest: 'cheapest overall',
+      adhoc: 'Card / QR at charger', direct: 'Operator direct', contract: 'needs another contract', cheapest: 'cheaper tariff', notYours: 'not your tariff',
       sub: 'subscription', promo: 'promotion', promos: 'Promotions', allIn: 'all in, operator fee included', breakdown: 'Breakdown', energy: 'Energy', operator: 'Operator', notPublished: 'not published',
       cardQr: 'Card / QR', own: 'Direct', note: 'Note', assumes: 'Assumes', point: 'Point', directions: 'Directions',
       period: { VAZIO: 'off-peak', FORA_VAZIO: 'peak', UNICO: 'flat' }, timeline: 'Quarter by quarter',
@@ -81,7 +81,7 @@
       waiting: 'À espera dos resultados…', none: 'Sem resultados.', away: 'km daqui',
       route: (km, off) => `km ${km} do percurso, a ${off} km`, range: 'intervalo',
       outside: 'fora da MOBI.E, paga-se ao operador',
-      adhoc: 'Cartão / QR no posto', direct: 'Operador directo', contract: 'exige outro contrato', cheapest: 'o mais barato',
+      adhoc: 'Cartão / QR no posto', direct: 'Operador directo', contract: 'exige outro contrato', cheapest: 'tarifário mais barato', notYours: 'não é o teu tarifário',
       sub: 'subscrição', promo: 'promoção', promos: 'Promoções', allIn: 'tudo incluído, com a tarifa do operador', breakdown: 'Detalhe', energy: 'Energia', operator: 'Operador', notPublished: 'não publicada',
       cardQr: 'Cartão / QR', own: 'Directo', note: 'Nota', assumes: 'Pressupostos', point: 'Ponto', directions: 'Direcções',
       period: { VAZIO: 'vazio', FORA_VAZIO: 'fora de vazio', UNICO: 'simples' }, timeline: 'Quarto a quarto',
@@ -101,6 +101,8 @@
   const km = v => v.toLocaleString(lang === 'pt' ? 'pt-PT' : 'en', { maximumFractionDigits: 1 });
   const app = new McpApps.App({ name: 'ohmigo-results', version: '__VERSION__' });
 
+  // What tells two ways to pay apart: labels repeat across CEME cycles.
+  const optKey = o => o.tariffId ?? o.offerId ?? o.label;
   function optName(o) {
     if (o.kind === 'adhoc') return S().adhoc;
     if (o.kind === 'opc_direct') return S().direct;
@@ -129,8 +131,8 @@
       const range = q.total && q.total.low !== q.total.high ? `${eur(q.total.low)}–${eur(q.total.high)}` : '';
       const dist = q.km != null ? `${km(q.km)} ${s.away}` : q.alongKm != null ? s.route(Math.round(q.alongKm), km(q.offRouteKm)) : '';
       const h = q.headline;
-      const opts = (q.options || []).map(o => `<li class="${q.best && o.kind === q.best.kind && o.label === q.best.label ? 'hl' : ''}"><span>${eur(o.total)}</span> ${esc(optName(o))}`
-        + `${o.requiresOtherContract ? ` <em>${s.contract}</em>` : ''}${o.cheaperElsewhere ? ` <em>${s.cheapest}</em>` : ''}`
+      const opts = (q.options || []).map(o => `<li class="${q.best && optKey(o) === optKey(q.best) ? 'hl' : ''}"><span>${eur(o.total)}</span> ${esc(optName(o))}`
+        + `${o.requiresOtherContract && !o.listed ? ` <em>${s.contract}</em>` : ''}${o.cheaperElsewhere ? ` <em>${s.cheapest}</em>` : ''}${o.notYours ? ` <em>${s.notYours}</em>` : ''}`
         + `${o.subscription ? ` <em>${esc(o.subscription.text)}</em>` : ''}${o.promos ? ` <em>${s.promo}</em>` : ''}</li>`).join('');
       return `<div class="row${i === 0 && q.total ? ' best' : ''}">
         <div class="n">${i + 1}</div>
