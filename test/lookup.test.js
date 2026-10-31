@@ -102,6 +102,36 @@ test('resolvePlace: the town before a comma', () => {
   assert.equal(ds.resolvePlace(', '), null);
 });
 
+test('resolvePlace: a city that ends in punctuation still matches exactly', () => {
+  const two = new Dataset({ schema: 1, generatedAt: '2026-10-28T00:00:00Z', sites: [
+    site('X-MAD-1', 'MAD-1', 'Calheta (Madeira)', 'Rua A', 'Op', 'OPOP', 32.7, -17.1),
+    site('X-AZO-1', 'AZO-1', 'Calheta (Açores)', 'Rua B', 'Op', 'OPOP', 38.6, -28.0),
+  ] });
+  assert.equal(two.resolvePlace('Calheta (Madeira)').lat, 32.7);
+});
+
+test('resolvePlace: punctuation around the name is not part of it', () => {
+  for (const name of ['Leiria.', 'Leiria!', '"Leiria"', 'Leiria?', 'leiria...']) assert.ok(ds.resolvePlace(name), name);
+  assert.equal(ds.resolvePlace('...'), null);
+  assert.equal(ds.resolvePlace('Rua.'), null, 'still not a place');
+  for (const name of ['(Leiria)', ', Leiria', 'Leiria (Pombal)', 'Leiria. (Pombal)']) assert.ok(ds.resolvePlace(name), name);
+});
+
+test('resolvePlace: a city with its own comma is still found whole', () => {
+  const lagoas = new Dataset({ schema: 1, generatedAt: 'x', sites: [
+    site('A', 'A', 'Lagoa, Faro', 'Rua', 'X', 'XX', 37.13, -8.45),
+    site('B', 'B', 'Lagoa, Azores', 'Rua', 'X', 'XX', 37.74, -25.57),
+  ] });
+  for (const name of ['Lagoa, Faro', 'Lagoa, Faro.', '(Lagoa, Faro)']) assert.ok(lagoas.resolvePlace(name)?.lat < 38, name);
+});
+
+test('resolvePlace: handles long names', () => {
+  const start = performance.now();
+  assert.equal(ds.resolvePlace(`a${'!'.repeat(200_000)}a`), null);
+  assert.ok(ds.resolvePlace(`Leiria${'!'.repeat(200_000)}`));
+  assert.ok(performance.now() - start < 1000);
+});
+
 test('resolvePlace: whole words from the start, never a substring anywhere', () => {
   assert.equal(ds.resolvePlace('a'), null, 'too short');
   assert.equal(ds.resolvePlace('eir'), null, 'inside a word: not Leiria');
