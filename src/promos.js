@@ -92,6 +92,8 @@ export function withPromos(promos, { energyEur, opc, vat }) {
 //   total      this session at this charger with the promotion
 //   saving     against the same tariff without it
 //   applied    already in the total of one of the options shown
+//   driverNote the note for ui/results.html, when `note` tells the assistant
+//              what to do
 export function promoOut(p, { quote, total, saving, applied }, t) {
   const amount = {
     ENERGIA: () => t('promo.energy', { eur: t.num(p.eurKwh, 4, 2) }),
@@ -104,7 +106,9 @@ export function promoOut(p, { quote, total, saving, applied }, t) {
     ? t('promo.note.new', { until: p.to, hours: p.maxHours })
     : t(p.network ? 'promo.note.all' : 'promo.note.allAny', { until: p.to, tariff })];
   if (p.target === 'FINAL') notes.push(t('promo.note.final'));
+  let driverNote;
   if (p.target === 'KWH_GRATIS') {
+    if (!p.monthKwhKnown) driverNote = [...notes, t('promo.note.freeUnknown.driver', { free: t.num(p.freeKwh, 1) })].join('; ');
     notes.push(p.monthKwhKnown
       ? t('promo.note.freeLeft', { left: t.num(p.freeKwhLeft, 2), free: t.num(p.freeKwh, 1) })
       : t('promo.note.freeUnknown', { free: t.num(p.freeKwh, 1) }));
@@ -118,6 +122,7 @@ export function promoOut(p, { quote, total, saving, applied }, t) {
     total, saving, newCustomers: !!p.newCustomers, maxHours: p.maxHours ?? null,
     from: p.from, until: p.to, url: p.url, checked: p.checked, applied,
     note: notes.join('; '),
+    ...(driverNote && { driverNote }),
   };
 }
 

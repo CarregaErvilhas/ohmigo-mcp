@@ -75,14 +75,17 @@ export const MESSAGES = {
     'promo.note.final': () => 'it replaces the usual energy + operator fee, even where that would be lower',
     'promo.note.freeLeft': ({ left, free }) => `${left} of this month's ${free} free kWh left, used first in this session; assumed to cover energy and network access only (tax, activation fee and operator fee still paid)`,
     'promo.note.freeUnknown': ({ free }) => `priced as if none of this month's ${free} free kWh were used yet: pass month_kwh (kWh already charged this month with this tariff) to apply it; assumed to cover energy and network access only`,
+    'promo.note.freeUnknown.driver': ({ free }) => `priced as if none of this month's ${free} free kWh were used yet: tell the assistant how many kWh you've charged this month with this tariff to apply it; assumed to cover energy and network access only`,
     'promo.note.new': ({ until, hours }) => `new customers only: sign up by ${until}${hours ? `, then the discount lasts ${hours} h` : ''}. Not in any total`,
     'promo.note.all': ({ until, tariff }) => `for every ${tariff} customer at this network, until ${until}`,
     'promo.note.allAny': ({ until, tariff }) => `for every ${tariff} customer at any MOBI.E charger, until ${until}`,
 
     'note.outside': () => 'Outside MOBI.E: pay the operator directly, no CEME.',
     'note.noUserTariff': () => "None of the user's tariffs apply at this socket.",
+    'note.noUserTariff.driver': () => 'None of your tariffs apply at this socket.',
     'note.noTariff': () => 'No CEME tariff applies to this socket.',
     'note.noCeme': () => "CEME energy prices are unavailable right now (the pricing service didn't answer), so this socket has no CEME total; the other ways to pay are listed. Say so, and suggest trying again in a few minutes for the CEME price.",
+    'note.noCeme.driver': () => "CEME energy prices are unavailable right now (the pricing service didn't answer), so this socket has no CEME total; the other ways to pay are listed. Try again in a few minutes for the CEME price.",
     'note.truncated': ({ n, total }) => `Only the ${n} nearest of the ${total} sites found were priced, to keep the answer fast; narrow the search (radius_km, corridor_km, filters) to see the rest.`,
     'note.tariffsCut': ({ n, total, narrowed }) => narrowed
       ? `Only the first ${n} of the ${total} matching tariffs are listed.`
@@ -193,14 +196,17 @@ export const MESSAGES = {
     'promo.note.final': () => 'substitui a soma habitual de energia + tarifa do operador, mesmo onde esta seria mais baixa',
     'promo.note.freeLeft': ({ left, free }) => `restam ${left} dos ${free} kWh grátis deste mês, usados primeiro neste carregamento; assumimos que cobrem só a energia e o acesso às redes (imposto, activação e tarifa do operador pagam-se na mesma)`,
     'promo.note.freeUnknown': ({ free }) => `cotado como se ainda não tivesse gasto nenhum dos ${free} kWh grátis deste mês: passa month_kwh (kWh já carregados este mês com este tarifário) para o aplicar; assumimos que cobrem só a energia e o acesso às redes`,
+    'promo.note.freeUnknown.driver': ({ free }) => `cotado como se ainda não tivesses gasto nenhum dos ${free} kWh grátis deste mês: diz ao assistente quantos kWh já carregaste este mês com este tarifário para o aplicar; assumimos que cobrem só a energia e o acesso às redes`,
     'promo.note.new': ({ until, hours }) => `só para clientes novos: adesão até ${until}${hours ? `, e o desconto dura ${hours} h` : ''}. Não entra em nenhum total`,
     'promo.note.all': ({ until, tariff }) => `para todos os clientes ${tariff} nesta rede, até ${until}`,
     'promo.note.allAny': ({ until, tariff }) => `para todos os clientes ${tariff} em qualquer posto MOBI.E, até ${until}`,
 
     'note.outside': () => 'Fora da MOBI.E: paga-se directamente ao operador, sem CEME.',
     'note.noUserTariff': () => 'Nenhum dos tarifários do utilizador se aplica a esta tomada.',
+    'note.noUserTariff.driver': () => 'Nenhum dos teus tarifários se aplica a esta tomada.',
     'note.noTariff': () => 'Nenhum tarifário CEME se aplica a esta tomada.',
     'note.noCeme': () => 'Os preços de energia dos CEME não estão disponíveis neste momento (o serviço de preços não respondeu), por isso esta tomada não tem total CEME; estão as outras formas de pagar. Diz isso ao utilizador e sugere tentar daqui a uns minutos para o preço CEME.',
+    'note.noCeme.driver': () => 'Os preços de energia dos CEME não estão disponíveis neste momento (o serviço de preços não respondeu), por isso esta tomada não tem total CEME; estão as outras formas de pagar. Tenta daqui a uns minutos para o preço CEME.',
     'note.truncated': ({ n, total }) => `Só foram cotados os ${n} locais mais próximos dos ${total} encontrados, para a resposta ser rápida; restringe a pesquisa (radius_km, corridor_km, filtros) para ver os restantes.`,
     'note.tariffsCut': ({ n, total, narrowed }) => narrowed
       ? `Só estão listados os primeiros ${n} dos ${total} tarifários que correspondem.`

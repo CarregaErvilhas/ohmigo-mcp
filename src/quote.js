@@ -37,6 +37,10 @@
 //             they didn't list never does: that's a tip (notYours). Chargers
 //             are ranked by it, so an IONITY whose own app beats every CEME
 //             ranks where it should.
+//
+// `note` talks to the assistant. Where its wording only fits the assistant,
+// `driverNote` says the same to the driver, for ui/results.html, which the
+// driver reads with no assistant in between.
 
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
@@ -359,6 +363,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     base.total = null;
     base.cemeUnavailable = true;
     base.note = t('note.noCeme');
+    base.driverNote = t('note.noCeme.driver');
     base.options.push(...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region));
     base.options.sort((a, b) => a.total - b.total);
     base.best = bestOption(base.options, null);
@@ -375,6 +380,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (!ceme) {
     base.total = null;
     base.note = picked.missing ? t('note.noUserTariff') : t('note.noTariff');
+    if (picked.missing) base.driverNote = t('note.noUserTariff.driver');
     base.options.push(...extras);
     base.best = bestOption(base.options, null);
     return base;
