@@ -150,24 +150,6 @@ test('sessionProfile: a session past the limit, or with no end, is refused befor
   assert.throws(() => sessionProfile([{ minutes: limit, kwh: 5 }, { minutes: limit, kwh: 5 }], start), RangeError);
 });
 
-test('estimateSession: a socket declaring 0 kW or less counts as unknown power, on every path', () => {
-  const dc = { batteryKwh: 60, startPct: 20, targetPct: 80 };
-  const cars = [
-    [false, { ...dc, acKw: 11 }],
-    [true, dc],
-    [true, { ...dc, dc10to80Minutes: 30 }],
-    [true, { ...dc, curve: [{ soc: 0, kw: 100 }, { soc: 100, kw: 50 }] }],
-  ];
-  for (const [isDc, c] of cars) for (const kw of [0, -5]) {
-    const s = estimateSession({ kw, dc: isDc }, c);
-    const unknown = estimateSession({ kw: null, dc: isDc }, c);
-    assert.ok(Number.isFinite(s.minutes) && s.minutes > 0, JSON.stringify(c));
-    assert.equal(s.minutes, unknown.minutes, JSON.stringify(c));
-    assert.deepEqual(s.assumptions, unknown.assumptions);
-    assert.ok(s.peakKw > 0);
-  }
-});
-
 test('quote: a session past the limit gets no quote and costs no ceme-v2 call, on every path', async () => {
   const sent = fakeCeme();
   const big = { batteryKwh: 250, startPct: 0, targetPct: 100 };
@@ -188,4 +170,18 @@ test('rank: leaves out what would take too long, counts it, and still ranks the 
   const r = await rank([{ site, points: [slowAc, fast] }], { batteryKwh: 250, startPct: 0, targetPct: 100 }, { lang: 'en' });
   assert.deepEqual(r.map(q => q.pointId), ['S1/P3']);
   assert.equal(r.tooLong, 1);
+});
+
+test('rank: what the driver\'s own filters drop does not count as too long', async () => {
+  fakeCeme();
+  const slowAc = { ...point, id: 'P2', kw: 3.7 };
+  const fast = { ...point, id: 'P3', kw: 50, dc: true };
+  const big = { batteryKwh: 250, startPct: 0, targetPct: 100 };
+  const inTime = await rank([{ site, points: [slowAc, fast] }], big, { lang: 'en', maxMinutes: 10 });
+  assert.deepEqual([inTime.length, inTime.tooLong], [0, 0]);
+  const busy = { get: () => ({ status: 'charging', fees: [] }) };
+  const free = await rank([{ site, points: [slowAc] }], big, { lang: 'en', live: busy, availableOnly: true });
+  assert.deepEqual([free.length, free.tooLong], [0, 0]);
+  const longer = await rank([{ site, points: [slowAc, fast] }], big, { lang: 'en', maxMinutes: 100_000 });
+  assert.deepEqual([longer.length, longer.tooLong], [1, 1]);
 });

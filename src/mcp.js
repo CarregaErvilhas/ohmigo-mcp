@@ -661,7 +661,10 @@ export function createServer(getDataset, live) {
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
     const tooLong = { hours: MAX_SESSION_HOURS, n: ranked.tooLong };
-    if (!ranked.length) return ranked.tooLong ? err(t('err.tooLong', tooLong), 'tooLong') : err(t('err.noneLeft'), 'noneLeft');
+    // err.tooLong says "at every socket", so only when that's what happened:
+    // with any socket dropped by a filter, raising the filter is the advice.
+    const sockets = candidates.reduce((n, c) => n + c.points.length, 0);
+    if (!ranked.length) return ranked.tooLong === sockets ? err(t('err.tooLong', tooLong), 'tooLong') : err(t('err.noneLeft'), 'noneLeft');
     const top = ranked.slice(0, a.limit);
     // Any MOBI.E socket without its CEME price was ranked on its other
     // prices only (or last): say so even when the top rows are all outside
@@ -685,7 +688,7 @@ export function createServer(getDataset, live) {
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // Summary lines on top of the JSON in the text (see ok).
-    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
+    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw ?? '?'} kW ${q.connector}) [${q.pointId}]`);
     return ok(data, [...notes, ...lines].join('\n'));
   });
 
@@ -719,7 +722,7 @@ export function createServer(getDataset, live) {
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
-    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${q.kw} kW ${q.connector} [${q.pointId}]`);
+    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${q.kw ?? '?'} kW ${q.connector} [${q.pointId}]`);
     const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));

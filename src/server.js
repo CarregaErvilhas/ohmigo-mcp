@@ -262,7 +262,10 @@ async function handle(req, res) {
     await transport.handleRequest(req, res, body);
   } catch (e) {
     console.error('[ohmigo]', e);
-    if (!res.headersSent) send(res, 500, { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null });
+    // With the headers out, a status can't be sent any more: closing is how
+    // the client learns this response won't finish.
+    if (res.headersSent) res.destroy();
+    else send(res, 500, { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null });
   }
 }
 

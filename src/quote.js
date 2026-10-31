@@ -415,13 +415,16 @@ export const byBest = (a, b) => sortKey(a) - sortKey(b);
 
 // Ranks sites by `best` (see sortKey), one row per site (its cheapest
 // point). MOBI.E and the networks outside it share one list: no network is
-// preferred, the price decides. `tooLong` on the list counts the sockets left
-// out because the session there would run past MAX_SESSION_HOURS.
+// preferred, the price decides. `tooLong` on the list counts the kinds of
+// socket the session limit left out, among those that passed the filters.
 export async function rank(candidates, car, opts = {}) {
   const simCache = new Map();
-  const quoted = await Promise.all(candidates.flatMap(({ site, points, ...dist }) =>
-    points.map(point => quotePoint({ site, point }, car, { ...opts, simCache }).then(q => q && { ...q, ...dist }))));
-  const all = quoted.filter(Boolean);
+  // A socket with no quote still goes through the filters below, as a session
+  // just past the limit: if the driver's own filters drop it, the limit
+  // didn't, and the note shouldn't say it did.
+  const noQuote = (site, point) => ({ tooLong: true, session: { minutes: MAX_SESSION_HOURS * 60 + 1 }, status: opts.live?.get(site.id, point.id)?.status ?? null });
+  const all = await Promise.all(candidates.flatMap(({ site, points, ...dist }) =>
+    points.map(point => quotePoint({ site, point }, car, { ...opts, simCache }).then(q => q ? { ...q, ...dist } : noQuote(site, point)))));
   let quotes = opts.maxMinutes ? all.filter(q => q.session.minutes <= opts.maxMinutes) : all;
   if (opts.availableOnly) quotes = quotes.filter(q => USABLE.has(q.status));
   const best = list => {
@@ -432,5 +435,5 @@ export async function rank(candidates, car, opts = {}) {
     }
     return [...bySite.values()].sort((a, b) => sortKey(a) - sortKey(b));
   };
-  return Object.assign(best(quotes), { tooLong: quoted.length - all.length });
+  return Object.assign(best(quotes.filter(q => !q.tooLong)), { tooLong: quotes.filter(q => q.tooLong).length });
 }

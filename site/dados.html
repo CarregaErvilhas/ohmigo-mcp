@@ -215,7 +215,7 @@ function postos(sites) {
     <tr><th>Local</th><th class="num">Tomadas</th><th class="num">kW</th><th>Ficha</th><th>Nível</th><th>Regime</th><th>Tarifa OPC</th><th>Ad hoc</th><th class="num">NAP €/kWh</th><th>Ofertas diretas aqui (€/kWh)</th></tr>
     ${rows.slice(0, max).map(({ s, first, span, p, ids }) => `<tr>
       ${first ? `<td class="wrap-ok" rowspan="${span}"><b>${esc(s.name ?? s.city)}</b> <span class="mut">${esc(s.name ? s.city : '')}</span><div class="mut" style="font-size:.75rem">${esc(s.address)} · ${esc(s.code.length > 16 ? s.code.slice(0, 8) + '…' : s.code)}</div></td>` : ''}
-      <td class="num" title="${esc(ids.join(', '))}">${ids.length}×</td><td class="num">${p.kw}</td><td>${esc(p.connector)}${p.dc ? ' DC' : ''}</td><td>${esc(p.level ?? '')}</td>
+      <td class="num" title="${esc(ids.join(', '))}">${ids.length}×</td><td class="num">${p.kw ?? '?'}</td><td>${esc(p.connector)}${p.dc ? ' DC' : ''}</td><td>${esc(p.level ?? '')}</td>
       <td>${esc(REGIME[p.regime] ?? p.regime)}</td><td>${esc(p.opc ?? '')}</td><td>${esc(p.adhoc ?? '')}</td><td class="num">${eur(p.napPrice)}</td>
       <td>${p.offers.map(x => `<span class="tag" title="${esc(x.id)}">${esc(x.label)}: ${eur(x.eurPerKwh)}</span>`).join('')}</td>
     </tr>`).join('')}

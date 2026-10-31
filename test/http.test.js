@@ -7,7 +7,10 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 let ceme, cemeDown = false, server, base, serverLog = '';
 
@@ -32,28 +35,33 @@ before(async () => {
   }).listen(0, '127.0.0.1');
   await once(ceme, 'listening');
 
-  server = spawn(process.execPath, ['src/server.js'], {
+  ({ proc: server, url: base } = await boot());
+});
+
+after(() => { server.kill('SIGKILL'); ceme.close(); });
+
+async function boot(dataset = 'test/fixtures/chargers.json') {
+  const proc = spawn(process.execPath, ['src/server.js'], {
     cwd: new URL('..', import.meta.url),
     env: {
-      ...process.env, PORT: '0', HOST: '127.0.0.1', DATASET_PATH: 'test/fixtures/chargers.json',
+      ...process.env, PORT: '0', HOST: '127.0.0.1', DATASET_PATH: dataset,
       CEME_API_URL: `http://127.0.0.1:${ceme.address().port}`, CEME_API_KEY: '',
       NAP_STATUS_URL: 'http://127.0.0.1:9/live', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let out = '';
-  server.stdout.on('data', c => { out += c; });
-  server.stderr.on('data', c => { serverLog += c; });
-  base = await new Promise((resolve, reject) => {
-    server.stdout.on('data', () => { const m = out.match(/http:\/\/(\S+?)\/mcp/); if (m) resolve(`http://${m[1]}`); });
-    server.on('exit', code => reject(new Error(`server exited ${code}: ${out}`)));
+  proc.stdout.on('data', c => { out += c; });
+  proc.stderr.on('data', c => { serverLog += c; });
+  const url = await new Promise((resolve, reject) => {
+    proc.stdout.on('data', () => { const m = out.match(/http:\/\/(\S+?)\/mcp/); if (m) resolve(`http://${m[1]}`); });
+    proc.on('exit', code => reject(new Error(`server exited ${code}: ${out}`)));
   });
-});
+  return { proc, url };
+}
 
-after(() => { server.kill('SIGKILL'); ceme.close(); });
-
-async function call(name, args) {
-  const r = await fetch(`${base}/mcp`, {
+async function call(name, args, url = base) {
+  const r = await fetch(`${url}/mcp`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'mcp-protocol-version': '2025-06-18' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: name === 'tools/list' ? name : 'tools/call', params: name === 'tools/list' ? {} : { name, arguments: args } }),
@@ -370,10 +378,38 @@ test('http: a session past the limit is a business error in the user\'s language
   }
   const ranking = await call('find_cheapest_charging', { place: 'Leiria', ...slow, lang: 'en' });
   assert.equal(ranking.structuredContent.code, 'tooLong');
+  // Here the time limit dropped everything first, so raising it is the advice.
+  const inTime = await call('find_cheapest_charging', { place: 'Leiria', ...slow, max_minutes: 30, lang: 'en' });
+  assert.equal(inTime.structuredContent.code, 'noneLeft');
   // Only the AC sockets are too slow here: they're left out, and the note says so.
   const some = (await call('estimate_charging_cost', { site: 'GLP-LRA-00156', battery_kwh: 250, start_pct: 0, target_pct: 100, car_ac_kw: 1, lang: 'en' })).structuredContent;
   assert.ok(some.results.length > 0 && some.results.every(q => q.dc));
-  assert.ok(some.notes.some(n => /left out/.test(n)));
+  assert.ok(some.notes.some(n => /Kinds of socket left out/.test(n)));
+});
+
+test('http: a socket declared at 0 kW is priced and shown as unknown power', async () => {
+  const data = JSON.parse(readFileSync(new URL('fixtures/chargers.json', import.meta.url)));
+  for (const site of data.sites) for (const p of site.points) if (p.connector === 'T2') { p.kw = 0; delete p.osm; }
+  const dir = mkdtempSync(join(tmpdir(), 'ohmigo-'));
+  writeFileSync(join(dir, 'chargers.json'), JSON.stringify(data));
+  const zero = await boot(join(dir, 'chargers.json'));
+  try {
+    const args = { site: 'GLP-LRA-00156', connectors: ['T2'], ...car, lang: 'en' };
+    const r = await call('estimate_charging_cost', args, zero.url);
+    assert.equal(r.isError, undefined);
+    const [q] = r.structuredContent.results;
+    assert.equal(q.kw, null);
+    assert.ok(q.assumptions.some(a => /charger power not published/.test(a)), JSON.stringify(q.assumptions));
+    assert.ok(q.options.every(o => o.kind !== 'direct'), 'no offers for a power band');
+    const looked = await call('lookup_charger', { query: 'GLP-LRA-00156', connectors: ['T2'], lang: 'en' }, zero.url);
+    for (const x of [r, looked]) {
+      assert.doesNotMatch(x.content[0].text, /\b0 kW|null kW/);
+      assert.match(x.content[0].text, /\? kW/);
+    }
+  } finally {
+    zero.proc.kill('SIGKILL');
+    rmSync(dir, { recursive: true });
+  }
 });
 
 test('http: a request target that does not parse gets a 400, is logged, and the server keeps answering', async () => {

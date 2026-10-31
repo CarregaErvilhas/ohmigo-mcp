@@ -124,6 +124,38 @@
       }
     },
     {
+      "id": "session-too-long",
+      "why": "Past the session limit there is no estimate: say so and suggest a faster charger or checking the figures, never invent a price or a duration.",
+      "message": "Tenho uma carrinha elétrica com 240 kWh de bateria útil, a 0%. Quero carregá-la até 100% no posto LRA-90003 da EDP em Leiria. Quanto custa?",
+      "requires": [
+        {
+          "site": "EDP-LRA-90003"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "battery_kwh": [
+                240,
+                240
+              ]
+            }
+          }
+        ],
+        "answer": {
+          "noMatch": [
+            "\\d\\s*€"
+          ]
+        },
+        "judge": [
+          "Does the reply say there is no estimate because the session would take too long at this charger (over 72 hours), without giving a price?",
+          "Does the reply suggest a faster charger or checking the battery and power figures?"
+        ]
+      }
+    },
+    {
       "id": "motorway-ask-direction",
       "why": "A service area with a charger on each side of the road: without a direction, ask where the user is heading; never guess one.",
       "message": "Vou parar na área de serviço da Galp em Pombal, na A1, para carregar. Quanto me vai custar? Tenho um VW ID.4 Pro (77 kWh) e estou com 15%.",

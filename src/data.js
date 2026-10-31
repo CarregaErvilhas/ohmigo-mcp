@@ -59,8 +59,12 @@ export class Dataset {
         // So they replace it everywhere (filters, duration, price band); the
         // NAP's value stays in napKw/napV/napA for the answers to show.
         for (const [k, nap] of [['kw', 'napKw'], ['v', 'napV'], ['a', 'napA']]) {
-          if (p.osm?.[k] != null && p[nap] === undefined) { p[nap] = p[k] ?? null; p[k] = p.osm[k]; }
+          if (p.osm?.[k] > 0 && p[nap] === undefined) { p[nap] = p[k] ?? null; p[k] = p.osm[k]; }
         }
+        // A socket can't deliver 0 kW: in the data that's a blank, not a
+        // measurement. Blank here, so the duration, the price band and the
+        // answers all read it as unknown power.
+        if (p.kw <= 0) p.kw = null;
         // A point id is only unique within its site ("19" exists on several
         // sites), so the key is "SITE/POINT". The bare id also resolves when
         // it happens to be unique.
