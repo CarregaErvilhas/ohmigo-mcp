@@ -39,16 +39,27 @@ export const PAIR_KM = 2;
 // A motorway or expressway in the address or OSM name: "A1", "IC2", "IP3",
 // "área de serviço". Not a bare "km": national roads ("EN1 km 152") have no
 // separate carriageways, you just cross.
-const MOTORWAY = /\b(?:a|ic|ip)\s?\d{1,2}\b|\barea de servic[oi]\b/;
-export const onMotorway = site => MOTORWAY.test(fold(`${site.address ?? ''} ${site.osm?.name ?? ''}`));
+const MOTORWAY = /\ba-?\d{1,2}\b|\bi[cp][\s-]?\d{1,2}\b|\barea de servic[oi]\b/;
+// "A 22" with a space also reads as a door number: "40 a 48" (a range, lower
+// case or after a number) or "Avenida das Laranjeiras A 2" (a door on a
+// street). So it counts in capitals, outside a street address.
+const SPACED_A = /(?<!\d\s)\bA \d{1,2}\b/;
+const STREET = /^(?:rua|r\.|avenida|av\.|travessa|largo|praca|alameda|estrada)\s/;
+const namesMotorway = text => MOTORWAY.test(fold(text)) || (SPACED_A.test(text) && !STREET.test(fold(text)));
+export const onMotorway = site => [site.address, site.osm?.name].some(t => t && namesMotorway(t));
 
 // The direction a site says it serves, as published: "N/S", "S-N", "sentido
-// Lisboa". null when it doesn't say.
-const LABEL = /\b([NSEO])\s?[-/]\s?([NSEO])\b|\bsentido\s+([^,;()]+)/i;
+// Lisboa". null when it doesn't say. Off a motorway a compass pair is almost
+// always "S/N", sem número (no door number), so it only counts on one, and
+// only in capitals: nobody writes the directions in lower case, "s/n" is
+// always the door. "sentido" says what it means anywhere, in any case.
+const SENTIDO = /\b(?i:sentido)\s+(?<town>[^,;()]+)/;
+const LABEL = new RegExp(`\\b(?<from>[NSEO])\\s?[-/]\\s?(?<to>[NSEO])\\b|${SENTIDO.source}`);
 function parseLabel(site) {
+  const label = onMotorway(site) ? LABEL : SENTIDO;
   for (const text of [site.osm?.name, site.address]) {
-    const m = text?.match(LABEL);
-    if (m) return { text: m[0].trim(), from: m[1]?.toUpperCase(), to: m[2]?.toUpperCase(), town: m[3]?.trim() };
+    const m = text?.match(label);
+    if (m) return { text: m[0].trim(), from: m.groups.from, to: m.groups.to, town: m.groups.town?.trim() };
   }
   return null;
 }

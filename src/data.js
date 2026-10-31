@@ -202,7 +202,7 @@ export class Dataset {
   //                hours pass: most sites have them, and a guess would hide
   //                chargers that are open)
   pointFilter({ minKw, connectors, dcOnly, minVoltage, cardPayment: card, cable, openAt } = {}) {
-    const cs = connectors?.length ? new Set(connectors.map(c => c.toUpperCase())) : null;
+    const cs = connectors?.length ? new Set(connectors) : null;
     const minV = this.hasVoltage ? minVoltage : null;
     const siteOk = new Map();
     const siteFits = s => {
