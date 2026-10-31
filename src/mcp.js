@@ -170,7 +170,7 @@ function placeLine(pl) {
 
 const Filter = {
   min_kw: z.number().positive().optional().describe('Minimum power, kW'),
-  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'iec60309x2single16'])).optional().describe('Plug types. Domestic plug: filter iec60309x2single16 (blue CEE, needs adapter; no Schuko)'),
+  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'iec60309x2single16'])).optional().describe('Plug types. Domestic plug: iec60309x2single16 (blue CEE, needs adapter; no Schuko)'),
   dc_only: z.boolean().optional().describe('Only DC (fast) chargers'),
   min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum voltage, V (e.g. 800 for an 800 V car)'),
   card_payment: z.boolean().optional().describe('Only where a bank card works at the charger (terminal or contactless)'),
