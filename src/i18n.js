@@ -86,6 +86,8 @@ export const MESSAGES = {
     'note.outside': () => 'Outside MOBI.E: pay the operator directly, no CEME.',
     'note.noUserTariff': () => "None of the user's tariffs apply at this socket.",
     'note.noUserTariff.driver': () => 'None of your tariffs apply at this socket.',
+    'note.userTariffDirect': ({ label }) => `The user's CEME tariff doesn't apply at this socket, but the same app has its own price here: ${label}. That is the total.`,
+    'note.userTariffDirect.driver': ({ label }) => `Your CEME tariff doesn't apply at this socket, but the same app has its own price here: ${label}. That is the total.`,
     'note.noTariff': () => 'No CEME tariff applies to this socket.',
     'note.noCeme': () => "CEME energy prices are unavailable right now (the pricing service didn't answer), so this socket has no CEME total; the other ways to pay are listed. Say so, and suggest trying again in a few minutes for the CEME price.",
     'note.noCeme.driver': () => "CEME energy prices are unavailable right now (the pricing service didn't answer), so this socket has no CEME total; the other ways to pay are listed. Try again in a few minutes for the CEME price.",
@@ -94,6 +96,7 @@ export const MESSAGES = {
       ? `Only the first ${n} of the ${total} matching tariffs are listed.`
       : `Only the first ${n} of the ${total} tariffs are listed; if the user's isn't here, call again with query (the CEME or tariff name) instead of saying it doesn't exist.`,
     'note.detailTop': ({ n }) => `The timeline (detail) is only included for the first ${n} results; for one charger's breakdown, use estimate_charging_cost.`,
+    'note.unlisted': () => 'Only popular CEME tariffs are priced, and at some chargers others would cost less than the headline (unlistedCheaper: how many). Many are for clients with another contract or closed to new sign-ups, so the driver may already hold one. Once per conversation, in one sentence, say there are cheaper tariffs not shown and ask whether they have a card from another CEME; if so, find it with list_ceme_tariffs and pass tariff_ids.',
     'note.moreWays': () => 'Each charger has more ways to pay in options than its best (other CEMEs, bank card at the charger, apps, subscriptions): tell the user there are more and offer to list them.',
     'err.tariffs': () => "The CEME tariff list can't be fetched right now (the pricing service didn't answer). Try again in a few minutes.",
     'err.placeWhich': ({ place, towns }) => `"${place}" fits several towns: ${towns}. Ask the user which one (or pass lat/lon) and call again with its full name.`,
@@ -210,6 +213,8 @@ export const MESSAGES = {
     'note.outside': () => 'Fora da MOBI.E: paga-se directamente ao operador, sem CEME.',
     'note.noUserTariff': () => 'Nenhum dos tarifários do utilizador se aplica a esta tomada.',
     'note.noUserTariff.driver': () => 'Nenhum dos teus tarifários se aplica a esta tomada.',
+    'note.userTariffDirect': ({ label }) => `O tarifário CEME do utilizador não se aplica a esta tomada, mas a mesma app tem um preço próprio aqui: ${label}. É esse o total.`,
+    'note.userTariffDirect.driver': ({ label }) => `O teu tarifário CEME não se aplica a esta tomada, mas a mesma app tem um preço próprio aqui: ${label}. É esse o total.`,
     'note.noTariff': () => 'Nenhum tarifário CEME se aplica a esta tomada.',
     'note.noCeme': () => 'Os preços de energia dos CEME não estão disponíveis neste momento (o serviço de preços não respondeu), por isso esta tomada não tem total CEME; estão as outras formas de pagar. Diz isso ao utilizador e sugere tentar daqui a uns minutos para o preço CEME.',
     'note.noCeme.driver': () => 'Os preços de energia dos CEME não estão disponíveis neste momento (o serviço de preços não respondeu), por isso esta tomada não tem total CEME; estão as outras formas de pagar. Tenta daqui a uns minutos para o preço CEME.',
@@ -218,6 +223,7 @@ export const MESSAGES = {
       ? `Só estão listados os primeiros ${n} dos ${total} tarifários que correspondem.`
       : `Só estão listados os primeiros ${n} dos ${total} tarifários; se o do utilizador não estiver aqui, volta a chamar com query (o nome do CEME ou do tarifário) em vez de dizer que não existe.`,
     'note.detailTop': ({ n }) => `A timeline (detail) só vem nos primeiros ${n} resultados; para o detalhe de um posto, usa estimate_charging_cost.`,
+    'note.unlisted': () => 'Só se cotam os tarifários CEME populares, e em alguns postos outros sairiam mais baratos do que a primeira opção (unlistedCheaper: quantos). Muitos são para clientes com outro contrato ou já fechados a novas adesões, por isso o condutor pode já ter um. Uma vez por conversa, numa frase, diz que há tarifários mais baratos fora da lista e pergunta se tem cartão de outro CEME; se tiver, encontra-o com list_ceme_tariffs e passa tariff_ids.',
     'note.moreWays': () => 'Cada posto tem mais formas de pagar em options do que a melhor (outros CEME, cartão bancário no posto, apps, subscrições): diz ao utilizador que há mais e oferece-te para as listar.',
     'err.tariffs': () => 'Não é possível obter a lista de tarifários CEME neste momento (o serviço de preços não respondeu). Tenta daqui a alguns minutos.',
     'err.placeWhich': ({ place, towns }) => `"${place}" serve a várias localidades: ${towns}. Pergunta ao utilizador qual é (ou usa lat/lon) e volta a chamar com o nome completo.`,

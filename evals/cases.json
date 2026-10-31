@@ -477,6 +477,30 @@
       }
     },
     {
+      "id": "unlisted-ask",
+      "why": "Without tariff_ids only popular tariffs are priced; when cheaper ones are left out (unlistedCheaper), say so once and ask which CEME card the user has, without listing them.",
+      "message": "Quanto me custa carregar amanhã às 9h no posto da EDP na Zona Portuária de Viana do Castelo? Tesla Model 3 Long Range, de 20% a 80%.",
+      "requires": [
+        {
+          "site": "EDP-VCT-00049"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "tariff_ids": false
+            }
+          }
+        ],
+        "judge": [
+          "If a result has unlistedCheaper above 0, does the reply say, briefly, that there are cheaper tariffs not shown and ask whether the user has a card from another CEME (or which one)? Answer n/a if no result has unlistedCheaper.",
+          "Does the reply still lead with a price for the charge, rather than only asking questions?"
+        ]
+      }
+    },
+    {
       "id": "remembered-car",
       "why": "What the app remembers (car, specs, card) goes into the call without asking again.",
       "memory": "Carro: Hyundai Ioniq 5 de 77,4 kWh (bateria útil cerca de 74 kWh), AC até 10,9 kW, DC até cerca de 230 kW, 10-80% DC em 18 minutos. Paga com o Cartão EDP Charge (Simples), tariff_id edp-bt-cartoedp.",
