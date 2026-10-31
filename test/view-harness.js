@@ -22,6 +22,8 @@ export function renderView(structuredContent) {
     },
   });
   app.ontoolresult({ structuredContent });
-  // One string per charger row, the first being the top of the ranking.
-  return els.list.innerHTML.split('<div class="row').slice(1);
+  // One string per charger row, the first being the top of the ranking, and
+  // in `above` whatever comes before the rows.
+  const [above, ...rows] = els.list.innerHTML.split('<div class="row');
+  return Object.assign(rows, { above });
 }

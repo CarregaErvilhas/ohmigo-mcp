@@ -54,10 +54,20 @@ test('view: the first row is highlighted by best, not by the CEME total', () => 
 
 test('view: a socket with no published power or plug reads "?"', () => {
   const [unknown] = renderView({ lang: 'en', results: [row({ kw: null, connector: 'nan' })] });
-  assert.match(unknown, /\? kW \? DC/);
+  assert.match(unknown, /\? kW \? · /);
   assert.doesNotMatch(unknown, /nan/);
-  assert.match(renderView({ lang: 'en', results: [row({ connector: null })] })[0], /50 kW \? DC/);
-  assert.match(renderView({ lang: 'en', results: [row({})] })[0], /50 kW CCS2 DC/);
+  // No plug known: neither AC nor DC is claimed, whatever dc says.
+  assert.match(renderView({ lang: 'en', results: [row({ connector: null })] })[0], /50 kW \? · /);
+  assert.match(renderView({ lang: 'en', results: [row({ connector: 'nan', dc: false })] })[0], /50 kW \? · /);
+  assert.match(renderView({ lang: 'en', results: [row({})] })[0], /50 kW CCS2 DC · /);
+  assert.match(renderView({ lang: 'en', results: [row({ dc: false })] })[0], /50 kW CCS2 AC · /);
+});
+
+test('view: with ceme-v2 down a banner sits above the rows, in the answer\'s language', () => {
+  const outside = row({ regime: 'sem_ceme', best: noCard, options: [noCard] });
+  assert.match(renderView({ lang: 'en', cemeUnavailable: true, results: [outside] }).above, /class="banner">CEME prices are unavailable/);
+  assert.match(renderView({ lang: 'pt', cemeUnavailable: true, results: [outside] }).above, /class="banner">Os preços CEME não estão disponíveis/);
+  assert.equal(renderView({ lang: 'en', results: [outside] }).above, '');
 });
 
 test('view: the driver gets driverNote, never the note written for the assistant', () => {

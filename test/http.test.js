@@ -441,6 +441,7 @@ test('http: with ceme-v2 down, the other ways to pay still come back, flagged', 
     assert.ok(r.structuredContent.results[0].best, 'the fixture has a best here');
     const rows = renderView(r.structuredContent);
     assert.match(rows[0], /^ best"/);
+    assert.match(rows.above, /class="banner"/);
     const adhoc = r.structuredContent.results.flatMap(q => q.options).find(o => o.kind === 'adhoc');
     assert.ok(rows.join('').includes(`<dt>${adhoc.label}</dt>`));
     assert.match(rows.join(''), /Try again in a few minutes/);

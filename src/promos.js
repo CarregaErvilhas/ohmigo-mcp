@@ -106,7 +106,9 @@ export function promoOut(p, { quote, total, saving, applied }, t) {
     ? t('promo.note.new', { until: p.to, hours: p.maxHours })
     : t(p.network ? 'promo.note.all' : 'promo.note.allAny', { until: p.to, tariff })];
   if (p.target === 'FINAL') notes.push(t('promo.note.final'));
+  let driverNote;
   if (p.target === 'KWH_GRATIS') {
+    if (!p.monthKwhKnown) driverNote = [...notes, t('promo.note.freeUnknown.driver', { free: t.num(p.freeKwh, 1) })].join('; ');
     notes.push(p.monthKwhKnown
       ? t('promo.note.freeLeft', { left: t.num(p.freeKwhLeft, 2), free: t.num(p.freeKwh, 1) })
       : t('promo.note.freeUnknown', { free: t.num(p.freeKwh, 1) }));
@@ -120,7 +122,7 @@ export function promoOut(p, { quote, total, saving, applied }, t) {
     total, saving, newCustomers: !!p.newCustomers, maxHours: p.maxHours ?? null,
     from: p.from, until: p.to, url: p.url, checked: p.checked, applied,
     note: notes.join('; '),
-    ...(p.target === 'KWH_GRATIS' && !p.monthKwhKnown && { driverNote: [...notes.slice(0, -1), t('promo.note.freeUnknown.driver', { free: t.num(p.freeKwh, 1) })].join('; ') }),
+    ...(driverNote && { driverNote }),
   };
 }
 

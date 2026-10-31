@@ -94,8 +94,10 @@ test('free kWh: any MOBI.E charger; in the total only when the month count came 
   assert.equal(unknown.label, 'GoldEnergy: first 7 kWh of each month free');
   assert.deepEqual([unknown.freeKwhLeft, unknown.monthKwhKnown, unknown.saving], [7, false, 2]);
   assert.match(unknown.note, /pass month_kwh/);
-  // The view shows driverNote: same facts, no order for the assistant.
+  // The view shows driverNote: same facts and a next step for the driver, no
+  // order for the assistant.
   assert.doesNotMatch(unknown.driverNote, /month_kwh/);
+  assert.match(unknown.driverNote, /tell the assistant how many kWh/);
   assert.match(unknown.driverNote, /^for every .*; priced as if none of this month's 7 free kWh/);
   const [known] = promoTips([{ ...q, promos: [gold({ monthKwhKnown: true, freeKwhLeft: 2, totalEur: 7.4 })] }], galp, ctx, translator('pt'));
   assert.match(known.note, /restam 2 dos 7 kWh grátis/);
