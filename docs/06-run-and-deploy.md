@@ -38,14 +38,27 @@ the path and has the same two-language strings block and parity test. If the
 server starts keeping or sending anything new about the user, update the
 privacy page first.
 
+`GET /.well-known/security.txt` is the RFC 9116 file with the contact for
+reporting a security problem. It's generated per request (`securityTxt` in
+`src/server.js`), so `Expires` is always ahead of today.
+
 `GET /healthz` shows how the server is doing: `status` is `ok`, or
 `degraded` with the reasons in `problems` (the last live feed refresh failed,
 ceme-v2 isn't answering, the dataset missed its weekly rebuild). It answers 200
 either way, so the platform doesn't restart a container over an outage
-elsewhere; point a monitor at `status`. Also there: `version`, `dataAsOf`,
-`dataAgeHours`, the live feed (`publishedAt`, `fresh`, `failures`, `retryAt`,
-`bytesLast`), the ceme-v2 breaker, per-tool counters (`calls`, `errors`,
-`avgMs`, `maxMs`, `maxBytes`) and memory.
+elsewhere; point a monitor at `status`. Anyone can read that summary, plus
+`version`, `dataAsOf` and `dataAgeHours`; `problems` names what's wrong, never
+the raw error. Send the `x-healthz-token` header with the value of
+`HEALTHZ_TOKEN` and the same answer adds the live feed (`publishedAt`, `fresh`,
+`failures`, `retryAt`, `bytesLast`, the last `error`), the ceme-v2 breaker,
+per-tool counters (`calls`, `errors`, `avgMs`, `maxMs`, `maxBytes`) and memory:
+
+```bash
+curl -H "x-healthz-token: $HEALTHZ_TOKEN" http://127.0.0.1:3002/healthz
+```
+
+With `HEALTHZ_TOKEN` unset, nobody gets the detail. A wrong token isn't an
+error: you get the summary and a 200.
 
 Every tool call logs one JSON line (`tool`, `ms`, `isError`, `code`,
 `bytes`). Never the arguments: they carry the user's location, car and
@@ -80,10 +93,11 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `LIVE_TTL_SECONDS` | `300` | how long a live feed copy counts as fresh (±10 %) |
 | `LIVE_WAIT_SECONDS` | `25` | how long a request waits for a live download |
 | `LIVE_WARMUP` | on | `0` skips the boot download |
+| `HEALTHZ_TOKEN` | none | unlocks the detail on `/healthz`, sent in the `x-healthz-token` header. Without it the detail stays private. |
 | `OHMIGO_QA` | off | `1` turns on QA mode: every result carries the quarter-hour `timeline` and a `debug` block, and the assistant is told to show them. Never in production |
 | `NAP_STATUS_URL` | MOBI.E's `evActualStatus` | the live feed |
 
-Secrets (`CEME_API_KEY`) go in the hosting platform's secret variables, never
+Secrets (`CEME_API_KEY`, `HEALTHZ_TOKEN`) go in the hosting platform's secret variables, never
 in the repo.
 
 ## Deploy (Zerops + Cloudflare)
@@ -105,8 +119,10 @@ Production is `https://ohmigo.ocarroeletrico.com/mcp`, Zerops project
   set `CEME_API_KEY_RATE_LIMIT` (requests per minute for that key; see
   ceme-v2's `docs/04-api-auth.md`). A secret: set it on the service in the
   Zerops console.
+- `HEALTHZ_TOKEN`: a long random value (`openssl rand -hex 32`), also a secret.
+  A monitor only needs it to read `live`, `ceme`, `tools` or `memoryMb`.
 
-The readiness check is `/healthz`. Boot loads the dataset (a few seconds) and
+The readiness check is `/healthz`, which only needs the 200 of the summary. Boot loads the dataset (a few seconds) and
 answers before the live feed finishes downloading. If the dataset download
 fails, boot retries for a while, inside the readiness timeout
 (`loadDataset` in `src/server.js`; keep the two in step), then exits, so the

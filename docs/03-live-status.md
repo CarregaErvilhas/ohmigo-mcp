@@ -49,7 +49,7 @@ download is the slow part.
 "unclosed tag" error) or the connection resets. Other failures (an HTTP
 error, a refused connection) are not retried at once: the next attempts back
 off (`BACKOFF_MS` in `src/live.js`), and requests in between answer with the copy we
-have instead of starting another download. `/healthz` shows `failures`,
+have instead of starting another download. `/healthz` (with its token, see [06](06-run-and-deploy.md)) shows `failures`,
 `retryAt` and the size of the last download (`bytesLast`).
 
 **One warm-up at boot**, so the first user after a deploy doesn't wait, a
