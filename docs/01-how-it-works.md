@@ -36,7 +36,7 @@ Follow one `find_cheapest_charging` call through the code:
 2. **`src/mcp.js`** validates the arguments against the zod schema, picks the
    language (`lang`), and turns "Leiria" into coordinates
    (`Dataset.resolvePlace`).
-3. **`src/live.js`** makes sure the live status is less than 15 minutes old.
+3. **`src/live.js`** makes sure the live status is less than 5 minutes old.
    If it isn't, it downloads the NAP feed while the user sees a progress
    message ([03](03-live-status.md)).
 4. **`src/data.js`** finds every site within the radius, or along the route,
@@ -111,7 +111,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/i18n.js` | Every user-facing sentence, in English and Portuguese |
 | `src/data.js` | Loads the dataset; searches by distance, along a route or the whole country; town names to coordinates; the operator list (`list_operators`) |
 | `src/geo.js` | Distances: haversine, distance to a route |
-| `src/hours.js` | Opening hours (NAP and OpenStreetMap, both in OSM syntax): is the site open at a given moment |
+| `src/hours.js` | Opening hours (NAP and OpenStreetMap, both in OSM syntax): is the site open at a given moment, or does it close during a session |
 | `src/lookup.js` | Finds a charger by what the user calls it: code, operator or brand, OSM name, town, address |
 | `src/direction.js` | Motorway service areas: which side the driver can reach, from where they're heading |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |

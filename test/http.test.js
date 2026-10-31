@@ -11,7 +11,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { moreWays } from '../src/mcp.js';
+import { moreWays, socketKindKey } from '../src/mcp.js';
 import { renderView } from './view-harness.js';
 
 let ceme, cemeDown = false, cheapTip = false, server, base, serverLog = '';
@@ -57,7 +57,7 @@ async function boot(dataset = 'test/fixtures/chargers.json') {
     env: {
       ...process.env, PORT: '0', HOST: '127.0.0.1', DATASET_PATH: dataset,
       CEME_API_URL: `http://127.0.0.1:${ceme.address().port}`, CEME_API_KEY: '',
-      NAP_STATUS_URL: 'http://127.0.0.1:9/live', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1',
+      NAP_STATUS_URL: 'http://127.0.0.1:9/live', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1', HEALTHZ_TOKEN: 'test-token',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -360,6 +360,16 @@ test('http: a site the NAP left nameless is its id prefix\'s operator everywhere
   assert.ok(!glp.notes.some(n => /inferred/.test(n)));
 });
 
+test('socketKindKey: sockets at sites with different hours stay apart, so a closing warning is not lost or invented', () => {
+  const point = { kw: 22, dc: false, connector: 'T2', regime: 'mobie' };
+  const site = (hours, osm) => ({ operatorId: 'X', hours, osm: osm && { openingHours: osm } });
+  const key = socketKindKey(site('Mo-Su 09:00-21:00'), point);
+  assert.equal(key, socketKindKey(site('Mo-Su 09:00-21:00'), point));
+  assert.notEqual(key, socketKindKey(site('24/7'), point));
+  assert.notEqual(key, socketKindKey(site(undefined, 'Mo-Su 09:00-21:00'), point), 'which source says it matters: the warning quotes it');
+  assert.notEqual(socketKindKey(site('24/7'), point), socketKindKey(site('24/7', 'Mo-Su 09:00-21:00'), point));
+});
+
 test('http: an inferred socket stays apart from its named sibling, so its assumption survives', async () => {
   const { results } = (await call('estimate_charging_cost', { site: 'CNT-9648PL0003', battery_kwh: 58, start_pct: 20, lang: 'en', at: '2026-11-02T12:00:00Z' })).structuredContent;
   const lent = results.filter(q => q.siteId === 'CNT-9648PL0003');
@@ -510,7 +520,7 @@ test('http: the landing page is rendered in each language at its own URL, for cr
 });
 
 test('http: /healthz, robots.txt, favicon and 404', async () => {
-  const h = await (await fetch(`${base}/healthz`)).json();
+  const h = await (await fetch(`${base}/healthz`, { headers: { 'x-healthz-token': 'test-token' } })).json();
   assert.equal(h.ok, true);
   assert.ok(['ok', 'degraded'].includes(h.status));
   assert.ok(h.problems.some(p => p.startsWith('live:')), 'the fake feed is down');
