@@ -11,7 +11,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { moreWays, socketKindKey } from '../src/mcp.js';
+import { moreWays, socketKindKey, unlistedNote } from '../src/mcp.js';
 import { renderView } from './view-harness.js';
 
 let ceme, cemeDown = false, cheapTip = false, server, base, serverLog = '';
@@ -152,6 +152,12 @@ test('the more-ways note does not count a tariff the user would have to switch t
   const t = key => key;
   assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2, notYours: true }] }], t), []);
   assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2 }] }], t), ['note.moreWays']);
+});
+
+test('the unlisted note shows only when a charger has cheaper tariffs left out', () => {
+  const t = key => key;
+  assert.deepEqual(unlistedNote([{ unlistedCheaper: 0 }, {}], t), []);
+  assert.deepEqual(unlistedNote([{}, { unlistedCheaper: 2 }], t), ['note.unlisted']);
 });
 
 test('http: estimate_charging_cost answers with structuredContent, and the text carries it too for text-only clients', async () => {

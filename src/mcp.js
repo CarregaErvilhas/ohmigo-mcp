@@ -347,6 +347,9 @@ const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 // A tariff the user would have to switch to (notYours) isn't a way to pay yet.
 const waysToPay = q => (q.options ?? []).filter(o => !o.notYours).length;
 export const moreWays = (results, t) => results.some(q => waysToPay(q) > 1) ? [t('note.moreWays')] : [];
+// Without tariff_ids only the popular tariffs are priced, and drivers often
+// hold a cheaper one they never thought to mention (see unlistedCheaper).
+export const unlistedNote = (results, t) => results.some(q => q.unlistedCheaper) ? [t('note.unlisted')] : [];
 
 // What a support question needs to reproduce an answer: which server, which
 // data, which live copy.
@@ -720,6 +723,7 @@ export function createServer(getDataset, live) {
           ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
           ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
           ...moreWays(top, t),
+          ...unlistedNote(top, t),
         ];
         const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: ranked.sitesPriced,
           ...(truncated && { truncated: true }), ...(ranked.socketsLeftOut && { socketsLeftOut: ranked.socketsLeftOut }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
@@ -766,7 +770,7 @@ export function createServer(getDataset, live) {
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return noCemeError(results, t);
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
-    const notes = [...(cemeDown ? [noCemeNote(results, t)] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t)];
+    const notes = [...(cemeDown ? [noCemeNote(results, t)] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t), ...unlistedNote(results, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));
   });
