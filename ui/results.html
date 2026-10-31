@@ -35,7 +35,7 @@
   .best .eur { color: var(--accent); }
   details { grid-column: 2 / 4; font-size: 12.5px; }
   summary { cursor: pointer; color: var(--muted); }
-  dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0; }
+  dl { display: grid; grid-template-columns: fit-content(45%) 1fr; gap: 2px 10px; margin: 6px 0; }
   dt { color: var(--muted); }
   dd { margin: 0; }
   button { font: inherit; font-size: 12.5px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); cursor: pointer; margin-top: 4px; }
@@ -61,6 +61,10 @@
   // MCP Apps bridge (McpApps.App, inlined above by src/view.js). Everything
   // here is display only: no network calls, no state.
   //
+  // The driver reads this page directly, so where a note is written for the
+  // assistant ("Say so...", "pass month_kwh") the server adds a driverNote and
+  // that's the one shown.
+  //
   // Language: the server says which one it answered in (data.lang); before
   // the first result we go by the host's locale. Fixed text lives in STR,
   // one table per language, like src/i18n.js on the server.
@@ -69,9 +73,9 @@
       waiting: 'Waiting for results…', none: 'No results.', away: 'km away',
       route: (km, off) => `km ${km} of route, ${off} km off`, range: 'range',
       outside: 'outside MOBI.E, pay the operator',
-      adhoc: 'Card / QR at charger', direct: 'Operator direct', contract: 'needs another contract', cheapest: 'cheaper tariff', notYours: 'not your tariff',
+      contract: 'needs another contract', cheapest: 'cheaper tariff', notYours: 'not your tariff',
       sub: 'subscription', promo: 'promotion', promos: 'Promotions', allIn: 'all in, operator fee included', breakdown: 'Breakdown', energy: 'Energy', operator: 'Operator', notPublished: 'not published',
-      cardQr: 'Card / QR', own: 'Direct', note: 'Note', assumes: 'Assumes', point: 'Point', directions: 'Directions',
+      own: 'Direct', note: 'Note', assumes: 'Assumes', point: 'Point', directions: 'Directions',
       period: { VAZIO: 'off-peak', FORA_VAZIO: 'peak', UNICO: 'flat' }, timeline: 'Quarter by quarter',
       foot: (at, stale, day) => `Estimates. ${at ? `Status from the NAP at ${at}${stale ? ' (may be stale)' : ''}.` : 'Live status unavailable.'} Chargers as of ${day}.`,
       credit: 'Direct prices: Preços (finais) kWh Portugal, by Alexandre Moleiro (custofinal.blogspot.com).',
@@ -81,9 +85,9 @@
       waiting: 'À espera dos resultados…', none: 'Sem resultados.', away: 'km daqui',
       route: (km, off) => `km ${km} do percurso, a ${off} km`, range: 'intervalo',
       outside: 'fora da MOBI.E, paga-se ao operador',
-      adhoc: 'Cartão / QR no posto', direct: 'Operador directo', contract: 'exige outro contrato', cheapest: 'tarifário mais barato', notYours: 'não é o teu tarifário',
+      contract: 'exige outro contrato', cheapest: 'tarifário mais barato', notYours: 'não é o teu tarifário',
       sub: 'subscrição', promo: 'promoção', promos: 'Promoções', allIn: 'tudo incluído, com a tarifa do operador', breakdown: 'Detalhe', energy: 'Energia', operator: 'Operador', notPublished: 'não publicada',
-      cardQr: 'Cartão / QR', own: 'Directo', note: 'Nota', assumes: 'Pressupostos', point: 'Ponto', directions: 'Direcções',
+      own: 'Directo', note: 'Nota', assumes: 'Pressupostos', point: 'Ponto', directions: 'Direcções',
       period: { VAZIO: 'vazio', FORA_VAZIO: 'fora de vazio', UNICO: 'simples' }, timeline: 'Quarto a quarto',
       foot: (at, stale, day) => `Estimativas. ${at ? `Estado do PAN às ${at}${stale ? ' (pode estar desactualizado)' : ''}.` : 'Estado em tempo real indisponível.'} Postos de ${day}.`,
       credit: 'Preços directos: Preços (finais) kWh Portugal, de Alexandre Moleiro (custofinal.blogspot.com).',
@@ -103,12 +107,16 @@
 
   // What tells two ways to pay apart: labels repeat across CEME cycles.
   const optKey = o => o.tariffId ?? o.offerId ?? o.label;
-  function optName(o) {
-    if (o.kind === 'adhoc') return S().adhoc;
-    if (o.kind === 'opc_direct') return S().direct;
-    if (o.kind === 'direct') return o.label;
-    return `${o.ceme} ${o.name}`;
-  }
+  // Outside the CEME options the label is the server's, already in data.lang:
+  // it's what says how you really pay at this charger (bank card, or only on
+  // the phone where no terminal is listed).
+  const optName = o => o.kind === 'ceme' ? `${o.ceme} ${o.name}` : o.label;
+  // A peak price is a ceiling, the most it can cost. Signed as in the text
+  // summary (mcp.js), which writes "<=".
+  const optEur = o => (o.peakPrice ? '≤ ' : '') + eur(o.total);
+  // Sockets with no published power or plug: kw is null, connector the text
+  // "nan". Reads like socketLine in mcp.js.
+  const socket = q => `${esc(q.kw ?? '?')} kW ${esc(q.connector === 'nan' ? '?' : q.connector ?? '?')}`;
 
   function render(data) {
     if (data?.lang) setLang(data.lang);
@@ -131,23 +139,23 @@
       const range = q.total && q.total.low !== q.total.high ? `${eur(q.total.low)}–${eur(q.total.high)}` : '';
       const dist = q.km != null ? `${km(q.km)} ${s.away}` : q.alongKm != null ? s.route(Math.round(q.alongKm), km(q.offRouteKm)) : '';
       const h = q.headline;
-      const opts = (q.options || []).map(o => `<li class="${q.best && optKey(o) === optKey(q.best) ? 'hl' : ''}"><span>${eur(o.total)}</span> ${esc(optName(o))}`
+      const opts = (q.options || []).map(o => `<li class="${q.best && optKey(o) === optKey(q.best) ? 'hl' : ''}"><span>${optEur(o)}</span> ${esc(optName(o))}`
         + `${o.requiresOtherContract && !o.listed ? ` <em>${s.contract}</em>` : ''}${o.cheaperElsewhere ? ` <em>${s.cheapest}</em>` : ''}${o.notYours ? ` <em>${s.notYours}</em>` : ''}`
         + `${o.subscription ? ` <em>${esc(o.subscription.text)}</em>` : ''}${o.promos ? ` <em>${s.promo}</em>` : ''}</li>`).join('');
-      return `<div class="row${i === 0 && q.total ? ' best' : ''}">
+      return `<div class="row${i === 0 && q.best ? ' best' : ''}">
         <div class="n">${i + 1}</div>
         <div class="where">${esc(q.operator)}<br><span style="font-weight:400">${esc(q.address)}${q.city ? ', ' + esc(q.city) : ''}</span></div>
-        <div class="eur">${q.best ? eur(q.best.total) : (q.total ? '≥ ' : '') + eur(q.total?.eur)}<small>${q.session.minutes} min${q.session.startLocal ? ` · ${esc(q.session.startLocal)}–${esc(q.session.endLocal)}` : ''}</small></div>
-        <div class="sub">${q.status ? `<span class="st st-${esc(q.status)}">${esc(s.status[q.status] || q.status)}</span> · ` : ''}${esc(q.kw)} kW ${esc(q.connector)}${q.dc ? ' DC' : ' AC'} · ${q.regime === 'sem_ceme' ? esc(s.outside) + ' · ' : ''}${km(q.session.kwhBilled)} kWh · ${esc(dist)}${range ? ` · ${s.range} ${range}` : ''}</div>
+        <div class="eur">${q.best ? optEur(q.best) : (q.total ? '≥ ' : '') + eur(q.total?.eur)}<small>${q.session.minutes} min${q.session.startLocal ? ` · ${esc(q.session.startLocal)}–${esc(q.session.endLocal)}` : ''}</small></div>
+        <div class="sub">${q.status ? `<span class="st st-${esc(q.status)}">${esc(s.status[q.status] || q.status)}</span> · ` : ''}${socket(q)}${q.dc ? ' DC' : ' AC'} · ${q.regime === 'sem_ceme' ? esc(s.outside) + ' · ' : ''}${km(q.session.kwhBilled)} kWh · ${esc(dist)}${range ? ` · ${s.range} ${range}` : ''}</div>
         ${opts ? `<ul class="opts">${opts}</ul>` : ''}
         <details><summary>${s.breakdown}</summary><dl>
           ${h ? `<dt>${s.energy}</dt><dd>${h.opcIncluded ? `${eur(h.total)} ${s.allIn}` : eur(h.energyEur)} · ${esc(h.ceme)} ${esc(h.name)}${h.kwhByPeriod ? ' · ' + Object.entries(h.kwhByPeriod).map(([p, k]) => `${km(k)} kWh ${esc(s.period[p] || p)}`).join(', ') : ''}</dd>` : ''}
           ${timelineHtml(q, h, s)}
           ${q.opc ? `<dt>${s.operator}</dt><dd>${eur(q.opc.eurWithVat)} · ${esc(q.opc.tariff ?? s.notPublished)}</dd>` : ''}
-          ${(q.options || []).filter(o => o.kind === 'adhoc' || o.kind === 'opc_direct').map(o => `<dt>${o.kind === 'adhoc' ? s.cardQr : s.direct}</dt><dd>${o.tariff ? esc(o.tariff) + ' · ' : ''}${esc(o.note || '')}</dd>`).join('')}
+          ${(q.options || []).filter(o => o.kind === 'adhoc' || o.kind === 'opc_direct').map(o => `<dt>${esc(o.label)}</dt><dd>${o.tariff ? esc(o.tariff) + ' · ' : ''}${esc(o.note || '')}</dd>`).join('')}
           ${(q.options || []).find(o => o.kind === 'direct') ? `<dt>${s.own}</dt><dd>${esc(q.options.find(o => o.kind === 'direct').note)}</dd>` : ''}
-          ${q.promos ? `<dt>${s.promos}</dt><dd>${q.promos.map(p => `${esc(p.label)}: ${eur(p.total)} · ${esc(p.note)}`).join('<br>')}</dd>` : ''}
-          ${q.note ? `<dt>${s.note}</dt><dd>${esc(q.note)}</dd>` : ''}
+          ${q.promos ? `<dt>${s.promos}</dt><dd>${q.promos.map(p => `${esc(p.label)}: ${eur(p.total)} · ${esc(p.driverNote ?? p.note)}`).join('<br>')}</dd>` : ''}
+          ${q.note ? `<dt>${s.note}</dt><dd>${esc(q.driverNote ?? q.note)}</dd>` : ''}
           <dt>${s.assumes}</dt><dd>${(q.assumptions || []).map(esc).join('; ')}</dd>
           <dt>${s.point}</dt><dd>${esc(q.pointId)}</dd>
         </dl>

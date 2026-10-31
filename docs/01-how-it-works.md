@@ -86,7 +86,9 @@ it applies:
 - **The result** (`assumptions`, `notes`, an option's `note`, through
   `src/i18n.js`): what holds only for some answers (a peak price, a promotion
   for new customers, a missing direction). It shows up exactly when it
-  applies, and every client passes it on.
+  applies, and every client passes it on. `ui/results.html` puts notes in front
+  of the driver with no assistant in between, so a note written for the
+  assistant comes with a `driverNote` for the page.
 
 The tool list has a budget too (`TOOLS_MAX_CHARS` in `test/http.test.js`).
 When it bites, trim before you raise it, and prefer one more argument on an
