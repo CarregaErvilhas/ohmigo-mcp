@@ -446,9 +446,11 @@ function pointsFor(ds, live, a, t) {
   return Object.assign([...kinds.values()], { assumptions });
 }
 
-// month_kwh needs the tariff list; without ceme-v2 the free kWh just don't
-// apply (and the CEME prices are flagged as missing anyway).
-const monthKwh = a => expandMonthKwh(a.month_kwh, tariffKey).catch(e => { if (e.ceme) return null; throw e; });
+// month_kwh needs the tariff list. Without it the free kWh don't apply, and the
+// simulate calls may still get through, so the prices alone wouldn't show that:
+// monthKwhLost makes it an assumption. -> options for rank and quotePoint
+const monthKwh = (a, signal) => expandMonthKwh(a.month_kwh, tariffKey, signal)
+  .then(month => ({ monthKwh: month }), e => { if (e.ceme) return { monthKwh: null, monthKwhLost: true }; throw e; });
 
 // What a ranking quotes. A car park with ten identical T2s prices the same
 // ten times, so each site keeps one socket per kind (the one most likely
@@ -687,7 +689,7 @@ export function createServer(getDataset, live) {
         const { candidates, truncated: pointsCut } = rankCandidates(results, live, w.route != null);
         const ranked = await rank(candidates, car(a), {
           at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences,
-          monthKwh: await monthKwh(a), signal,
+          ...await monthKwh(a, signal), signal,
           maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
         });
         // Two cuts, one note: too many sockets, or too many ceme-v2 calls.
@@ -714,7 +716,7 @@ export function createServer(getDataset, live) {
         const notes = [
           ...(cemeDown ? [noCemeNote(ranked, t)] : []),
           ...voltageNotes(ds, a, t),
-          ...(truncated ? [t('note.truncated', { n: candidates.length, total, sockets: ranked.socketsLeftOut })] : []),
+          ...(truncated ? [t('note.truncated', { n: ranked.sitesPriced, total, sockets: ranked.socketsLeftOut })] : []),
           ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
           ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
           ...moreWays(top, t),
@@ -750,8 +752,9 @@ export function createServer(getDataset, live) {
     const targets = pointsFor(ds, live, a, t);
     if (targets.error) return err(targets.error, targets.code);
     const assumptions = [...(targets.assumptions ?? []), ...voltageNotes(ds, a, t)];
+    const signal = ctx?.mcpReq?.signal;
     const opts = { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences, detail: !!a.detail, qa: QA, simCache: new Map(),
-      monthKwh: await monthKwh(a) };
+      signal, ...await monthKwh(a, signal) };
     // Quoting is cheap once the first one has called ceme-v2 (simCache), so
     // every kind is priced and the cheapest are kept.
     const quoted = await Promise.all(targets.map(hit => quotePoint(hit, car(a), opts)));

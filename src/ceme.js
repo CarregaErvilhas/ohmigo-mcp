@@ -24,10 +24,11 @@ let session = null; // { token, until }
 let authing = null; // the session request in flight, shared by concurrent calls
 
 // The cache. An entry stays past TTL_MS as the last good answer for its key:
-// a call then asks ceme-v2 again, and only falls back on it after a 429.
-//   key -> { at, value, bytes, pending }: `value` the last good reply (from
-//   `at`, `bytes` of JSON), `pending` the request in flight, shared by whoever
-//   asks meanwhile.
+// a call then asks ceme-v2 again, and only falls back on it after a 429 or when
+// the line refuses it.
+//   key -> { at, value, bytes, pending, flight }: `value` the last good reply
+//   (from `at`, `bytes` of JSON), `pending` the request in flight, shared by
+//   whoever asks meanwhile, `flight` who's still waiting for it.
 // A reply to /v1/simulate carries every tariff. The limits below are on its
 // JSON; parsed, it takes a few times that in memory.
 const MAX_CACHE_ENTRIES = 500;
@@ -39,7 +40,7 @@ export const MAX_DETAIL_CACHE_BYTES = 256 * 1024;
 // A session's key lists its slices, up to ~10 KB for the longest one. Past this
 // the key is a digest, so it costs the cache a few bytes.
 const MAX_KEY_CHARS = 200;
-// How old a last good answer can be and still stand in during a 429. The key
+// How old a last good answer can be and still stand in. The key
 // fixes the session and the quarter-hours, so only a tariff or promotion edited
 // in that hour, or OMIE prices published since, can make it wrong; the result
 // says how old it is (assume.cemeStale in quote.js).
@@ -97,15 +98,17 @@ const refused = (msg, extra) => Object.assign(unavailable(msg), { refused: true 
 const rateLimited = path => refused(`ceme-v2 ${path}: rate limited`, { rateLimited: true });
 const gate = limiter({
   concurrent: MAX_CONCURRENT, queued: MAX_QUEUED,
-  full: () => refused('ceme-v2: too many calls waiting'),
+  full: () => refused('ceme-v2: too many calls waiting', { shed: true }),
   gone: () => refused('ceme-v2: the request was abandoned'),
 });
 
-// Retry-After is seconds or an HTTP date.
+// Retry-After is seconds or an HTTP date. Date.parse alone is too generous: it
+// reads "12 apples" as a day in 2001.
 function retryAfterMs(header) {
-  const text = header?.trim();
-  if (!text) return RETRY_AFTER_DEFAULT_MS;
-  const ms = /^-?\d+$/.test(text) ? Number(text) * 1000 : Date.parse(text) - Date.now();
+  const text = header?.trim() ?? '';
+  const seconds = /^-?\d+(\.\d+)?$/.test(text);
+  if (!seconds && !/^[A-Za-z]{3,9},? .*\d{2}:\d{2}:\d{2}/.test(text)) return RETRY_AFTER_DEFAULT_MS;
+  const ms = seconds ? Number(text) * 1000 : Date.parse(text) - Date.now();
   if (Number.isNaN(ms)) return RETRY_AFTER_DEFAULT_MS;
   return Math.min(RETRY_AFTER_MAX_MS, Math.max(RETRY_AFTER_MIN_MS, ms));
 }
@@ -131,6 +134,9 @@ function authHeaders() {
     .finally(() => { authing = null; });
   return authing;
 }
+
+// While this is true every call fails at once, without reaching ceme-v2.
+export const cemeOff = () => Date.now() < breaker.until || Date.now() < quotaUntil;
 
 function refuseIfOff(path) {
   if (Date.now() < breaker.until) throw unavailable(`ceme-v2 ${path}: temporarily unavailable`);
@@ -192,13 +198,25 @@ const stale = ({ value, at }) => Object.assign(Array.isArray(value) ? [...value]
 const cacheKey = key => (key.length > MAX_KEY_CHARS ? `#${createHash('sha256').update(key).digest('base64url')}` : key);
 const isFresh = entry => Date.now() - entry.at < TTL_MS;
 
-function cached(fullKey, fn, { maxBytes = MAX_CACHE_BYTES } = {}) {
+// One more waiter on a call in flight. The call is dropped only when its last
+// waiter has abandoned it: whoever else asked for the same thing still wants
+// the answer, and must not hear that a limit was reached.
+function join(flight, signal) {
+  if (signal?.aborted) return;
+  flight.waiters++;
+  signal?.addEventListener('abort', () => { if (--flight.waiters === 0) flight.stop.abort(); }, { once: true });
+}
+
+function cached(fullKey, fn, { maxBytes = MAX_CACHE_BYTES, signal } = {}) {
   const key = cacheKey(fullKey);
   const hit = cache.get(key);
-  if (hit?.pending) return hit.pending;
+  if (hit?.pending) { join(hit.flight, signal); return hit.pending; }
   if (hit && isFresh(hit)) return Promise.resolve(hit.value);
-  const entry = hit ?? { at: 0, value: undefined, bytes: 0, pending: null };
-  entry.pending = fn().then(({ data, bytes }) => {
+  const entry = hit ?? { at: 0, value: undefined, bytes: 0, pending: null, flight: null };
+  entry.flight = { waiters: 0, stop: new AbortController() };
+  join(entry.flight, signal);
+  if (!entry.flight.waiters) entry.flight.stop.abort();
+  entry.pending = fn(entry.flight.stop.signal).then(({ data, bytes }) => {
     forget(key);
     const size = bytes + key.length;
     if (size <= maxBytes) {
@@ -210,7 +228,8 @@ function cached(fullKey, fn, { maxBytes = MAX_CACHE_BYTES } = {}) {
   }, e => {
     entry.pending = null;
     if (entry.value === undefined) { if (cache.get(key) === entry) cache.delete(key); throw e; }
-    if (e.rateLimited && Date.now() - entry.at < STALE_MS) return stale(entry);
+    // Held back by a limit, not by anything wrong with ceme-v2's data.
+    if ((e.rateLimited || e.shed) && Date.now() - entry.at < STALE_MS) return stale(entry);
     throw e;
   });
   if (!hit) { cache.set(key, entry); evict(); }
@@ -253,10 +272,11 @@ function simRequest({ kwh, at = new Date(), region = 'CONT', profile = null, det
   return { key: `sim|${region}|${mkKey}|${k}|${q}`, body: { kwh: k, at: q, region, useSpot: true, ...(mk && { monthKwh: mk }) } };
 }
 
-// `signal`: a call still in line when the request is abandoned never goes out.
+// `signal`: a call still in line when everyone who asked for it has abandoned
+// their request never goes out.
 export function simulate(args) {
   const { key, body, maxBytes } = simRequest(args);
-  return cached(key, () => call('/v1/simulate', { method: 'POST', body: JSON.stringify(body) }, args.signal), { maxBytes });
+  return cached(key, stop => call('/v1/simulate', { method: 'POST', body: JSON.stringify(body) }, stop), { maxBytes, signal: args.signal });
 }
 
 // Would simulate() answer without a new call to ceme-v2? (a ranking's cap only
@@ -271,17 +291,17 @@ export function isCovered(args) {
 // ("goldenergy-bt-clientesgold"). A charger may use the other one (MT), so
 // every variant of the same tariff gets the same count. `key` is quote.js's
 // tariffKey, passed in to keep this module free of quote.js.
-export async function expandMonthKwh(monthKwh, key) {
+export async function expandMonthKwh(monthKwh, key, signal) {
   if (!monthKwh || !Object.keys(monthKwh).length) return null;
-  const all = await tariffs();
+  const all = await tariffs(signal);
   const want = new Map(Object.entries(monthKwh).map(([id, kwh]) => [key(id), kwh]));
   const out = {};
   for (const t of all.data ?? all) if (want.has(key(t.id))) out[t.id] = want.get(key(t.id));
   return Object.keys(out).length ? out : null;
 }
 
-export function tariffs() {
-  return cached('tariffs', () => call('/v1/tariffs'));
+export function tariffs(signal) {
+  return cached('tariffs', stop => call('/v1/tariffs', {}, stop), { signal });
 }
 
 // CEME promotions that haven't ended yet (each with `active` = already on).

@@ -4,17 +4,24 @@
 // of work piling up behind a slow dependency until the process runs out of
 // memory or the assistant gives up. A job whose `signal` aborts leaves the line
 // (`gone()` makes the error), so an abandoned request holds nobody's place.
+
+// The longest anyone stands in line, then it's refused like a full line. A
+// ceme-v2 that's slow but alive answers each call inside its 10 s timeout, so
+// the breaker never opens and the line could take minutes; assistants give up
+// long before that, and a quick honest answer beats a late one.
+export const MAX_WAIT_MS = 20_000;
+
 export function limiter({ concurrent, queued, full, gone }) {
   let active = 0;
   const line = [];
   const wait = signal => new Promise((go, stop) => {
-    line.push(go);
-    signal?.addEventListener('abort', () => {
-      const i = line.indexOf(go);
-      if (i < 0) return;
-      line.splice(i, 1);
-      stop(gone());
-    }, { once: true });
+    const settle = () => { clearTimeout(timer); signal?.removeEventListener('abort', abandon); };
+    const place = () => { settle(); go(); };
+    const leave = why => { settle(); line.splice(line.indexOf(place), 1); stop(why()); };
+    const timer = setTimeout(() => leave(full), MAX_WAIT_MS);
+    const abandon = () => leave(gone);
+    line.push(place);
+    signal?.addEventListener('abort', abandon, { once: true });
   });
   return async function run(job, signal) {
     if (signal?.aborted) throw gone();

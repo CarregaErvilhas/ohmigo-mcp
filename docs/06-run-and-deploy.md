@@ -185,7 +185,8 @@ from running away:
   and the work inside a ranking, not calls between different users.
 - *Quota.* A 429 isn't an outage: it stays out of the breaker. No call goes out
   until `Retry-After` has passed (bounded, `RETRY_AFTER_*`). Meanwhile a call
-  whose exact key was answered within `STALE_MS` gets that last good answer: a
+  whose exact key was answered within `STALE_MS` gets that last good answer, and
+  so does one the line refuses: a
   quote built on it says how old it is, and `/dados` is marked `partial` with
   `staleSince`. Any other call fails as unavailable, and the tools say this server
   held the call back, not that the pricing service didn't answer. Since a session
@@ -195,9 +196,12 @@ from running away:
 - *Outages.* After a few 5xx or timeouts in a row the client stops calling for a
   while (`BREAKER_*`) and the tools answer without CEME prices.
 - *Concurrency.* Every call goes through one line per process: `MAX_CONCURRENT`
-  at once, `MAX_QUEUED` waiting, first come first served. The line fits every call
-  the running rankings can make, plus room for estimates. Past that a call fails
-  as unavailable, which doesn't touch the breaker, with the same wording as above.
+  at once, `MAX_QUEUED` waiting, first come first served, for at most
+  `MAX_WAIT_MS` (`src/limit.js`), so a slow but living ceme-v2 gets a quick honest
+  answer. The line fits every call the running rankings can make, plus room for
+  estimates. Past that a call fails as unavailable, which doesn't touch the
+  breaker, with the same wording as above. With `month_kwh`, a tariff list that
+  can't be had leaves the free kWh out of the total, and the result says so.
 - *One ranking's share.* `max_minutes` and `available_only` apply first, since
   duration and status are known before any call. Then a ranking makes one call
   per distinct charging speed, nearest first, up to `MAX_SIMS_PER_CALL` calls that
@@ -205,7 +209,9 @@ from running away:
   needing a new call are left out: sites outside MOBI.E and speeds already
   fetched stay. `note.truncated` says how many were left out, and so does
   `socketsLeftOut` in the result. The first calls always go out, so the cap can't
-  empty a ranking. The speeds past it aren't priced from the nearest one: that
+  empty a ranking. While the breaker is open or the quota spent the cap is off:
+  those calls are refused here and cost nothing, so the sockets stay listed on
+  their other prices. The speeds past it aren't priced from the nearest one: that
   reply is for other kWh, so it would need math that belongs to ceme-v2.
 
 **The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets
@@ -214,8 +220,9 @@ from running away:
 to try again in a few seconds. `rank()` in `src/quote.js` first works out the
 sessions, then fires the calls together and waits for them, then prices in chunks
 of `RANK_CHUNK` with a turn for the event loop between them, so `/healthz` keeps
-answering. A request that's abandoned leaves the line, drops its calls still
-waiting, and stops at the next chunk. All of these limits are per process and
+answering. A request that's abandoned, in either tool, leaves the line and stops
+at the next chunk; its calls still waiting are dropped unless another request
+is waiting on the same one. All of these limits are per process and
 shared by everyone: a burst from one client still slows the others, and can get
 them refused.
 

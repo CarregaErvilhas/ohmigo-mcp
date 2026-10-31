@@ -43,7 +43,7 @@
 // driver reads with no assistant in between.
 
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { applicable, isCovered, MAX_RANKINGS, MAX_SIMS_PER_CALL, simulate } from './ceme.js';
+import { applicable, cemeOff, isCovered, MAX_RANKINGS, MAX_SIMS_PER_CALL, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
 import { cardPayment } from './data.js';
 import { closesDuring, daysLater, siteOpen } from './hours.js';
@@ -290,6 +290,7 @@ const simArgs = ({ site }, { session, start, slices }, { detail = false, qa = fa
 //   detail: add `timeline` (when the kWh go in, and the period and price
 //           over time for each tariff shown). qa: also `debug` (what went to
 //           ceme-v2 and what came back).
+//   monthKwhLost: the user gave month_kwh, but it couldn't be used.
 //   monthKwh: { ceme-v2 tariff id: kWh the user already charged with it this
 //           month }, for free-kWh promotions (see ceme.js expandMonthKwh).
 // -> the quote, or null when the session would run past MAX_SESSION_HOURS.
@@ -409,6 +410,7 @@ export async function quotePoint(hit, car, opts = {}) {
   base.assumptions.push(sim.profile
     ? t('assume.window', { from: base.session.startLocal, to: base.session.endLocal })
     : t('assume.startOnly', { from: base.session.startLocal }));
+  if (opts.monthKwhLost) base.assumptions.push(t('assume.monthKwhLost'));
   if (sim.staleSince) base.assumptions.push(t('assume.cemeStale', { minutes: Math.ceil((Date.now() - sim.staleSince) / 60_000) }));
   const quotes = eligible(sim.data, audiences, tariffIds);
   const picked = pickTariffs(quotes, point, tariffIds, shown);
@@ -532,8 +534,10 @@ export const byBest = (a, b) => sortKey(a) - sortKey(b);
 // A socket whose speed didn't make the cap is left out (`socketsLeftOut`), and
 // only that: another price can't stand in, since a reply is for its own kWh,
 // spread over its own quarters, and adapting it would redo ceme-v2's math. The
-// first calls always go out, so the cap never empties a ranking. `sitesPriced`:
-// the candidates with something left.
+// first calls always go out, so the cap never empties a ranking. With the
+// breaker open or the quota spent the cap is off: those calls are refused here
+// and cost nothing, so the sockets stay listed on their other prices, flagged.
+// `sitesPriced`: the candidates with something left.
 export async function rank(candidates, car, opts = {}) {
   const { signal } = opts;
   const simCache = new Map();
@@ -558,17 +562,22 @@ export async function rank(candidates, car, opts = {}) {
 
   signal?.throwIfAborted();
   const overCap = new Set();
+  const free = cemeOff();
   let calls = 0;
   for (const x of kept) {
     const key = x.plan?.key;
     if (!key || simCache.has(key) || overCap.has(key)) continue;
     const args = simArgs(x, x.plan, shared);
-    const covered = isCovered(args);
+    const covered = free || isCovered(args);
     if (!covered && calls >= MAX_SIMS_PER_CALL) { overCap.add(key); continue; }
     if (!covered) calls++;
     simCache.set(key, simulate(args));
   }
-  await Promise.allSettled(simCache.values());
+  // An abandoned ranking doesn't wait for a call someone else is sharing.
+  await Promise.race([
+    Promise.allSettled(simCache.values()),
+    new Promise((_, stop) => signal?.addEventListener('abort', () => stop(signal.reason), { once: true })),
+  ]);
 
   const toPrice = kept.filter(x => !overCap.has(x.plan?.key));
   const quotes = [];

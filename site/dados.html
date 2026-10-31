@@ -90,7 +90,7 @@ function nav() {
 function draw() {
   nav();
   const search = tab === 'resumo' ? '' : `<div class="bar"><input type="search" id="q" placeholder="Filtrar…" value="${esc(q)}"><label id="shown"></label></div>`;
-  $('#app').innerHTML = search + TABS[tab].render(fold(q));
+  $('#app').innerHTML = cemeStale() + search + TABS[tab].render(fold(q));
   const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(q.length, q.length); }
 }
 const match = (f, ...xs) => !f || xs.some(x => fold(x).includes(f));
@@ -121,7 +121,6 @@ function resumo() {
     <tr><td>Rede → operadores</td><td><code>offers/networks.json</code></td><td class="nw">manual</td></tr>
   </table>
   ${ce.error ? `<p class="err">${CEME_DOWN}</p>` : ''}
-  ${cemeStale()}
   ${D.offers.orphans?.length ? `<h2>manual.json órfãos</h2><ul>${D.offers.orphans.map(o => `<li>${esc(o)}</li>`).join('')}</ul>` : ''}`;
 }
 
