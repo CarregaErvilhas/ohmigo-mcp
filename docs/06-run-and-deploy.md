@@ -179,38 +179,45 @@ from running away:
   (`MAX_CACHE_*`); `detail` replies past `MAX_DETAIL_CACHE_BYTES` aren't kept.
   What counts as the same answer depends on the call. Without a slice profile
   (only `/dados` and empty sessions): the same kWh to 0.1 and the same
-  quarter-hour. With one, which is every tool: the same kWh in every slice, and
-  the same quarter-hour for the start. So sockets of one charging speed share a
-  call, but a session that spans quarter-hours and starts a minute later doesn't
-  reuse anything: its first slice holds other kWh. The cache mostly saves
-  repeats and the work inside a ranking, not calls between different users.
+  quarter-hour. With one, which is every tool: exactly the same slices. So sockets
+  of one charging speed share a call inside a ranking, but a session starting a
+  minute later shares nothing with the last one. The cache mostly saves repeats
+  and the work inside a ranking, not calls between different users.
 - *Quota.* A 429 isn't an outage: it stays out of the breaker. No call goes out
   until `Retry-After` has passed (bounded, `RETRY_AFTER_*`). Meanwhile a call
-  whose exact key was answered within `STALE_MS` gets that last good answer, and
-  a quote built on it says how old it is. Any other call fails as unavailable and
-  the tools answer without CEME prices. Since a session starts at the current
-  minute, a repeat of a "now" question has a new key after a minute, so the last
-  good answer mostly helps questions with a fixed `at`, `/dados` and the tariff
-  list.
+  whose exact key was answered within `STALE_MS` gets that last good answer: a
+  quote built on it says how old it is, and `/dados` is marked `partial` with
+  `staleSince`. Any other call fails as unavailable, and the tools say this server
+  held the call back, not that the pricing service didn't answer. Since a session
+  starts at the current minute, a repeat of a "now" question has a new key after a
+  minute, so the last good answer mostly helps questions with a fixed `at`,
+  `/dados` and the tariff list.
 - *Outages.* After a few 5xx or timeouts in a row the client stops calling for a
   while (`BREAKER_*`) and the tools answer without CEME prices.
 - *Concurrency.* Every call goes through one line per process: `MAX_CONCURRENT`
-  at once, `MAX_QUEUED` waiting, first come first served. Past that a call fails
-  as unavailable, which doesn't touch the breaker.
-- *One ranking's share.* A ranking makes one call per distinct charging speed, up
-  to `MAX_SIMS_PER_CALL` in `src/quote.js`. It stops there and reports the cut
-  in `note.truncated`, like the cut on the number of sockets
-  (`MAX_RANKED_POINTS` in `src/mcp.js`). The speeds past it aren't priced from the
-  nearest one: that reply is for other kWh, so it would need math that belongs to
-  ceme-v2.
+  at once, `MAX_QUEUED` waiting, first come first served. The line fits every call
+  the running rankings can make, plus room for estimates. Past that a call fails
+  as unavailable, which doesn't touch the breaker, with the same wording as above.
+- *One ranking's share.* `max_minutes` and `available_only` apply first, since
+  duration and status are known before any call. Then a ranking makes one call
+  per distinct charging speed, nearest first, up to `MAX_SIMS_PER_CALL` calls that
+  really go out; what the cache covers is free. Past the cap only the sockets
+  needing a new call are left out: sites outside MOBI.E and speeds already
+  fetched stay. `note.truncated` says how many were left out, and so does
+  `socketsLeftOut` in the result. The first calls always go out, so the cap can't
+  empty a ranking. The speeds past it aren't priced from the nearest one: that
+  reply is for other kWh, so it would need math that belongs to ceme-v2.
 
-**The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets on the event
-loop. `rank()` in `src/quote.js` lets `MAX_RANKINGS` run at once and
-`MAX_RANKINGS_QUEUED` wait; past that the tool says to try again in a few
-seconds. It also yields every `RANK_CHUNK` sockets, so `/healthz` keeps
-answering while it works. All of these limits are per process, and shared by
-everyone: a burst from one client still slows the others, and can get them
-refused.
+**The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets
+(`src/mcp.js`) on the event loop. The tool takes a place before it searches:
+`MAX_RANKINGS` run at once and `MAX_RANKINGS_QUEUED` wait, and past that it says
+to try again in a few seconds. `rank()` in `src/quote.js` first works out the
+sessions, then fires the calls together and waits for them, then prices in chunks
+of `RANK_CHUNK` with a turn for the event loop between them, so `/healthz` keeps
+answering. A request that's abandoned leaves the line, drops its calls still
+waiting, and stops at the next chunk. All of these limits are per process and
+shared by everyone: a burst from one client still slows the others, and can get
+them refused.
 
 **What this doesn't do.** None of it stops anyone from sending requests, or
 keeps one client from spending the shared quota. For that you need a limit at the

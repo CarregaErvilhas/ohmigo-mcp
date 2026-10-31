@@ -26,7 +26,7 @@ import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt } from './offers.js'
 import { cardPayment } from './data.js';
 import { siteOpen } from './hours.js';
 import { describePlan } from './opc.js';
-import { byBest, quotePoint, rank, tariffKey } from './quote.js';
+import { byBest, quotePoint, rank, rankingSlot, tariffKey } from './quote.js';
 import { fold } from './lookup.js';
 import { MAX_SESSION_HOURS } from './profile.js';
 import { logged } from './stats.js';
@@ -481,6 +481,12 @@ function rankCandidates(results, live, route) {
 // reading a catalogue. The result says when this cut bit.
 const MAX_TARIFFS = 60;
 
+// Sockets without a CEME price: was it ceme-v2, or this server holding calls
+// back (spent quota, full line)? Only the first may be told as "didn't answer".
+const heldBackOnly = list => !list.some(q => q.cemeUnavailable && !q.cemeHeldBack);
+const noCemeNote = (list, t) => t(heldBackOnly(list) ? 'note.cemeBusy' : 'note.noCeme');
+const noCemeError = (list, t) => err(t(heldBackOnly(list) ? 'err.pricingBusy' : 'err.pricing'), 'ceme');
+
 // `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
 // every few hours, and each request should see the current one.
 export function createServer(getDataset, live) {
@@ -502,7 +508,7 @@ export function createServer(getDataset, live) {
     // A ceme-v2 without /v1/promos still lists the tariffs.
     let all, current;
     try { [all, current] = await Promise.all([tariffs(), promos().catch(() => ({ data: [] }))]); }
-    catch (e) { if (e.ceme) return err(t('err.tariffs'), 'ceme'); throw e; }
+    catch (e) { if (e.ceme) return err(t(e.refused ? 'err.tariffsBusy' : 'err.tariffs'), 'ceme'); throw e; }
     const q = fold(query);
     // One row per tariff, not per voltage: the BT/MT variant is picked per charger.
     const seen = new Map();
@@ -672,55 +678,58 @@ export function createServer(getDataset, live) {
     if (w.error) return err(w.error, w.code);
     if (a.target_pct <= a.start_pct) return err(t('err.target'), 'target');
     await withLive(live, ctx, t);
-    const { total, results } = ds.search({ ...w, ...filterOf(a), limit: Infinity });
-    if (!results.length) return err(t('err.noMatch'), 'noMatch');
-    const { candidates, truncated: pointsCut } = rankCandidates(results, live, w.route != null);
-    const month = await monthKwh(a);
-    let ranked;
+    // The slot comes before the search: a refused or abandoned call costs nothing.
+    const signal = ctx?.mcpReq?.signal;
     try {
-      ranked = await rank(candidates, car(a), {
-        at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences,
-        monthKwh: month,
-        maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
+      return await rankingSlot(signal, async () => {
+        const { total, results } = ds.search({ ...w, ...filterOf(a), limit: Infinity });
+        if (!results.length) return err(t('err.noMatch'), 'noMatch');
+        const { candidates, truncated: pointsCut } = rankCandidates(results, live, w.route != null);
+        const ranked = await rank(candidates, car(a), {
+          at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences,
+          monthKwh: await monthKwh(a), signal,
+          maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
+        });
+        // Two cuts, one note: too many sockets, or too many ceme-v2 calls.
+        const truncated = pointsCut || ranked.socketsLeftOut > 0;
+        const tooLong = { hours: MAX_SESSION_HOURS, n: ranked.tooLong };
+        // err.tooLong only when no socket could be priced at all: with any priced
+        // socket dropped by a filter, raising the filter is the advice.
+        if (!ranked.length) return ranked.nonePriced ? err(t('err.tooLong', tooLong), 'tooLong') : err(t('err.noneLeft'), 'noneLeft');
+        const top = ranked.slice(0, a.limit);
+        // Any MOBI.E socket without its CEME price was ranked on its other
+        // prices only (or last): say so even when the top rows are all outside
+        // MOBI.E.
+        const cemeDown = ranked.some(q => q.cemeUnavailable);
+        if (cemeDown && !top.some(q => q.best)) return noCemeError(ranked, t);
+        for (const [i, q] of top.entries()) {
+          q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm);
+          // The timeline is for "how was this price built", a question about one
+          // charger: ten of them were ~100 KB. The first few keep it.
+          if (i >= DETAIL_IN_RANKING) {
+            delete q.timeline;
+            for (const o of q.options) delete o.components;
+          }
+        }
+        const notes = [
+          ...(cemeDown ? [noCemeNote(ranked, t)] : []),
+          ...voltageNotes(ds, a, t),
+          ...(truncated ? [t('note.truncated', { n: candidates.length, total, sockets: ranked.socketsLeftOut })] : []),
+          ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
+          ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
+          ...moreWays(top, t),
+        ];
+        const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: ranked.sitesPriced,
+          ...(truncated && { truncated: true }), ...(ranked.socketsLeftOut && { socketsLeftOut: ranked.socketsLeftOut }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
+        // Summary lines on top of the JSON in the text (see ok).
+        const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` (+${waysToPay(q) - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q)}) [${q.pointId}]`);
+        return ok(data, [...notes, ...lines].join('\n'));
       });
     } catch (e) {
       if (e.busy) return err(t('err.busy'), 'busy');
+      if (signal?.aborted) return err(t('err.cancelled'), 'cancelled');
       throw e;
     }
-    // Two cuts, one note: too many sockets, or too many ceme-v2 calls.
-    const truncated = pointsCut || ranked.sitesPriced < candidates.length;
-    const tooLong = { hours: MAX_SESSION_HOURS, n: ranked.tooLong };
-    // err.tooLong only when no socket could be priced at all: with any priced
-    // socket dropped by a filter, raising the filter is the advice.
-    if (!ranked.length) return ranked.nonePriced ? err(t('err.tooLong', tooLong), 'tooLong') : err(t('err.noneLeft'), 'noneLeft');
-    const top = ranked.slice(0, a.limit);
-    // Any MOBI.E socket without its CEME price was ranked on its other
-    // prices only (or last): say so even when the top rows are all outside
-    // MOBI.E.
-    const cemeDown = ranked.some(q => q.cemeUnavailable);
-    if (cemeDown && !top.some(q => q.best)) return err(t('err.pricing'), 'ceme');
-    for (const [i, q] of top.entries()) {
-      q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm);
-      // The timeline is for "how was this price built", a question about one
-      // charger: ten of them were ~100 KB. The first few keep it.
-      if (i >= DETAIL_IN_RANKING) {
-        delete q.timeline;
-        for (const o of q.options) delete o.components;
-      }
-    }
-    const notes = [
-      ...(cemeDown ? [t('note.noCeme')] : []),
-      ...voltageNotes(ds, a, t),
-      ...(truncated ? [t('note.truncated', { n: ranked.sitesPriced, total })] : []),
-      ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
-      ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
-      ...moreWays(top, t),
-    ];
-    const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: ranked.sitesPriced,
-      ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
-    // Summary lines on top of the JSON in the text (see ok).
-    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` (+${waysToPay(q) - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q)}) [${q.pointId}]`);
-    return ok(data, [...notes, ...lines].join('\n'));
   });
 
   registerAppTool(server, 'estimate_charging_cost', {
@@ -752,9 +761,9 @@ export function createServer(getDataset, live) {
     const results = priced.sort(byBest).slice(0, MAX_KINDS);
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
-    if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
+    if (cemeDown && !results.some(q => q.best)) return noCemeError(results, t);
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
-    const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t)];
+    const notes = [...(cemeDown ? [noCemeNote(results, t)] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));
   });

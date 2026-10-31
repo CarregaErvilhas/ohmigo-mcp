@@ -43,7 +43,7 @@
 // driver reads with no assistant in between.
 
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { applicable, simulate } from './ceme.js';
+import { applicable, isCovered, MAX_RANKINGS, MAX_SIMS_PER_CALL, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
 import { cardPayment } from './data.js';
 import { closesDuring, daysLater, siteOpen } from './hours.js';
@@ -72,19 +72,21 @@ const cardKey = id => tariffKey(id).replace(/-\d+$/, '');
 
 export const DEFAULT_SHOWN = 3;
 
-// What one ranking may spend. ceme-v2's key is shared by everyone, and a
-// ranking asks once per distinct charging speed: 20-32 near Lisbon or Porto on
-// the real dataset, depending on the car. 40 leaves those alone and stops a
-// search that wanders over every speed there is (72 nationwide).
-export const MAX_SIMS_PER_CALL = 40;
 // Pricing thousands of sockets runs on the event loop, and everything else
-// waits for it, /healthz included. So: a few rankings at once per process, a
-// short line behind them, and a turn for the loop every RANK_CHUNK sockets.
-export const MAX_RANKINGS = 3;
+// waits for it, /healthz included. So: a few rankings at once per process
+// (MAX_RANKINGS, ceme.js), a short line behind them, and a turn for the loop
+// every RANK_CHUNK sockets.
+export { MAX_RANKINGS, MAX_SIMS_PER_CALL };
 export const MAX_RANKINGS_QUEUED = 12;
 export const RANK_CHUNK = 100;
-const rankings = limiter({ concurrent: MAX_RANKINGS, queued: MAX_RANKINGS_QUEUED, full: () => Object.assign(new Error('too many rankings'), { busy: true }) });
-const OVER_SIM_CAP = Symbol('over the cap of ceme-v2 calls');
+const rankings = limiter({
+  concurrent: MAX_RANKINGS, queued: MAX_RANKINGS_QUEUED,
+  full: () => Object.assign(new Error('too many rankings'), { busy: true }),
+  gone: () => new Error('the ranking was abandoned'),
+});
+// Runs `job` with a ranking's place. The caller takes it before searching, so a
+// refused or abandoned call costs nothing. Throws { busy: true } past the line.
+export const rankingSlot = (signal, job) => rankings(job, signal);
 
 // Which CEME tariffs to price at this point, cheapest first.
 //   - The user's own tariffs (cards/subscriptions they told their assistant
@@ -264,26 +266,41 @@ const notYours = (o, t) => ({ ...o, notYours: true, note: t(o.requiresOtherContr
 
 export const directOptionsForTest = (direct, session, lang, region) => directOptions(direct, session, translator(lang), region);
 
-// Quotes one point. `simCache` lets a caller ranking many points share the
-// ceme-v2 call: a ranking needs one per distinct charging speed. With `maxSims`
-// a point that would need one more than that isn't quoted (OVER_SIM_CAP): its
-// price can't come from the nearest speed, whose reply is for another number
-// of kWh, spread differently over the quarters, without redoing ceme-v2's math.
+// The part of a quote known before asking ceme-v2: the session and, for a socket
+// on MOBI.E, the key of the ceme-v2 call it shares with others of its speed.
+// -> null when the session would run past MAX_SESSION_HOURS.
+function planSession({ site, point }, car, { at, lang, detail = false, qa = false }) {
+  const session = estimateSession(point, car, translator(lang));
+  if (!(session.minutes <= MAX_SESSION_HOURS * 60)) return null;
+  // The session starts at `at` (or now), to the minute so points share the
+  // ceme-v2 call, and runs for `minutes`.
+  const start = new Date(Math.floor((at ?? new Date()).getTime() / 60_000) * 60_000);
+  const slices = sessionProfile(session.segments, start);
+  const key = point.regime === 'sem_ceme' ? null
+    : `${site.region}|${detail || qa ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',') || `${start.toISOString()}=${session.kwh}`}`;
+  return { session, start, slices, key };
+}
+
+const simArgs = ({ site }, { session, start, slices }, { detail = false, qa = false, monthKwh = null, signal }) =>
+  ({ kwh: session.kwh, at: start, region: site.region, profile: slices, detail: detail || qa, monthKwh, signal });
+
+// Quotes one point. `simCache` lets a caller pricing many points share the
+// ceme-v2 call: they need one per distinct charging speed. `plan`: planSession's
+// result, for a caller that already has it.
 //   detail: add `timeline` (when the kWh go in, and the period and price
 //           over time for each tariff shown). qa: also `debug` (what went to
 //           ceme-v2 and what came back).
 //   monthKwh: { ceme-v2 tariff id: kWh the user already charged with it this
 //           month }, for free-kWh promotions (see ceme.js expandMonthKwh).
 // -> the quote, or null when the session would run past MAX_SESSION_HOURS.
-export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, detail = false, qa = false, monthKwh = null, audiences = [], simCache = new Map(), maxSims = Infinity } = {}) {
+export async function quotePoint(hit, car, opts = {}) {
+  const { site, point } = hit;
+  const { tariffIds, shown, live, lang, detail = false, qa = false, audiences = [], simCache = new Map() } = opts;
   const t = translator(lang);
-  const session = estimateSession(point, car, t);
-  if (!(session.minutes <= MAX_SESSION_HOURS * 60)) return null;
-  // The session starts at `at` (or now), to the minute so points share the
-  // ceme-v2 call, and runs for `minutes`.
-  const start = new Date(Math.floor((at ?? new Date()).getTime() / 60_000) * 60_000);
+  const planned = opts.plan ?? planSession(hit, car, opts);
+  if (!planned) return null;
+  const { session, start, slices, key } = planned;
   const end = new Date(start.getTime() + session.minutes * 60_000);
-  const slices = sessionProfile(session.segments, start);
   const lp = live?.get(site.id, point.id) ?? null;
   const base = {
     pointId: `${site.id}/${point.id}`, siteId: site.id, code: site.code,
@@ -368,21 +385,21 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   // own price today).
   const adhoc = ownWalkUp(site, direct) ? null : adhocOption(point, session, t, base.region, site);
   const want = detail || qa;
-  const key = `${base.region}|${want ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',') || `${start.toISOString()}=${session.kwh}`}`;
-  if (!simCache.has(key) && simCache.size >= maxSims) return OVER_SIM_CAP;
-  if (!simCache.has(key)) simCache.set(key, simulate({ kwh: session.kwh, at: start, region: base.region, profile: slices, detail: want, monthKwh }));
+  if (!simCache.has(key)) simCache.set(key, simulate(simArgs(hit, planned, opts)));
   let sim;
   try {
     sim = await simCache.get(key);
   } catch (e) {
     if (!e.ceme) throw e;
-    // ceme-v2 is down: the CEME prices are missing, but the walk-up price,
-    // the direct offers and the status didn't come from it. Answer with
-    // those, flagged, and never pass a partial total off as complete.
+    // ceme-v2 is down, or this server held the call back: the CEME prices
+    // are missing, but the walk-up price, the direct offers and the status
+    // didn't come from it. Answer with those, flagged, and never pass a
+    // partial total off as complete.
     base.total = null;
     base.cemeUnavailable = true;
-    base.note = t('note.noCeme');
-    base.driverNote = t('note.noCeme.driver');
+    if (e.refused) base.cemeHeldBack = true;
+    base.note = t(e.refused ? 'note.cemeBusy' : 'note.noCeme');
+    base.driverNote = t(e.refused ? 'note.cemeBusy.driver' : 'note.noCeme.driver');
     base.options.push(...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region));
     base.options.sort((a, b) => a.total - b.total);
     base.best = bestOption(base.options, null);
@@ -501,41 +518,69 @@ export const byBest = (a, b) => sortKey(a) - sortKey(b);
 // point). MOBI.E and the networks outside it share one list: no network is
 // preferred, the price decides. `tooLong` on the list counts the kinds of
 // socket the session limit left out, among those that passed the filters;
-// `nonePriced` says no socket had a quote, filters or not; `sitesPriced` counts
-// the candidates that made it before MAX_SIMS_PER_CALL. They come nearest
-// first, so that's a cut by distance, like MAX_RANKED_POINTS in mcp.js. A site
-// cut half-way is left out whole (the socket not quoted could be its cheapest),
-// and the first site never is, so there's always something to show.
-// Throws { busy: true } when too many rankings are waiting.
-export const rank = (candidates, car, opts = {}) => rankings(() => rankNow(candidates, car, opts));
-
-async function rankNow(candidates, car, opts) {
+// `nonePriced` says no socket had a quote, filters or not.
+//
+// In three steps, because what costs is the ceme-v2 call and what blocks is
+// pricing thousands of sockets once the replies are in:
+//   1. Work out every session. Duration and status are known by now, so
+//      max_minutes and available_only go first: a socket they drop spends no call.
+//   2. Ask for the distinct speeds, nearest first, all together (ceme.js's line
+//      keeps them at MAX_CONCURRENT), up to MAX_SIMS_PER_CALL calls that really go
+//      out: what the cache covers is free.
+//   3. Price in chunks, with a turn for the event loop in between. Every reply
+//      is in, so a chunk takes no longer than its own math.
+// A socket whose speed didn't make the cap is left out (`socketsLeftOut`), and
+// only that: another price can't stand in, since a reply is for its own kWh,
+// spread over its own quarters, and adapting it would redo ceme-v2's math. The
+// first calls always go out, so the cap never empties a ranking. `sitesPriced`:
+// the candidates with something left.
+export async function rank(candidates, car, opts = {}) {
+  const { signal } = opts;
   const simCache = new Map();
-  // One instant for the whole ranking: read per quote, a minute boundary in
-  // the middle would change every session's slices, and each speed would be
-  // asked for twice.
+  // One instant for the whole ranking: read per socket, a minute boundary in
+  // the middle would change every session's slices.
   const at = opts.at ?? new Date();
-  // A socket with no quote still goes through the filters below, as a session
-  // just past the limit: if the driver's own filters drop it, the limit
-  // didn't, and the note shouldn't say it did.
-  const noQuote = (site, point) => ({ tooLong: true, session: { minutes: MAX_SESSION_HOURS * 60 + 1 }, status: opts.live?.get(site.id, point.id)?.status ?? null });
-  const todo = candidates.flatMap(({ site, points, ...dist }, index) => points.map(point => ({ site, point, dist, index })));
-  const quoted = [];
-  let sitesPriced = candidates.length;
-  // A chunk at a time, with a turn for the event loop in between. ceme-v2's
-  // reply has to arrive inside the chunk: left for the end, it would wake every
-  // waiting quote in one go, and that's the long block all over again.
-  for (let i = 0; i < todo.length && todo[i].index < sitesPriced; i += RANK_CHUNK) {
-    quoted.push(...await Promise.all(todo.slice(i, i + RANK_CHUNK).map(async ({ site, point, dist, index }) => {
-      const q = await quotePoint({ site, point }, car, { ...opts, at, simCache, maxSims: index ? MAX_SIMS_PER_CALL : Infinity });
-      if (q === OVER_SIM_CAP) sitesPriced = Math.min(sitesPriced, index);
-      return { index, q: q === OVER_SIM_CAP ? null : q ? { ...q, ...dist } : noQuote(site, point) };
-    })));
+  const shared = { ...opts, at };
+  // A socket with no quote still goes through the filters, as a session just
+  // past the limit: if the driver's own filters drop it, the limit didn't, and
+  // the note shouldn't say it did.
+  const noQuote = { tooLong: true, session: { minutes: MAX_SESSION_HOURS * 60 + 1 } };
+  const todo = [];
+  for (const [index, { site, points, ...dist }] of candidates.entries()) {
+    for (const point of points) {
+      if (todo.length % RANK_CHUNK === RANK_CHUNK - 1) { await nextTurn(); signal?.throwIfAborted(); }
+      const plan = planSession({ site, point }, car, shared);
+      todo.push({ site, point, dist, index, plan, status: opts.live?.get(site.id, point.id)?.status ?? null, minutes: plan ? Math.round(plan.session.minutes) : noQuote.session.minutes });
+    }
+  }
+  const nonePriced = todo.every(x => !x.plan);
+  const kept = todo.filter(x => (!opts.maxMinutes || x.minutes <= opts.maxMinutes) && (!opts.availableOnly || USABLE.has(x.status)));
+
+  signal?.throwIfAborted();
+  const overCap = new Set();
+  let calls = 0;
+  for (const x of kept) {
+    const key = x.plan?.key;
+    if (!key || simCache.has(key) || overCap.has(key)) continue;
+    const args = simArgs(x, x.plan, shared);
+    const covered = isCovered(args);
+    if (!covered && calls >= MAX_SIMS_PER_CALL) { overCap.add(key); continue; }
+    if (!covered) calls++;
+    simCache.set(key, simulate(args));
+  }
+  await Promise.allSettled(simCache.values());
+
+  const toPrice = kept.filter(x => !overCap.has(x.plan?.key));
+  const quotes = [];
+  for (let i = 0; i < toPrice.length; i += RANK_CHUNK) {
+    signal?.throwIfAborted();
+    quotes.push(...await Promise.all(toPrice.slice(i, i + RANK_CHUNK).map(async x => (x.plan
+      ? { ...await quotePoint(x, car, { ...shared, plan: x.plan, simCache }), ...x.dist }
+      : noQuote))));
     await nextTurn();
   }
-  const all = quoted.filter(x => x.index < sitesPriced).map(x => x.q);
-  let quotes = opts.maxMinutes ? all.filter(q => q.session.minutes <= opts.maxMinutes) : all;
-  if (opts.availableOnly) quotes = quotes.filter(q => USABLE.has(q.status));
+  const withSomething = new Set(toPrice.map(x => x.index));
+  const lost = new Set(kept.filter(x => !withSomething.has(x.index)).map(x => x.index));
   const best = list => {
     const bySite = new Map();
     for (const q of list) {
@@ -544,5 +589,5 @@ async function rankNow(candidates, car, opts) {
     }
     return [...bySite.values()].sort((a, b) => sortKey(a) - sortKey(b));
   };
-  return Object.assign(best(quotes.filter(q => !q.tooLong)), { tooLong: quotes.filter(q => q.tooLong).length, nonePriced: all.every(q => q.tooLong), sitesPriced });
+  return Object.assign(best(quotes.filter(q => !q.tooLong)), { tooLong: quotes.filter(q => q.tooLong).length, nonePriced, socketsLeftOut: kept.length - toPrice.length, sitesPriced: candidates.length - lost.size });
 }

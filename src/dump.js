@@ -87,14 +87,19 @@ export function dump(ds) {
 
 // ceme-v2's error can quote its response body, and this JSON is public: the
 // detail goes to the log and the page gets one word.
+// A last good answer (ceme.js, after a 429) counts as partial too: not kept here,
+// short-lived at the CDN, and `staleSince` says how old the oldest part is, so a
+// public page can't pass an hour-old price off as current.
 const cemeFailed = e => { console.error('[ohmigo] dados: ceme-v2:', e.message); return { error: 'unavailable' }; };
 
 async function build(ds) {
   const [sim, pr] = await Promise.all([simulate({ kwh: 20 }).catch(cemeFailed), promos().catch(cemeFailed)]);
+  const since = [sim.staleSince, pr.staleSince].filter(Boolean);
   const regimes = {};
   for (const s of ds.sites) for (const p of s.points) regimes[p.regime] = (regimes[p.regime] || 0) + 1;
   return {
-    partial: !!(sim.error || pr.error),
+    partial: !!(sim.error || pr.error || since.length),
+    ...(since.length && { staleSince: new Date(Math.min(...since)).toISOString() }),
     version: VERSION, dataAsOf: ds.generatedAt, now: new Date().toISOString(),
     counts: { sites: ds.sites.length, points: Object.values(regimes).reduce((a, b) => a + b, 0), regimes },
     ceme: sim.error ? { error: sim.error } : {
