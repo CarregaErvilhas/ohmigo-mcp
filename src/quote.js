@@ -94,6 +94,27 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
   return { options, headline, best, missing: false };
 }
 
+// The CEME's own bill, line by line, as ceme-v2 builds it (same rounding, so
+// the lines add up to its total). Euros, VAT excluded except `vatEur`:
+//   energyTar   energy + network access (TAR) for the kWh; `energy` and `tar`
+//               split it when the CEME publishes the split (else null)
+//   iec         electricity excise tax per kWh
+//   activation  EGME activation fee, once per session; `support` a CEME's
+//               own per-session charge. activationStale: the CEME still
+//               publishes last year's legal EGME value (egmeLegal)
+//   base        sum of the lines above; vatEur the VAT on it; total = base + vatEur
+// With a promotion in the total (`promoApplied`) these lines are the tariff
+// without it: they won't add up to `energyEur`.
+function cemeComponents(t, w) {
+  const { energyTar, energy, tar, iec, activation, support, base, vatEur } = t.parts;
+  return {
+    energyTar, energy, tar, iec, activation, support, base, vatEur, total: t.totalEur,
+    ...(t.egme_legal != null && { egmeLegal: t.egme_legal }),
+    ...(t.activation_stale && { activationStale: true }),
+    ...(w.final || w.energyEur !== t.totalEur ? { promoApplied: true } : {}),
+  };
+}
+
 // One CEME tariff as a way to pay here: ceme-v2's energy total plus the
 // operator fee with VAT, with the tariff's promotions for every customer at
 // this network already in (promos.js; new-customer ones never are). An
@@ -103,7 +124,7 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
 // (each tariff has its own cycle, so one session can cross for one and not
 // for another): { VAZIO: 12.4, FORA_VAZIO: 20.1 }.
 //   opc: { low, high } operator fee excl. VAT; vat: the region's multiplier
-function cemeOption(t, { site, opc, vat }) {
+function cemeOption(t, { site, opc, vat, detail }) {
   const promos = promosHere(t, site).filter(appliesToCustomers);
   const w = withPromos(promos, { energyEur: t.totalEur, opc, vat });
   return {
@@ -112,6 +133,7 @@ function cemeOption(t, { site, opc, vat }) {
     tariffId: t.id, ceme: t.ceme, name: t.name, tariffKind: t.kind, period: t.period,
     ...(t.kwhByPeriod && Object.keys(t.kwhByPeriod).length > 1 && { kwhByPeriod: t.kwhByPeriod }),
     requiresOtherContract: !!t.bundle, ...(t.audience && { audience: t.audience }), energyEur: w.energyEur,
+    ...(detail && t.parts && { components: cemeComponents(t, w) }),
     // A tariff only for people who sign up now, often a dated campaign
     // (`until`: its last day). Never the headline or `best` by default.
     ...(t.newCustomers && { newCustomersOnly: true }), ...(t.valid_until && { until: t.valid_until }),
@@ -346,7 +368,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (opc.low !== opc.high) base.assumptions.push(t('assume.feeRange'));
   if (plan?.time?.length) base.assumptions.push(t('assume.perMinute'));
 
-  const ctx = { site, opc, vat };
+  const ctx = { site, opc, vat, detail: want };
   const shownOpts = picked.options.map(o => cemeOption(o, ctx));
   // The headline, now that promotions may have changed the order: with the
   // user's tariffs, the cheapest of them; otherwise the cheapest shown one
