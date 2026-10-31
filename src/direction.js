@@ -60,16 +60,15 @@ export const onMotorway = site => [site.address, site.osm?.name].some(t => t && 
 // The direction a site says it serves, as published: "N/S", "S-N", "sentido
 // Lisboa". null when it doesn't say. Compass pairs only in capitals: nobody
 // writes them in lower case. "S/N" is also sem número (no door number), the
-// usual ending of a Portuguese address, so it only counts as south to north
-// when the address itself is on a motorway: an OSM name saying "A1" doesn't
-// explain a door in the address.
+// usual ending of a Portuguese address, so in an address it only counts as
+// south to north when that address is on a motorway: an OSM name saying "A1"
+// doesn't explain a door in the address. An OSM name has no door numbers.
 const LABEL = /\b(?<from>[NSEO])\s?[-/]\s?(?<to>[NSEO])\b|\b(?:[Ss]entido|SENTIDO)\s+(?<town>[^,;()]+)/g;
 function parseLabel(site) {
-  const doors = !site.address || !namesMotorway(site.address);
   for (const text of [site.osm?.name, site.address]) {
     for (const m of text?.matchAll(LABEL) ?? []) {
       const { from, to, town } = m.groups;
-      if (doors && from === 'S' && to === 'N') continue;
+      if (text === site.address && from === 'S' && to === 'N' && !namesMotorway(text)) continue;
       return { text: m[0].trim(), from, to, town: town?.trim() };
     }
   }

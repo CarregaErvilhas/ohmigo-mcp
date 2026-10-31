@@ -110,6 +110,8 @@ test('directionLabel: S/N is sem número off a motorway, a direction on one', ()
   assert.equal(directionLabel({ address: 'A2 - KM 31,2 (S/N)' }), 'S/N');
   assert.equal(directionLabel({ address: 'Posto Galp - EN 235 KM 13,400 (E-O)' }), 'E-O', 'only S/N looks like a door');
   assert.equal(directionLabel({ address: 'E.N. 1 km 3 (N/S)' }), 'N/S');
+  assert.equal(directionLabel({ address: 'Pombal', osm: { name: 'Galp A1 S-N' } }), 'S-N', 'an OSM name has no door numbers');
+  assert.equal(directionLabel({ address: null, osm: { name: 'Área de Serviço de Pombal A1 S-N' } }), 'S-N');
   assert.equal(directionLabel({ address: 'Rua Direita S/N', osm: { name: 'Posto A1' } }), null, 'the address is the one with the door number');
   assert.equal(directionLabel({ address: 'Área de Serviço de Almodôvar, A2', osm: { name: 'IONITY Almodovar S-N' } }), 'S-N', 'a motorway address: the OSM name can say it');
   assert.equal(directionLabel({ address: 'A1 s/n' }), null, 'lowercase is always sem número');
