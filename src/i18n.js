@@ -144,6 +144,19 @@ export const MESSAGES = {
     'err.whereOrFilter': () => 'Give lat+lon, place or route, or, to search the whole country, at least one filter (query, region, min_kw, min_voltage, connectors, dc_only, card_payment: true, cable_attached, open_now).',
     'note.nationwide': ({ shown, total }) => `No place given, so all of Portugal (or the region asked) was searched: ${total} sites match, most powerful first; showing ${shown}. For a full list, narrow with region or query, or raise limit.`,
     'note.operators': () => 'Operators as the NAP publishes them (every public charger in Portugal, on MOBI.E and outside it), grouped by NAP operatorId. Not the DGEG registry: an operator registered with the DGEG but with no charger on the NAP is not here.',
+
+    // The lines above the JSON in a tool's text (see `ok` in src/mcp.js).
+    'summary.tariffs': ({ n }) => n === 1 ? '1 tariff' : `${n} tariffs`,
+    'summary.promotions': ({ n }) => n === 1 ? '1 promotion' : `${n} promotions`,
+    'summary.needsContract': () => '(needs another contract)',
+    'summary.newOnly': () => '(new sign-ups only)',
+    'summary.until': ({ date }) => `(until ${date})`,
+    'summary.sites': ({ n }) => n === 1 ? '1 site:' : `${n} sites:`,
+    'summary.sockets': ({ n, kw }) => `${n === 1 ? '1 socket' : `${n} sockets`}, max ${kw} kW`,
+    'summary.operators': ({ n }) => n === 1 ? '1 operator:' : `${n} operators:`,
+    'summary.operatorSize': ({ sites, points, dc, kw }) => `${sites === 1 ? '1 site' : `${sites} sites`}, ${points === 1 ? '1 socket' : `${points} sockets`} (${dc} DC), max ${kw} kW`,
+    'summary.moreWays': ({ n }) => n === 1 ? '(+1 more way to pay)' : `(+${n} more ways to pay)`,
+    'summary.noPrice': () => 'n/a',
   },
   pt: {
     'progress.live': () => 'A obter o estado dos postos em tempo real no PAN…',
@@ -268,6 +281,18 @@ export const MESSAGES = {
     'err.whereOrFilter': () => 'Indica lat+lon, place ou route, ou, para pesquisar o país todo, pelo menos um filtro (query, region, min_kw, min_voltage, connectors, dc_only, card_payment: true, cable_attached, open_now).',
     'note.nationwide': ({ shown, total }) => `Sem sítio indicado, pesquisou-se Portugal todo (ou a região pedida): ${total} locais servem, os mais potentes primeiro; a mostrar ${shown}. Para a lista completa, restringe com region ou query, ou aumenta o limit.`,
     'note.operators': () => 'Operadores tal como o PAN os publica (todos os postos públicos em Portugal, na MOBI.E e fora dela), agrupados pelo operatorId do PAN. Não é o registo da DGEG: um operador registado na DGEG sem postos no PAN não aparece.',
+
+    'summary.tariffs': ({ n }) => n === 1 ? '1 tarifário' : `${n} tarifários`,
+    'summary.promotions': ({ n }) => n === 1 ? '1 promoção' : `${n} promoções`,
+    'summary.needsContract': () => '(exige outro contrato)',
+    'summary.newOnly': () => '(só para novas adesões)',
+    'summary.until': ({ date }) => `(até ${date})`,
+    'summary.sites': ({ n }) => n === 1 ? '1 local:' : `${n} locais:`,
+    'summary.sockets': ({ n, kw }) => `${n === 1 ? '1 tomada' : `${n} tomadas`}, máx. ${kw} kW`,
+    'summary.operators': ({ n }) => n === 1 ? '1 operador:' : `${n} operadores:`,
+    'summary.operatorSize': ({ sites, points, dc, kw }) => `${sites === 1 ? '1 local' : `${sites} locais`}, ${points === 1 ? '1 tomada' : `${points} tomadas`} (${dc} DC), máx. ${kw} kW`,
+    'summary.moreWays': ({ n }) => n === 1 ? '(+1 forma de pagar)' : `(+${n} formas de pagar)`,
+    'summary.noPrice': () => 'n/d',
   },
 };
 

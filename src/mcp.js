@@ -529,7 +529,7 @@ export function createServer(getDataset, live) {
     const shown = rows.slice(0, MAX_TARIFFS);
     const notes = rows.length > shown.length ? [t('note.tariffsCut', { n: shown.length, total: rows.length, narrowed: !!q })] : [];
     return ok({ version: VERSION, count: rows.length, ...(notes.length && { notes }), tariffs: shown, ...(promoRows.length && { promos: promoRows }) },
-      `${[...notes, ''].join('\n')}${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}${r.newCustomersOnly ? ' (new sign-ups only)' : ''}${r.until ? ` (until ${r.until})` : ''}`).join('\n')}`);
+      `${[...notes, ''].join('\n')}${t('summary.tariffs', { n: rows.length })}${promoRows.length ? `, ${t('summary.promotions', { n: promoRows.length })}` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ` ${t('summary.needsContract')}` : ''}${r.newCustomersOnly ? ` ${t('summary.newOnly')}` : ''}${r.until ? ` ${t('summary.until', { date: r.until })}` : ''}`).join('\n')}`);
   });
 
   server.registerTool('lookup_charger', {
@@ -606,7 +606,7 @@ export function createServer(getDataset, live) {
     notes.push(...facts.flatMap(f => f.notes));
     if (results.some(r => r.points.some(fromOsm))) notes.push(t('note.osmSockets'));
     const maxOf = (r, k) => Math.max(...r.points.map(p => p[k] ?? 0)) || '?';
-    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${r.points.length} sockets, max ${maxOf(r, 'kw')} kW${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
+    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${t('summary.sockets', { n: r.points.length, kw: maxOf(r, 'kw') })}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
     return ok({
       ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, wholeCountry: everywhere || undefined, total,
       ...(notes.length && { notes: [...new Set(notes)] }),
@@ -622,7 +622,7 @@ export function createServer(getDataset, live) {
           status: live.get(r.site.id, p.id)?.status ?? null, adHocPayment: !!p.opc?.AD_HOC_PAYMENT,
         })),
       })),
-    }, [...new Set(notes), `${total} sites:`, text].join('\n'));
+    }, [...new Set(notes), t('summary.sites', { n: total }), text].join('\n'));
   });
 
   server.registerTool('list_operators', {
@@ -652,7 +652,7 @@ export function createServer(getDataset, live) {
     const notes = [t('note.operators'), ...voltageNotes(ds, a, t),
       ...shown.filter(o => o.inferredSites).map(o => t('note.operatorsInferred', { operator: o.name, n: o.inferredSites }))];
     return ok({ ...meta(ds, live, lang), total: ops.length, notes, operators: shown },
-      [...notes, `${ops.length} operators:`, ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${o.sites} sites, ${o.points} sockets (${o.dcPoints} DC), max ${o.maxKw ?? '?'} kW`)].join('\n'));
+      [...notes, t('summary.operators', { n: ops.length }), ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${t('summary.operatorSize', { sites: o.sites, points: o.points, dc: o.dcPoints, kw: o.maxKw ?? '?' })}`)].join('\n'));
   });
 
   registerAppTool(server, 'find_cheapest_charging', {
@@ -710,7 +710,7 @@ export function createServer(getDataset, live) {
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // Summary lines on top of the JSON in the text (see ok).
-    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` (+${waysToPay(q) - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q)}) [${q.pointId}]`);
+    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` ${t('summary.moreWays', { n: waysToPay(q) - 1 })}` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : t('summary.noPrice')} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q)}) [${q.pointId}]`);
     return ok(data, [...notes, ...lines].join('\n'));
   });
 
@@ -744,7 +744,7 @@ export function createServer(getDataset, live) {
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
-    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
+    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : t('summary.noPrice')} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
     const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));

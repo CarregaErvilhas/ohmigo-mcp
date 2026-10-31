@@ -419,6 +419,24 @@ test('http: with ceme-v2 down, list_ceme_tariffs says so in plain words', async 
   } finally { cemeDown = false; }
 });
 
+test('http: the summary lines come in the language asked for', async () => {
+  const pt = { lang: 'pt' };
+  const texts = await Promise.all([
+    call('list_ceme_tariffs', { query: 'edp', ...pt }),
+    call('find_chargers', { place: 'Leiria', ...pt }),
+    call('list_operators', pt),
+    call('find_cheapest_charging', { place: 'Leiria', battery_kwh: 63, start_pct: 20, ...pt }),
+  ]).then(rs => rs.map(r => r.content[0].text.split('\n\n{')[0]));
+  const [tariffs, chargers, operators, ranking] = texts;
+  assert.match(tariffs, /^1 tarifário:/m);
+  assert.match(chargers, /^\d+ locais:|^1 local:/m);
+  assert.match(chargers, /tomadas?, máx\. /);
+  assert.match(operators, /^\d+ operadores:|^1 operador:/m);
+  assert.match(operators, /locais?, \d+ tomadas? \(\d+ DC\), máx\. /);
+  assert.match(ranking, /\(\+\d+ formas? de pagar\)/);
+  for (const text of texts) assert.doesNotMatch(text, /\b(?:tariffs?|promotions?|sites?|sockets?|operators?|ways? to pay|max|n\/a)\b/);
+});
+
 test('http: list_ceme_tariffs matches accents either way', async () => {
   for (const query of ['luzigas', 'luzigás', 'LUZIGAS']) {
     assert.equal((await call('list_ceme_tariffs', { query })).structuredContent.count, 70, query);
