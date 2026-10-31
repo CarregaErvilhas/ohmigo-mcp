@@ -40,6 +40,10 @@ npm run offers:gaps                       # operators with direct-payment signal
 - **The dataset is built in nap-dashboard** (`scripts/ohmigo_dataset.py`
   there), not here. Format changes go there first, with a `SCHEMA` bump if
   incompatible (`src/data.js` refuses unknown schemas).
+- **Guidance for the assistant goes in the narrowest place.** `INSTRUCTIONS`
+  only for what spans tools (it has a budget, `test/mcp.test.js`); one tool's
+  rules in its description or `.describe()`; one answer's in the result's
+  notes. See "What the assistant reads" in `docs/01-how-it-works.md`.
 - **Docs must not rot.** Don't copy prices, counts or thresholds into docs;
   point to the file that owns them. Docs describe what the code does now, for
   a newcomer, in the second person.

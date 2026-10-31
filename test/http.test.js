@@ -68,6 +68,21 @@ test('http: every tool is read-only and talks to the outside world', async () =>
   for (const t of tools) assert.deepEqual(t.annotations, { readOnlyHint: true, openWorldHint: true }, t.name);
 });
 
+// The tool list is in the assistant's context in every conversation, used or
+// not. Raising this is a decision, not a fix: first trim descriptions or merge
+// tools (src/mcp.js says where guidance belongs). Six tools; list_operators
+// and the socket filters (voltage, card, cable, hours) took it from 18 000.
+const TOOLS_MAX_CHARS = 20_500;
+
+test('http: the tool list stays small, and every tool says what it is for so tool search finds it', async () => {
+  const { tools } = await call('tools/list');
+  const n = JSON.stringify(tools).length;
+  assert.ok(n <= TOOLS_MAX_CHARS, `tools/list is ${n} characters, budget ${TOOLS_MAX_CHARS}`);
+  // Clients that load tools on demand match the user's request against names
+  // and descriptions: each one names the domain in its own words.
+  for (const t of tools) assert.match(t.description, /\bEV\b.*\bPortugal\b|\bPortugal\b.*\bEV\b/s, t.name);
+});
+
 test('http: estimate_charging_cost answers with structuredContent, and the text carries it too for text-only clients', async () => {
   const r = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car });
   assert.equal(r.isError, undefined);

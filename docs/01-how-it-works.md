@@ -65,6 +65,32 @@ Follow one `find_cheapest_charging` call through the code:
    support **MCP Apps** also load `ui/results.html` (built by `src/view.js`)
    and show it inline.
 
+## What the assistant reads
+
+Before it calls anything, the assistant gets the server's `INSTRUCTIONS` and
+the tool list (names, descriptions, argument schemas), all in `src/mcp.js`.
+Both sit in its context in every conversation where ohmigo is connected,
+whether the user asks about charging or not, and some clients cut the
+instructions short. So you put each piece of guidance in the narrowest place
+it applies:
+
+- **`INSTRUCTIONS`**: only what holds across tools (who's who on MOBI.E, never
+  ask for a charger id, what to look up yourself, how to present a price).
+  `INSTRUCTIONS_MAX` is its budget and `test/mcp.test.js` enforces it.
+- **A tool's description, or an argument's `.describe()`**: what only that
+  tool or argument needs. Clients that load tools on demand only read these
+  when the tool is about to be used, so this text costs nothing until then.
+  Each description names the domain ("EV", "Portugal"), because that's what
+  those clients search to find the tool.
+- **The result** (`assumptions`, `notes`, an option's `note`, through
+  `src/i18n.js`): what holds only for some answers (a peak price, a promotion
+  for new customers, a missing direction). It shows up exactly when it
+  applies, and every client passes it on.
+
+The tool list has a budget too (`TOOLS_MAX_CHARS` in `test/http.test.js`).
+When it bites, trim before you raise it, and prefer one more argument on an
+existing tool over a new tool that does almost the same thing.
+
 ## Files
 
 | File | What it does |

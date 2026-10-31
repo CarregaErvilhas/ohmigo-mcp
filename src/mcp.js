@@ -35,59 +35,36 @@ import { viewHtml } from './view.js';
 
 const VIEW_URI = 'ui://ohmigo/results.html';
 
-// Read once by the assistant when it connects. It's a prompt, not docs: it
-// tells the assistant what to ask the user, what to look up itself, and how to
+// Read by the assistant when it connects. It's a prompt, not docs: it tells
+// the assistant what to ask the user, what to look up itself, and how to
 // present the results honestly.
-export const INSTRUCTIONS = `Estimates what an EV charging session costs at any public charger in Portugal, on every network published on the NAP (National Access Point, "PAN" in Portuguese): MOBI.E chargers (CEME energy tariff + charger operator (OPC) fee + taxes) and chargers outside MOBI.E (Tesla, Continente...) paid to the operator directly. Finds the cheapest charger near a place or along a route.
+//
+// It goes into the assistant's context in every conversation, used or not,
+// and some clients cut it: Claude Code keeps only the first INSTRUCTIONS_MAX
+// characters (test/mcp.test.js holds it to that). So only what applies across
+// tools lives here. What one tool needs goes in that tool's description or
+// its arguments' (clients that load tools on demand only read those when the
+// tool is about to be used), and what one result needs goes in the result
+// itself (assumptions, notes, each option's note), which every client passes
+// on and costs nothing when it doesn't apply.
+export const INSTRUCTIONS_MAX = 4096;
+export const INSTRUCTIONS = `Prices EV charging at every public charger in Portugal on the NAP ("PAN" in Portuguese): MOBI.E chargers (CEME energy + charger operator (OPC) fee + taxes) and those outside MOBI.E (Tesla, Continente...), paid to the operator. Finds the cheapest charger near a place or on a route; lists chargers and operators.
 
-Language: always answer the user in the language they write in. Pass lang with their language (e.g. "pt" or "en") on every call; the server's labels, assumptions and progress messages come back in Portuguese or English, and you translate them for any other language.
+Language: answer in the user's language and pass it as lang on every call; text comes back in Portuguese or English, translate it for any other language.
 
-Who's who on MOBI.E (don't mix these up):
-- CEME: who the user buys the energy from (their card/app). Sets the energy price.
-- OPC (Operador de Ponto de Carregamento): the company that operates a PUBLIC charger (IONITY, Powerdot, Galp...). Charges the usage fee on top of the energy. Every charger this server returns has an OPC.
-- DPC (Detentor de Ponto de Carregamento): the holder of a PRIVATE-access charger connected to MOBI.E: a home wallbox, a condominium garage, a company car park for its staff or fleet. It is not an operator, there is no OPC behind it and no OPC fee: the session costs only the CEME energy, the EGME fee and taxes. Only its owner's authorized users can charge there. DPC chargers are not in the public data (NAP), so this server never lists or prices them. "DPC" is not a kind of OPC, not a payment option and not a field in the results; don't call an OPC a DPC or the reverse. If the user charges at a DPC charger (home, work, condo), say that ohmigo can't price it and that the cost is their CEME tariff (list_ceme_tariffs shows it) without any operator fee.
+Who's who on MOBI.E (don't mix them up): the CEME sells the energy (the user's card/app) and sets its price. The OPC operates a PUBLIC charger (IONITY, Powerdot, Galp...) and bills a fee on top; every charger here has one. A DPC holds a PRIVATE charger connected to MOBI.E (home wallbox, condo garage, company car park): not an operator, no OPC fee, not in the NAP, so ohmigo can't list or price it; a session there costs the user's CEME tariff (list_ceme_tariffs) plus the EGME fee and taxes. Never call an OPC a DPC or the reverse.
 
-Finding the charger the user means: nobody knows a charger's id, so never ask for one. When the user names a charger ("the Continente in Leiria", "IONITY Mealhada", "the Galp on the A1 at Pombal", "the charger at Lidl in Coimbra") or reads its code off the sticker ("LRA-00156"), call lookup_charger with their words as query, plus lat/lon if you know where they are. It returns what the NAP publishes about that site (every socket's power, plug and live status, the operator fee, the walk-up price, direct offers; the operator fee, walk-up and NAP prices there come without VAT, as published, while estimate_charging_cost adds the region's VAT; napPriceWithVat marks an operator that publishes it with VAT in) and, in "osm", what the OpenStreetMap community mapped there: the place's name, the brand (often who owns the chargers, or the shop or car park they're at), opening hours, access, parking fee, "underground" car park. "operator" (from the NAP) is the OPC that runs the charger and bills its fee; the owner can be someone else: Lidl's chargers are owned by Lidl and operated by Galp, so the NAP says Galp and OSM says Lidl. Both are right; say who operates it, and credit OpenStreetMap when you use its data. Each site's "missing" lists the user's words it lacks: if the best sites still miss some, say so instead of presenting them as the one the user meant, and ask or try fewer words. If several sites fit, list them briefly (operator, address, town) and ask which one. For the cost there, pass its siteId as site to estimate_charging_cost (point_id only when the user picked one socket).
+Never ask for a charger id: when the user names a charger (brand or operator + town, a shop, an address, the code on its sticker), call lookup_charger with their words, then pass its siteId as site to estimate_charging_cost. At a motorway service area, when a result asks for the direction, ask where the user is heading.
 
-Lists and socket details: to list who operates chargers ("which OPCs are there?", "who runs the chargers in Madeira?", "who has 800 V chargers?"), call list_operators; it covers every operator with chargers on the NAP (MOBI.E and outside it), not the DGEG registry, so say so if asked about licensing. To list chargers by a property across the whole country ("every charger above 500 V", "all IONITY sites"), call find_chargers with the filter and no place; it says how many match and returns the most powerful first (narrow with region or query for the rest). Each socket has kw, volts and amps: OpenStreetMap's (read off the charger by the community) where they differ from the NAP's, with the NAP's in napKw/napVolts/napAmps; otherwise the operator's declaration on the NAP, where 750 or 600 V on a DC socket is often a placeholder. Say which source a number comes from when it matters. "level" (BTN, BTE, MT) is the grid connection's voltage level, which picks the energy tariff, not the socket's voltage: never present it as the socket voltage.
+"level" (BTN, BTE, MT) is the grid connection, never the socket's voltage (that's volts). Before the user goes, mention what applies: "cable" false = they bring their own cable (say it whenever you suggest an AC socket); "openNow" false or "hours": a car park that closes is unusable then; "cardPayment", "locationDescription" (where in the car park), "support" (who to call if it won't start).
 
-Before the user goes: "cable" false on a socket means it has no cable fixed to it, so the user must bring their own (Type 2 cable for AC); mention it whenever you suggest an AC socket. "openNow" and "hours" (NAP and OpenStreetMap, in OpenStreetMap syntax) say if the site is open; a charger in a car park that closes is unusable at night, so say so, and pass open_now to leave closed ones out. "cardPayment" true means a bank card works at the charger itself (terminal or contactless), false means it doesn't; card_payment filters on it. "locationDescription" (and osm.level, osm.covered) says where it is inside the car park ("Piso -1"). "support" is who to call or email when the charger doesn't start. osm.manufacturer/model name the charger hardware and osm.capacity how many cars can charge at once, when mapped. When the notes say two sources disagree (hours, card), pass that on instead of picking one.
+Before a cost call: look up the car's specs yourself (usable battery, max AC/DC kW, published DC 10-80% minutes, the DC curve if you find it); don't ask the user for them. Ask only for what you don't know: battery % now, target % (default 80), and whether they're in a hurry (the cheapest is often a slow AC socket: pass max_minutes or dc_only on a trip). If they pay with CEME cards/apps, resolve them with list_ceme_tariffs and pass them all as tariff_ids. ohmigo stores nothing: remember the car, its specs and the user's tariffs yourself, and for monthly free-kWh promotions the kWh they charged per tariff this month (month_kwh).
 
-Motorways: a service area usually has one charger site on each side of the road, and the driver can only reach the one on their side; both often share a name and even an address. When a result says so (directionNeeded, or an error asking for the direction), ask the user which way they're driving (where they're heading) unless they already said, then call again with towards (that town, or its lat/lon). The server picks the side from the direction the site says it serves, or else from the right-hand rule; in that case an assumption tells the user to check the signs: pass it on. On a route (route argument) the far side is left out when the sites say which way they serve; otherwise both sides can show up, so name the direction when you present one.
+Presenting: lead with "best", the cheapest option anyone can use now: total in €, duration, how to pay, main assumptions. Every charger has more ways to pay in "options": other CEMEs, "adhoc" (bank card/QR at the charger, what someone without a CEME card pays: always mention it), "direct" (operator apps, subscriptions, roaming apps; a subscription's fee is not in the total) and "opc_direct" (the operator's NAP price outside MOBI.E). Say there are more and offer to list them; point out when a subscription or another CEME is cheaper. MOBI.E and other networks share one ranking: the price decides.
+Pass on the result's assumptions and notes and each option's note: they flag peak prices (the most it can cost; usually much less off-peak), promotions in or out of the total, stale or island-VAT prices, sources that disagree. Tariffs and promotions for new sign-ups only (newCustomersOnly, newCustomers) are tips for non-clients ("signing up by <until> gets <price>"), never the price. Prices for one group (audience) are only for drivers who said they belong to it: never infer a group, and say whom the price is for.
+Credit your sources: OpenStreetMap for "osm" data; for "direct" prices, the source in the note (for the blog, its author, Alexandre Moleiro).
 
-Before calling a cost tool, make sure you know (ask only for what you don't have or don't remember):
-1. Where: the user's location (lat/lon), a town name, or a route (list of waypoints from origin to destination); or the charger itself (above). For a place that isn't a town (a shopping centre, a street, a motorway service area), use its lat/lon from your own knowledge or a search; place only knows towns and addresses on the NAP.
-2. The car model. Look up yourself (web search or your knowledge) its USABLE battery capacity (battery_kwh), max AC power (car_ac_kw), max DC power (car_dc_kw) and its published DC 10-80% charging time in minutes (dc_10_80_minutes), which makes the duration estimate far better than the generic curve. If you find the car's DC charging curve (kW at each state of charge), pass it as charge_curve. Don't ask the user for these numbers unless you can't find them.
-3. Current battery % (start_pct).
-4. Target battery % (target_pct). Default 80 if the user doesn't say; above 80% DC charging gets slow and per-minute fees add up.
-5. Whether they're in a hurry. The cheapest option is often a slow AC socket that takes hours; on a trip, pass max_minutes (e.g. 45) or dc_only.
-6. Optional: the CEME tariffs they have (the cards/apps/subscriptions they pay with; some users have several). Call list_ceme_tariffs to resolve names like "EDP" or "Via Verde" to tariff_ids and pass them all; each charger is priced with the cheapest of them. Without tariff_ids, results show the top 3 popular tariffs (tariffs_shown for more), headlined by the cheapest that needs no other contract.
-7. Optional: when they will charge (at, ISO 8601). Prices change between off-peak (vazio) and peak hours. Default is now.
-
-This server stores nothing about the user. Remember the car, its charging specs and the user's tariffs yourself (if your app has memory) so you don't ask again next time.
-
-When presenting results: give the total in euros and the duration, name the tariff used, and mention the main assumptions (charging losses, estimated duration, per-minute fees). Each charger lists every way to pay in options:
-- "ceme": a CEME card/app on MOBI.E;
-- "adhoc": bank card / QR code at the charger, no CEME. Always mention it when present: it's what someone without a CEME card pays. MOBI.E publishes it without VAT; the total has the region's VAT added;
-- "direct": paying outside the CEME system: a card terminal (TPA) or QR at the charger, the operator's own app or subscription (IONITY Power, Atlante GO...), or a roaming app (Electroverse, Elli, Electromaps...). Final prices with VAT, from a public price list (see note and checked date). Subscriptions show a monthly/yearly fee that is NOT included in the session total; say so. When you quote one of these prices, credit its source (named in the note): for the blog, name its author, Alexandre Moleiro. On Madeira and the Azores they carry vatUnverified: the list uses mainland VAT, so tell the user to confirm the price;
-- "opc_direct": chargers outside MOBI.E (Continente, Tesla...): this charger's own price as the NAP publishes it, paid to the operator through its app or card without a subscription. The NAP publishes it without VAT (eurPerKwhExVat); total and eurPerKwh have the region's VAT added (23 % on the mainland, less on Madeira and the Azores). A few operators publish it with VAT in (napVatIncluded, Tesla): then eurPerKwh is the NAP's number. It's ranked like any other price. When the same charger also has "direct" offers (network-wide prices), show both: they can differ. When the assumptions say the price changes with the time of day, tell the user it's the peak price and the app can be cheaper at other hours.
-MOBI.E chargers and those outside it come in one ranking; no network is preferred, the price decides (regime "sem_ceme" marks the ones outside MOBI.E, with no CEME).
-CEME promotions: some CEMEs give a discount only at one network (e.g. a CEME's energy cheaper at Powerdot chargers, or a subscription that cuts the operator fee there). A result's "promos" lists the ones at that charger, each with label, total (this session with it), saving, until and note:
-- applied: true means it's for every customer of that tariff and is already in that option's total (the option carries "promos" and, for operator-fee discounts, opcDiscountPct). Say the price includes it and until when.
-- newCustomers: true means it only holds for people who sign up during the promotion (maxHours: how long it lasts after signing up). It is never in any total. Mention it as a tip ("if you're new to X, signing up by <until> would make this session cost <total>"), never as the price.
-- target FINAL is an all-in price (operator fee and VAT included) that the CEME charges at its network instead of energy + operator fee; the option carries opcIncluded. It replaces the usual sum even where that would be lower: say so if it costs more.
-
-Monthly free kWh (promos with target KWH_GRATIS, e.g. a CEME giving its electricity clients the first kWh of each month free, on any charger): this server stores nothing, so YOU keep the count, per tariff and per calendar month (Portugal time). Keep a running log in your memory of the user's sessions: date, tariff_id, kWh. Add one when the user says they charged (ask for the kWh on the invoice/app if they know it; otherwise use the session.kwhBilled of the estimate they followed) and start again from zero on the 1st of each month. On every cost call, pass month_kwh: { tariff_id: kWh charged so far this month } for the tariffs that have such a promotion. With it, the option's total already uses the free kWh still left (freeKwhLeft), and applied is true. Without it, monthKwhKnown is false and the promotion is only a tip priced as if no free kWh were used yet: if you don't know the count, ask the user how many sessions and roughly how many kWh they've charged with that card this month, rather than guessing.
-Tariffs only for new sign-ups (newCustomersOnly: true on a tariff or an option, usually a dated campaign with until = its last day): someone who's already a client of that CEME can't get it. It is never the headline or "best" unless the user passed it in tariff_ids (then they have it). When it is cheaper, mention it as a tip ("if you're not a X client yet, signing up by <until> gets <price>"), never as the price.
-Prices for one group only (audience on a tariff or an option: a company's employees, ride-hailing drivers; the groups are listed in the audiences argument): they are hidden unless you pass audiences. Pass a group only when the driver told you they belong to it ("trabalho na EDP", "sou colaborador da Powerdot", "sou motorista Uber") or you remember they did; never infer it. When they say only "sou colaborador" or "I'm an employee", ask of which company. An option with audience is for that group only: say so ("price for EDP employees").
-
-Chargers are ranked by "best": the cheapest option anyone can use now (no subscription, no other contract, not a new-sign-ups-only tariff). Lead with it, and point out when a subscription or another CEME would be cheaper. Every result carries all its ways to pay in "options", usually more than you show: always tell the user there are more (subscriptions, other CEMEs, apps) and offer to list them.
-
-Peak prices (peakPrice on an option, napPriceIsPeak in lookup_charger; today Tesla Superchargers): the operator's price changes during the day, but on the NAP it publishes one fixed value, the highest of the day, and there is no public source with the price at each hour. Always tell the driver, in plain words: the price shown is the most it can cost at that charger (congestion fees aside), it's usually much cheaper at night and off-peak, and only the operator's app shows the price for their hour. Never present it as the price they will pay, and when it decides a ranking, say a peak-priced charger may well be cheaper at their time.
-
-Time of day matters: a session lasts minutes to hours, and the energy price can change while it runs (peak to off-peak "vazio" hours, the wholesale OMIE price every 15 minutes for indexed tariffs, even a clock change). The server prices the session quarter-hour by quarter-hour from its start (at, default now) to its estimated end; session.startLocal/endLocal give the window. A CEME option with kwhByPeriod crossed periods: mention it when it changes the picture (e.g. "starting 30 min later puts most of it in off-peak"). If the user asks how a price was built, or why it changes with the time, call again with detail: true and explain the timeline (when the kWh go in and, per tariff, each stretch's period, price and OMIE; quarters that look the same are merged into one run).
-
-Charger status comes from the NAP's live feed; live.publishedAt says when it was published. The feed is a large file fetched on demand, so the first call after a few quiet minutes can take ~20-30 s. If live.fresh is false or live.publishedAt is null, say status may be stale or unknown. A charger can still be taken by the time they arrive. Costs are estimates; the operator's and CEME's published prices on the day prevail.`;
+Live status comes from the NAP; if live.fresh is false, say it may be stale. Costs are estimates; the operator's and CEME's prices on the day prevail.`;
 
 // Argument schemas, shared by the tools. zod turns them into the JSON Schema
 // the assistant sees, and validates what it sends back.
@@ -97,23 +74,23 @@ Charger status comes from the NAP's live feed; live.publishedAt says when it was
 export const QA = process.env.OHMIGO_QA === '1';
 // In QA, show more tariffs per charger by default, to check more of the math.
 const QA_SHOWN = 10;
-const QA_NOTE = `
+export const QA_NOTE = `
 
-QA MODE: this is a test server. Results include "timeline" and "debug". When you answer, also show the session window, the timeline of the headline tariff and anything in "debug" that looks wrong, so the tester can check the math. Each charger comes with up to ${QA_SHOWN} tariffs by default: list them all, not just the top 3.`;
+QA MODE (test server): results carry "timeline" and "debug". Also show the session window, the headline tariff's timeline and anything in "debug" that looks wrong, so the tester can check the math; list all of each charger's tariffs (up to ${QA_SHOWN}), not just 3.`;
 
 const Detail = {
-  detail: z.boolean().optional().describe('Include the timeline: when the kWh are delivered and, for each CEME tariff shown, its period (vazio/fora de vazio), price and OMIE over the session (quarter-hours that look the same are merged into runs). Use when the user asks how the price was built. In a ranking, only the first results carry it.'),
+  detail: z.boolean().optional().describe('Add the timeline (kWh delivered and, per CEME tariff shown, period, price and OMIE over the session), when the user asks how the price was built or why it changes with the time. In a ranking only the first results carry it.'),
 };
 
 // Prices only some people can get (offers/audiences.json). Never guessed:
 // only what the driver said about themselves.
 const Audience = {
   audiences: z.array(z.enum(Object.keys(AUDIENCES))).max(10).optional()
-    .describe(`Groups the driver said they belong to, which unlock prices only they can get: ${Object.entries(AUDIENCES).map(([id, a]) => `${id} = ${a.en}`).join('; ')}. Only when the driver said so in this conversation or you remember they did; never guess it from their car, job or location. Omit otherwise.`),
+    .describe(`Groups the driver said they belong to, unlocking prices only for them: ${Object.entries(AUDIENCES).map(([id, a]) => `${id} = ${a.en}`).join('; ')}. Never guess; "I'm an employee" alone: ask which company.`),
 };
 
 const Lang = {
-  lang: z.string().max(20).optional().describe('The user\'s language, e.g. "pt", "pt-PT", "en". Portuguese gets Portuguese text; anything else English.'),
+  lang: z.string().max(20).optional().describe('The user\'s language, e.g. "pt", "en"'),
 };
 
 // `at` beyond this is a bug in the caller (1970, 2099), not a plan: nobody
@@ -121,43 +98,47 @@ const Lang = {
 // cost" a few days back. Checked per call, so a long-running server moves
 // the window with the clock.
 const AT_PAST_DAYS = 7, AT_AHEAD_DAYS = 365;
+// ISO 8601 with a UTC offset ("Z" or "+01:00"), checked by hand: zod's
+// .datetime() puts a ~300-character regex in the JSON Schema of every tool
+// that has `at`, which the assistant reads and never needs.
+const ISO_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 const inWindow = s => {
   const ms = Date.parse(s) - Date.now();
   return ms >= -AT_PAST_DAYS * 86_400_000 && ms <= AT_AHEAD_DAYS * 86_400_000;
 };
 
 const Car = {
-  battery_kwh: z.number().positive().max(250).describe('Usable battery capacity in kWh (look it up from the car model)'),
-  start_pct: z.number().min(0).max(100).describe('Current state of charge, %'),
-  target_pct: z.number().min(1).max(100).default(80).describe('Target state of charge, % (default 80)'),
-  car_ac_kw: z.number().positive().max(43).optional().describe("Car's max AC charging power, kW (on-board charger)"),
-  car_dc_kw: z.number().positive().max(500).optional().describe("Car's max DC charging power, kW"),
-  dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% charging time, minutes"),
+  battery_kwh: z.number().positive().max(250).describe('Usable battery capacity, kWh (look it up from the car model)'),
+  start_pct: z.number().min(0).max(100).describe('Battery now, %'),
+  target_pct: z.number().min(1).max(100).default(80).describe('Target battery, % (default 80; DC slows down above it)'),
+  car_ac_kw: z.number().positive().max(43).optional().describe("Car's max AC power, kW (on-board charger)"),
+  car_dc_kw: z.number().positive().max(500).optional().describe("Car's max DC power, kW"),
+  dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes: makes the duration far better than the generic curve"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
-    .describe("Car's DC charging curve: power (kW) at state of charge (%), e.g. [{soc:10,kw:150},{soc:50,kw:110},{soc:80,kw:60}]"),
-  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariff ids from list_ceme_tariffs; omit to show the top popular ones"),
-  tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: how many popular tariffs to show per charger'),
-  at: z.string().datetime({ offset: true }).optional()
-    .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`)
-    .describe(`When the charge starts, ISO 8601 (default now; from ${AT_PAST_DAYS} days ago to ${AT_AHEAD_DAYS} days ahead)`),
+    .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]"),
+  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), all of them: each charger is priced with the cheapest. Omit to show the popular ones"),
+  tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs shown per charger'),
+  at: z.string().refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
+    .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`).optional()
+    .describe(`When the charge starts, ISO 8601 with offset (default now; ${AT_PAST_DAYS} days back to ${AT_AHEAD_DAYS} ahead). Energy prices change between peak and off-peak (vazio) hours`),
   month_kwh: z.record(z.string().max(64), z.number().min(0).max(100000)).optional()
-    .describe("kWh the user already charged in the current calendar month with each of their tariffs, keyed by tariff_id, e.g. {\"goldenergy-bt-clientesgold\": 12.4}. From your own count of their sessions (see the instructions on monthly free kWh). Omit when unknown."),
+    .describe('Tariffs with a monthly free-kWh promotion: kWh charged with each this calendar month (Portugal time), by tariff_id, e.g. {"goldenergy-bt-clientesgold": 12.4}. Keep your own log of the user\'s sessions (kWh from their invoice/app, else the kwhBilled you estimated), reset on the 1st; with no count, ask'),
 };
 
 const Where = {
   lat: z.number().min(30).max(43).optional().describe('Latitude of the user or search centre'),
   lon: z.number().min(-32).max(-6).optional().describe('Longitude of the user or search centre'),
-  place: z.string().optional().describe('Town/municipality name, used when lat/lon are unknown (e.g. "Leiria")'),
-  radius_km: z.number().positive().max(50).default(5).describe('Search radius around lat/lon or place'),
+  place: z.string().optional().describe('Town or municipality, when lat/lon are unknown (e.g. "Leiria"). Only towns and NAP addresses: for a shopping centre, street or service area, pass its lat/lon'),
+  radius_km: z.number().positive().max(50).default(5).describe('Search radius, km'),
   route: z.array(z.object({ lat: z.number(), lon: z.number() })).min(2).max(200).optional()
-    .describe('Waypoints from origin to destination; searches along this line instead of around a point'),
+    .describe('Waypoints from origin to destination, to search along the route instead'),
   corridor_km: z.number().positive().max(20).default(2).describe('Max distance from the route, km'),
-  query: z.string().max(200).optional().describe('Only chargers whose operator, brand, name or address matches these words, e.g. "IONITY", "Continente", "Lidl". A town in it is used as the place when no lat/lon/place/route is given'),
+  query: z.string().max(200).optional().describe('Only chargers whose operator, brand, name or address match these words, e.g. "IONITY", "Lidl"; a town in it is the place when none is given'),
 };
 
 const Towards = {
   towards: z.union([z.string().max(100), z.object({ lat: z.number().min(30).max(43), lon: z.number().min(-32).max(-6) })]).optional()
-    .describe('Where the user is driving to: a town (e.g. "Lisboa") or lat/lon. Picks the side of a motorway service area they can reach; ask the user when a result says the direction is needed'),
+    .describe('Where the driver is heading, a town or lat/lon: picks the side of a motorway service area they can reach'),
 };
 
 // `towards` as a point and a name for the sentences, or an error.
@@ -184,10 +165,10 @@ const Filter = {
   min_kw: z.number().positive().optional().describe('Minimum charger power, kW'),
   connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'SCHUKO'])).optional().describe('Acceptable plug types'),
   dc_only: z.boolean().optional().describe('Only DC (fast) chargers'),
-  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum socket voltage, V (e.g. 800 for cars with an 800 V battery): OpenStreetMap\'s where mapped, else what the operator declares on the NAP'),
-  card_payment: z.boolean().optional().describe('Only chargers where a bank card works at the charger itself (card terminal / contactless), per the NAP or OpenStreetMap'),
-  cable_attached: z.boolean().optional().describe('true: only sockets with the cable fixed to the charger; false: only sockets where the user brings their own cable'),
-  open_now: z.boolean().optional().describe('Leave out chargers whose opening hours say they are closed now (or at `at`, when given), e.g. in a car park that closes at night'),
+  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum socket voltage, V (e.g. 800 for an 800 V car)'),
+  card_payment: z.boolean().optional().describe('Only chargers where a bank card works at the charger itself'),
+  cable_attached: z.boolean().optional().describe('true: only sockets with a fixed cable; false: only those where the user brings one'),
+  open_now: z.boolean().optional().describe('Leave out chargers closed now (or at `at`) by their opening hours'),
 };
 
 // The Filter arguments, as Dataset.pointFilter takes them.
@@ -239,7 +220,7 @@ const Region = {
 };
 
 const maxMinutes = z.number().positive().optional()
-  .describe('Drop chargers whose estimated session takes longer than this. Slow AC sockets are often cheapest but take hours; set this when the user is on a trip or in a hurry.');
+  .describe('Drop chargers whose session takes longer, minutes: slow AC is often cheapest but takes hours, so set it on a trip or in a hurry');
 
 const car = a => ({
   batteryKwh: a.battery_kwh, startPct: a.start_pct, targetPct: a.target_pct,
@@ -483,8 +464,8 @@ export function createServer(getDataset, live) {
 
   server.registerTool('list_ceme_tariffs', {
     title: 'List CEME tariffs',
-    description: 'Lists the CEME (EV charging electricity retailer) tariffs used on MOBI.E chargers, to resolve the card/app the user pays with to a tariff_id. Filter by name. Also lists the CEMEs\' current promotions at specific charging networks.',
-    inputSchema: z.object({ query: z.string().optional().describe('Text to match in the CEME or tariff name, e.g. "edp", "galp", "via verde"'), ...Audience, ...Lang }),
+    description: 'Lists the CEME tariffs (the EV charging cards/apps of the electricity retailers on MOBI.E, Portugal), to turn what the user pays with ("EDP", "Via Verde") into tariff_ids for the cost tools. Also lists the CEMEs\' current promotions at specific charging networks.',
+    inputSchema: z.object({ query: z.string().optional().describe('Text in the CEME or tariff name, e.g. "edp", "via verde"'), ...Audience, ...Lang }),
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, async ({ query, audiences, lang: l }, ctx) => {
     const t = translator(langOf({ lang: l }, ctx));
@@ -522,11 +503,11 @@ export function createServer(getDataset, live) {
 
   server.registerTool('lookup_charger', {
     title: 'Look up a charger',
-    description: 'Finds a specific charger the way the user names it: the code on its sticker ("LRA-00156"), operator or brand plus town ("Continente Leiria", "IONITY Mealhada"), the shop or place it is at, or its address. Returns everything published about it: each socket\'s power, plug, live status, operator fee, walk-up (ad hoc) price and direct offers, plus OpenStreetMap details. Use its siteId as site in estimate_charging_cost.',
+    description: 'Finds one public EV charger in Portugal the way the user names it: the code on its sticker ("LRA-00156"), operator or brand plus town ("Continente Leiria", "IONITY Mealhada"), the shop or place it is at, or its address. Returns what is published about it: each socket\'s power, plug, live status, operator fee, walk-up (ad hoc) price and direct offers, as published (mostly without VAT; estimate_charging_cost gives final prices), plus OpenStreetMap details in "osm". The NAP "operator" runs the charger and bills its fee; OSM\'s brand is often the owner or the shop (Lidl\'s chargers are run by Galp): say who operates it and credit OpenStreetMap. "missing" lists the user\'s words a site lacks: don\'t present it as their charger without saying so. If several fit, ask which (operator, address, town). For the cost, pass its siteId as site to estimate_charging_cost.',
     inputSchema: z.object({
-      query: z.string().min(1).max(200).describe('What the user calls the charger, in their words: code, operator/brand, place, town, address'),
+      query: z.string().min(1).max(200).describe('The user\'s words for the charger: code, operator/brand, place, town, address'),
       lat: Where.lat, lon: Where.lon,
-      radius_km: z.number().positive().max(300).optional().describe('With lat/lon: only sites this close'),
+      radius_km: z.number().positive().max(300).optional().describe('With lat/lon: only sites this close, km'),
       ...Towards, ...Filter, ...Audience, ...Lang,
       limit: z.number().int().positive().max(20).default(5),
     }),
@@ -574,7 +555,7 @@ export function createServer(getDataset, live) {
 
   server.registerTool('find_chargers', {
     title: 'Find chargers',
-    description: 'Finds public EV charge points near a location, along a route, or in the whole country when a filter is given (e.g. every charger with min_voltage 800, every IONITY site, card_payment), with power, voltage, plug type, fixed cable, opening hours, bank card payment and live status. No cost estimate; use find_cheapest_charging for that. For one charger the user names, use lookup_charger.',
+    description: 'Lists public EV chargers in Portugal near a place, along a route, or in the whole country when a filter is given (every 800 V charger, every IONITY site, card_payment), with power, voltage, plug, fixed cable, opening hours, bank card payment and live status per socket. No prices: for costs use find_cheapest_charging; for one charger the user names, lookup_charger.',
     inputSchema: z.object({ ...Where, ...Filter, ...Region, ...Lang, limit: z.number().int().positive().max(100).default(15) }),
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, async (a, ctx) => {
@@ -644,10 +625,10 @@ export function createServer(getDataset, live) {
 
   registerAppTool(server, 'find_cheapest_charging', {
     title: 'Find cheapest charging',
-    description: 'Ranks chargers near a location or along a route by the estimated total cost of the session (energy + operator fee + taxes), for the user\'s car and battery levels. Every charger lists all the ways to pay.',
+    description: 'Ranks public EV chargers in Portugal near a place or along a route by the estimated cost of the user\'s charging session (energy + operator fee + taxes; MOBI.E and other networks in one list), for their car and battery levels. Each result has "best", the cheapest way to pay anyone can use now, and every way to pay in "options".',
     inputSchema: z.object({
       ...Where, ...Filter, ...Car, ...Audience, ...Detail, ...Lang, max_minutes: maxMinutes,
-      available_only: z.boolean().default(true).describe('Skip chargers the live feed reports as charging, out of order or blocked'),
+      available_only: z.boolean().default(true).describe('Skip chargers reported busy, out of order or blocked'),
       limit: z.number().int().positive().max(30).default(10),
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -695,10 +676,10 @@ export function createServer(getDataset, live) {
 
   registerAppTool(server, 'estimate_charging_cost', {
     title: 'Estimate charging cost',
-    description: 'Estimated cost and duration of a session at one charger (site: siteId from lookup_charger or the other tools, or the code/name the user gave) or one socket (point_id), with the full breakdown and every way to pay. With site, each different kind of socket there is priced, cheapest first.',
+    description: 'Estimated cost and duration of a charging session at one public EV charger in Portugal (site) or one socket (point_id), with the full breakdown and every way to pay. Each kind of socket at the site is priced, cheapest first.',
     inputSchema: z.object({
-      site: z.string().max(200).optional().describe('The charger: siteId from lookup_charger/find_chargers (e.g. "GLP-LRA-00156"), its code ("LRA-00156"), or the user\'s words if they name one site'),
-      point_id: z.string().optional().describe('One socket, "SITE/POINT" as returned by the other tools, e.g. "GLP-LRA-00156/LRA-00156-02". Only when the user picked a socket; otherwise use site'),
+      site: z.string().max(200).optional().describe('The charger: siteId from lookup_charger or the other tools (e.g. "GLP-LRA-00156"), its sticker code ("LRA-00156"), or the user\'s words for one site'),
+      point_id: z.string().optional().describe('One socket, "SITE/POINT" from the other tools; only when the user picked one'),
       ...Towards, ...Filter, ...Car, ...Audience, ...Detail, ...Lang,
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
