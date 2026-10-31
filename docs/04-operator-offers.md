@@ -47,20 +47,34 @@ Alexandre Moleiro, who lets us use it as long as we credit him. Prices are
 final with VAT, one column per power band (AC ≤7.4, AC 11-22, DC ≤50,
 100, 120, 150, 180, >180). We credit it in every price we show (the `note`
 names the source). The author publishes a **new post** for each update, so
-the scraper reads Blogger's feed and takes the newest post that has the price
-table, instead of a fixed URL.
+the scraper reads Blogger's feed and takes the most recently published post
+that has the price table, instead of a fixed URL. It goes by publication date,
+so an edit to an old post doesn't bring its old prices back.
 
 **The weekly job** (`.github/workflows/offers.yml`, Mondays, or by hand from
 the Actions tab):
-1. scrapes, then runs `npm test`;
-2. if `offers/custofinal.json` changed, opens a **pull request** with the
-   scrape log. Nothing reaches users until someone merges it;
-3. if the scrape fails (blog moved, layout changed, feed down), opens an
-   **issue**, and the old prices stay.
+1. scrapes, then runs `npm test`, in a job with no secrets;
+2. if `offers/custofinal.json` changed, a second job on a fresh runner, which
+   runs nothing from the repo, takes just that file and opens a **pull
+   request** with the scrape log. Nothing reaches users until someone merges
+   it. It opens even if the tests failed: the body says so, and the required
+   `test` check fails on it, so it can't be merged until they're fixed. If an
+   open PR already has the same content, it does nothing;
+3. if the scrape fails (blog moved, layout changed, feed down), the tests fail
+   with no offer change to show them on, or the PR can't be opened, opens an
+   **issue** saying which, and the old prices stay.
 
 The parser is strict on purpose. An unknown column header, a table without a
-caption, or zero rows make it fail, rather than quietly publish prices in the
-wrong columns.
+caption, zero rows, a price cell that isn't a number, or a row with more cells
+than bands make it fail, rather than quietly publish prices in the wrong
+columns (an empty cell or a short row is fine: not offered at that power).
+
+On top of that comes a sanity check, `offerProblems()` in
+`src/offers-parse.js`, whose limits are the constants at the top of that file.
+Every row's labels must be of a sane length, without control or format
+characters, angle brackets or leftover entities; every offer that ships must
+have its prices within bounds; the source must be https on the blog. A bad one
+fails the scrape. `npm test` runs the same check over everything in `offers/`.
 
 ## Matching offers to chargers: `offers/networks.json`
 
@@ -78,8 +92,9 @@ into NAP operator ids:
 - `scope: "mobie"`: every charger on MOBI.E.
 - `scope: "unknown"`: we can't tell which chargers, so the offer is left out.
 - A label the file doesn't know: the scrape still works, leaves those rows out,
-  and the pull request lists them as **unmapped**. Add them (the operator id is
-  in `npm run offers:gaps` or the dataset), and the next run picks them up.
+  and the pull request lists them as **unmapped**. `npm test` fails on any
+  unmapped label, so that PR can't be merged: add them (the operator id is in
+  `npm run offers:gaps` or the dataset) and run the scrape again.
 
 When a provider has a row for a specific network AND a MOBI.E-wide row (the
 blog lists "Electroverse @ Rede Mobi.E" and "Electroverse @ Ionity"), the
@@ -119,7 +134,9 @@ renamed the slug) is skipped with a warning at boot, and `npm test` fails
 naming it.
 
 Every entry needs a `source` (https) and the `checkedAt` date you read it.
-After 90 days, users are told the price may be out of date.
+The source's host must be in `sourceHosts` at the top of `manual.json`, or
+`npm test` fails: a new source is a line there too. After 90 days, users are
+told the price may be out of date.
 
 ## Notes on the NAP's own price: `offers/nap-notes.json`
 

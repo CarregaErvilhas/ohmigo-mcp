@@ -77,7 +77,7 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
   quarter by quarter ([02](docs/02-cost-math.md)).
 - **Durations are modelled**, not measured. Without the car's curve or 10-80 %
   time, they're rough.
-- **Live status is up to 15 minutes old**, and the first question after a quiet
+- **Live status is up to 5 minutes old**, and the first question after a quiet
   spell waits ~25 s for the download.
 - **Some MOBI.E chargers publish no operator fee anywhere.** Their price is
   energy only, shown as "≥".

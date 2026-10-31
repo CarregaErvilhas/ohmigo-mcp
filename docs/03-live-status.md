@@ -17,10 +17,11 @@ We've asked for a chunked version. Until then, we live with the whole file.
 **On demand, with a cache.** Nothing is downloaded until a user asks a
 question. Then:
 
-1. If our copy is **less than 15 minutes old** (`LIVE_TTL_SECONDS`, ±10 %
-   so instances drift apart), we use it, with no network at all. Why not
-   fresher: every refresh is a full 38 MB download (see below), so a 5-minute
-   TTL meant three times the traffic for a status that's best-effort anyway. Results carry
+1. If our copy is **less than 5 minutes old** (`LIVE_TTL_SECONDS`, ±10 %
+   so instances drift apart), we use it, with no network at all. 5 minutes
+   matches how often the NAP publishes (about every 5 minutes). Every refresh is a full 38 MB
+   download (see below), but only while someone is asking: with no users,
+   there is no traffic. Results carry
    `live.publishedAt`, so the assistant can say how old the status is.
 2. Otherwise we start **one** download. If ten users ask at the same moment,
    they all wait on that same download (`refresh()` hands back the one
@@ -48,7 +49,7 @@ download is the slow part.
 "unclosed tag" error) or the connection resets. Other failures (an HTTP
 error, a refused connection) are not retried at once: the next attempts back
 off (`BACKOFF_MS` in `src/live.js`), and requests in between answer with the copy we
-have instead of starting another download. `/healthz` shows `failures`,
+have instead of starting another download. `/healthz` (with its token, see [06](06-run-and-deploy.md)) shows `failures`,
 `retryAt` and the size of the last download (`bytesLast`).
 
 **One warm-up at boot**, so the first user after a deploy doesn't wait, a

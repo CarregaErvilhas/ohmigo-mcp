@@ -36,7 +36,7 @@ Follow one `find_cheapest_charging` call through the code:
 2. **`src/mcp.js`** validates the arguments against the zod schema, picks the
    language (`lang`), and turns "Leiria" into coordinates
    (`Dataset.resolvePlace`).
-3. **`src/live.js`** makes sure the live status is less than 15 minutes old.
+3. **`src/live.js`** makes sure the live status is less than 5 minutes old.
    If it isn't, it downloads the NAP feed while the user sees a progress
    message ([03](03-live-status.md)).
 4. **`src/data.js`** finds every site within the radius, or along the route,
