@@ -166,6 +166,7 @@ export function promoTips(quotes, site, { opc, vat, applied = new Map(), shown =
   for (const q of quotes) {
     const ctx = { energyEur: q.totalEur, opc, vat };
     const here = promosHere(q, site, networks);
+    if (!here.length) continue;
     const customers = here.filter(appliesToCustomers);
     const plain = withPromos([], ctx).high;
     const price = withPromos(customers, ctx).high; // the option's total (quote.js cemeOption)
@@ -182,7 +183,10 @@ export function promoTips(quotes, site, { opc, vat, applied = new Map(), shown =
       // Would it take effect next to what's already in this tariff's price?
       // A new-customer or uncounted free-kWh tip joins them to find out: it
       // goes last, so a tie stays with the promotion already in.
-      const beaten = saves && !withPromos(customers.includes(p) ? customers : [...customers, p], ctx).applied.includes(p);
+      // An all-in price replaces the rest, so it can win and still cost more
+      // than what's in the price: that's no saving either.
+      const dearer = p.target === 'FINAL' && !inTotal(p, q) && alone >= price;
+      const beaten = saves && (dearer || !withPromos(customers.includes(p) ? customers : [...customers, p], ctx).applied.includes(p));
       const total = inTotal(p, q) || beaten || spent ? price : alone;
       const saving = beaten ? 0 : r2(plain - alone);
       const cur = best.get(p.id);

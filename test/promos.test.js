@@ -192,6 +192,16 @@ test('promoTips: a new-customer or uncounted free-kWh tip is beaten only by what
   assert.doesNotMatch(row('uncounted').note, /pass month_kwh/, 'the count would not change it');
 });
 
+test('promoTips: a new-customer all-in price dearer than what is in the price offers no saving', () => {
+  const inPrice = { ...luzigas, id: 'in-price', newCustomers: false, totalEur: 5 };
+  const newFinal = { ...luzigas, id: 'new-final', target: 'FINAL', totalEur: 7 };
+  const ctx = { opc: { low: 1, high: 1 }, vat: 1.23, applied: new Map([['in-price', new Set(['a'])]]), shown: new Set(['a']) };
+  const rows = promoTips([{ id: 'a', ceme: 'X', name: 'Y', totalEur: 7, promos: [inPrice, newFinal] }], powerdot, ctx, translator('en'));
+  const row = rows.find(p => p.id === 'new-final');
+  assert.equal(row.saving, 0);
+  assert.match(row.note, /already in this price/);
+});
+
 test('promoTips: a row with applied true is the tariff it applied on, not a cheaper one', () => {
   const quotes = [
     { id: 'tip', ceme: 'Enable', name: 'Simples', totalEur: 5, promos: [miioOne] },
