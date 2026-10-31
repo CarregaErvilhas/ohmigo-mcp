@@ -61,7 +61,7 @@ Never ask for a charger id: when the user names a charger (brand or operator + t
 Before a cost call: look up the car's specs yourself (usable battery, max AC/DC kW, published DC 10-80% minutes, the DC curve if you find it); don't ask the user for them. Ask only for what you don't know: battery % now, target % (default 80), and whether they're in a hurry (the cheapest is often a slow AC socket: pass max_minutes or dc_only on a trip). If they pay with CEME cards/apps, resolve them with list_ceme_tariffs and pass all the ones they hold as tariff_ids. ohmigo stores nothing: remember the car, its specs and the user's tariffs yourself, and for monthly free-kWh promotions the kWh they charged per tariff this month (month_kwh).
 
 Presenting: lead with "best", the cheapest option anyone can use now: total in €, duration, how to pay, main assumptions. Every charger has more ways to pay in "options": other CEMEs, "adhoc" (no CEME card needed; its label says if by card at the charger or on the phone: always mention it), "direct" (operator apps, subscriptions, roaming apps; a subscription's fee is not in the total) and "opc_direct" (the operator's NAP price outside MOBI.E). Say there are more and offer to list them; point out when a subscription or another CEME is cheaper. MOBI.E and other networks share one ranking: the price decides.
-Pass on the result's assumptions and notes and each option's note: they flag peak prices (the most it can cost; usually much less off-peak), promotions in or out of the total, stale or island-VAT prices, sources that disagree. Tariffs and promotions for new sign-ups only (newCustomersOnly, newCustomers) are tips for non-clients ("signing up by <until> gets <price>"), never the price. Prices for one group (audience) are only for drivers who said they belong to it: never infer a group, and say whom the price is for.
+Pass on the result's assumptions and notes and each option's note: they flag peak prices (the most it can cost; usually much less off-peak), promotions in or out of the total, stale or island-VAT prices, sources that disagree. Tariffs and promotions for new sign-ups only (newCustomersOnly, newCustomers) are tips for non-clients ("signing up by <until> gets <price>"), never the price. Prices for one group (audience) are only for drivers who said they belong to it, now or before (your memory counts): never infer a group, and say whom the price is for.
 Credit your sources: OpenStreetMap for "osm" data; for "direct" prices, the source in the note (for the blog, its author, Alexandre Moleiro).
 
 Live status comes from the NAP; if live.fresh is false, say it may be stale. Costs are estimates; the operator's and CEME's prices on the day prevail.`;
@@ -79,14 +79,14 @@ export const QA_NOTE = `
 QA MODE (test server): results carry "timeline" and "debug". Also show the session window, the headline tariff's timeline and anything in "debug" that looks wrong, so the tester can check the math; list all of each charger's tariffs (up to ${QA_SHOWN}), not just 3.`;
 
 const Detail = {
-  detail: z.boolean().optional().describe('Add the timeline (kWh delivered and, per CEME tariff shown, period, price and OMIE over the session), when the user asks how the price was built or why it changes with the time. In a ranking only the first results carry it.'),
+  detail: z.boolean().optional().describe("Add the timeline (kWh, period, price and OMIE over the session) and each CEME option's \"components\" (its bill line by line) when the user asks how the price was built. In a ranking only the first results carry it."),
 };
 
 // Prices only some people can get (offers/audiences.json). Never guessed:
 // only what the driver said about themselves.
 const Audience = {
   audiences: z.array(z.enum(Object.keys(AUDIENCES))).max(10).optional()
-    .describe(`Groups the driver said they belong to, unlocking prices only for them: ${Object.entries(AUDIENCES).map(([id, a]) => `${id} = ${a.en}`).join('; ')}. Never guess; "I'm an employee" alone: ask which company.`),
+    .describe(`Groups the driver said they belong to (now or earlier), for prices only they get: ${Object.entries(AUDIENCES).map(([id, a]) => `${id} = ${a.en}`).join('; ')}. Never guess; "I'm an employee" alone: ask which company.`),
 };
 
 const Lang = {
@@ -197,9 +197,11 @@ function siteFacts(site, t, at = new Date()) {
   const notes = [];
   if (hours.disagree) notes.push(t('note.hoursDisagree', { site: site.id, nap: hours.nap, osm: hours.osm }));
   if (card.disagree) notes.push(t('note.cardDisagree', { site: site.id, napYes: card.nap }));
+  if (site.operatorInferred) notes.push(t('assume.operatorInferred', { operator: site.operator }));
   const phone = site.phone ?? site.osm?.phone;
   return {
     facts: {
+      operatorInferred: site.operatorInferred,
       name: site.name ?? undefined,
       hours: hours.nap || hours.osm ? { nap: hours.nap ?? undefined, osm: hours.osm ?? undefined } : undefined,
       openNow: hours.open ?? undefined,
@@ -267,7 +269,7 @@ function resolveWhere(ds, a, t, { everywhere = false } = {}) {
   }
   if (!everywhere) return { error: t('err.where'), code: 'where' };
   const filtered = a.query || a.region || a.min_kw != null || a.min_voltage != null || a.connectors?.length || a.dc_only
-    || a.card_payment != null || a.cable_attached != null || a.open_now;
+    || a.card_payment === true || a.cable_attached != null || a.open_now;
   return filtered ? { only, everywhere: true } : { error: t('err.whereOrFilter'), code: 'where' };
 }
 
@@ -325,6 +327,10 @@ function siteCard(h, live, t, audiences = [], notes = []) {
     sockets: [...groups.values()].sort((a, b) => (b.named ? 1 : 0) - (a.named ? 1 : 0) || (b.kw ?? 0) - (a.kw ?? 0)),
   };
 }
+
+// A socket in a summary line. The NAP leaves power and plug blank on some
+// sockets: kw arrives as null and connector as the text "nan".
+const socketLine = q => `${q.kw ?? '?'} kW ${q.connector === 'nan' ? '?' : q.connector ?? '?'}`;
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
@@ -419,7 +425,9 @@ function pointsFor(ds, live, a, t) {
       if (named.length) points = named;
     }
     for (const point of points) {
-      const key = canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, h.site.operatorId]);
+      // operatorInferred: a socket on a lent site must not merge into a named
+      // sibling's, or its assumption goes with it.
+      const key = canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, h.site.operatorId, !!h.site.operatorInferred]);
       const cur = kinds.get(key);
       if (!cur || (!free(cur.site, cur.point) && free(h.site, point))) kinds.set(key, { site: h.site, point });
     }
@@ -458,6 +466,10 @@ function rankCandidates(results, live, route) {
   return { candidates, truncated: candidates.length < results.length };
 }
 
+// Rows list_ceme_tariffs returns: the assistant is looking for one card, not
+// reading a catalogue. The result says when this cut bit.
+const MAX_TARIFFS = 60;
+
 // `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
 // every few hours, and each request should see the current one.
 export function createServer(getDataset, live) {
@@ -480,13 +492,13 @@ export function createServer(getDataset, live) {
     let all, current;
     try { [all, current] = await Promise.all([tariffs(), promos().catch(() => ({ data: [] }))]); }
     catch (e) { if (e.ceme) return err(t('err.tariffs'), 'ceme'); throw e; }
-    const q = (query || '').toLowerCase();
+    const q = fold(query);
     // One row per tariff, not per voltage: the BT/MT variant is picked per charger.
     const seen = new Map();
     for (const t of all.data ?? all) {
       const key = tariffKey(t.id);
       const name = `${t.ceme_name ?? t.ceme} ${t.name}`;
-      if (q && !name.toLowerCase().includes(q)) continue;
+      if (q && !fold(name).includes(q)) continue;
       if (!forAudiences(t, audiences)) continue;
       // ceme-v2's valid_to is exclusive (the day the campaign is gone).
       const until = t.version?.valid_to ? new Date(Date.parse(t.version.valid_to) - 864e5).toISOString().slice(0, 10) : null;
@@ -503,9 +515,10 @@ export function createServer(getDataset, live) {
         ...(p.eurKwh != null && { eurKwh: p.eurKwh }), ...(p.pct != null && { pct: p.pct }),
         ...(p.freeKwh != null && { freeKwhPerMonth: p.freeKwh }),
       from: p.from, until: p.to, active: p.active, newCustomers: p.newCustomers, tariffIds: p.tariffs, url: p.url }));
-    const shown = rows.slice(0, 60);
-    return ok({ version: VERSION, count: rows.length, tariffs: shown, ...(promoRows.length && { promos: promoRows }) },
-      `${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}${r.newCustomersOnly ? ' (new sign-ups only)' : ''}${r.until ? ` (until ${r.until})` : ''}`).join('\n')}`);
+    const shown = rows.slice(0, MAX_TARIFFS);
+    const notes = rows.length > shown.length ? [t('note.tariffsCut', { n: shown.length, total: rows.length, narrowed: !!q })] : [];
+    return ok({ version: VERSION, count: rows.length, ...(notes.length && { notes }), tariffs: shown, ...(promoRows.length && { promos: promoRows }) },
+      `${[...notes, ''].join('\n')}${rows.length} tariffs${promoRows.length ? `, ${promoRows.length} promotions` : ''}:\n${shown.map(r => `${r.tariff_id}: ${r.ceme} · ${r.name}${r.requiresOtherContract ? ' (needs another contract)' : ''}${r.newCustomersOnly ? ' (new sign-ups only)' : ''}${r.until ? ` (until ${r.until})` : ''}`).join('\n')}`);
   });
 
   server.registerTool('lookup_charger', {
@@ -557,7 +570,7 @@ export function createServer(getDataset, live) {
       sites: cards,
       // OpenStreetMap's licence (ODbL) asks for this wherever its data shows.
       credit: r.results.some(h => h.site.osm) ? t('credit.osm') : undefined,
-    }, [...notes, ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${g.kw ?? '?'} kW ${g.connector}`).join(', ')}`)].join('\n'));
+    }, [...new Set(notes), ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g)}`).join(', ')}`)].join('\n'));
   });
 
   server.registerTool('find_chargers', {
@@ -625,7 +638,8 @@ export function createServer(getDataset, live) {
       const direct = [...new Set(OFFERS.filter(x => o.operatorId && x.scope?.operatorIds?.includes(o.operatorId)).map(x => x.label))];
       return { ...o, directOffers: direct.length ? direct : undefined };
     });
-    const notes = [t('note.operators'), ...voltageNotes(ds, a, t)];
+    const notes = [t('note.operators'), ...voltageNotes(ds, a, t),
+      ...shown.filter(o => o.inferredSites).map(o => t('note.operatorsInferred', { operator: o.name, n: o.inferredSites }))];
     return ok({ ...meta(ds, live, lang), total: ops.length, notes, operators: shown },
       [...notes, `${ops.length} operators:`, ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${o.sites} sites, ${o.points} sockets (${o.dcPoints} DC), max ${o.maxKw ?? '?'} kW`)].join('\n'));
   });
@@ -666,7 +680,10 @@ export function createServer(getDataset, live) {
       q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm);
       // The timeline is for "how was this price built", a question about one
       // charger: ten of them were ~100 KB. The first few keep it.
-      if (i >= DETAIL_IN_RANKING) delete q.timeline;
+      if (i >= DETAIL_IN_RANKING) {
+        delete q.timeline;
+        for (const o of q.options) delete o.components;
+      }
     }
     const notes = [
       ...(cemeDown ? [t('note.noCeme')] : []),
@@ -678,7 +695,7 @@ export function createServer(getDataset, live) {
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // Summary lines on top of the JSON in the text (see ok).
-    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` (+${waysToPay(q) - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
+    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` (+${waysToPay(q) - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q)}) [${q.pointId}]`);
     return ok(data, [...notes, ...lines].join('\n'));
   });
 
@@ -708,7 +725,7 @@ export function createServer(getDataset, live) {
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
-    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${q.kw} kW ${q.connector} [${q.pointId}]`);
+    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
     const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...moreWays(results, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));

@@ -1,5 +1,5 @@
 // The whole server over HTTP: src/server.js started as a process, with a
-// four-site dataset (test/fixtures) and a fake ceme-v2, called the way an MCP
+// small dataset (test/fixtures) and a fake ceme-v2, called the way an MCP
 // client calls it. Covers what the unit tests can't: the tool handlers, the
 // response shapes, /healthz, the shutdown.
 import { test, before, after } from 'node:test';
@@ -10,6 +10,8 @@ import { once } from 'node:events';
 import { moreWays } from '../src/mcp.js';
 
 let ceme, cemeDown = false, cheapTip = false, server, base;
+// Enough rows to pass list_ceme_tariffs' cut, under a name with an accent.
+const manyTariffs = Array.from({ length: 70 }, (_, i) => ({ id: `luzigas-bt-${i}`, ceme: 'LZG', ceme_id: 'LZG', ceme_name: 'Luzigás', name: `Plano ${i}`, kind: 'FIXED' }));
 
 before(async () => {
   // Fake ceme-v2: one tariff, priced at 0.2 €/kWh.
@@ -20,7 +22,7 @@ before(async () => {
       if (cemeDown) { res.writeHead(503); return res.end('down'); }
       const send = x => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(x)); };
       if (req.url === '/v1/session') return send({ token: 't', expires_in: 3600 });
-      if (req.url === '/v1/tariffs') return send({ data: [{ id: 'edp-bt-x', ceme: 'EDPC', ceme_id: 'EDPC', ceme_name: 'EDP', name: 'Stub', kind: 'FIXED' }] });
+      if (req.url === '/v1/tariffs') return send({ data: [{ id: 'edp-bt-x', ceme: 'EDPC', ceme_id: 'EDPC', ceme_name: 'EDP', name: 'Stub', kind: 'FIXED' }, ...manyTariffs] });
       if (req.url === '/v1/promos') return send({ data: [] });
       const b = JSON.parse(body || '{}');
       send({
@@ -146,7 +148,7 @@ test('http: find_cheapest_charging ranks MOBI.E and the networks outside it', as
   const r = await call('find_cheapest_charging', { place: 'Leiria', ...car });
   const d = r.structuredContent;
   assert.equal(d.kind, 'ranking');
-  assert.equal(d.quoted, 3);
+  assert.equal(d.quoted, 4);
   assert.equal(d.truncated, undefined);
   assert.ok(d.results.some(q => q.regime === 'sem_ceme') && d.results.some(q => q.regime === 'mobie'));
   assert.ok(JSON.stringify(r).length < 30_000);
@@ -178,6 +180,11 @@ test('http: find_chargers searches the whole country only when a filter keeps th
   const none = await call('find_chargers', {});
   assert.equal(none.isError, true);
   assert.equal(none.structuredContent.code, 'where');
+  // pointFilter ignores card_payment: false, so it can't stand in for a place.
+  const noCard = await call('find_chargers', { card_payment: false });
+  assert.equal(noCard.isError, true);
+  assert.equal(noCard.structuredContent.code, 'where');
+  assert.match(noCard.content[0].text, /card_payment: true/);
   // A cost ranking still needs a place.
   const cheap = await call('find_cheapest_charging', { min_voltage: 900, ...car });
   assert.equal(cheap.structuredContent.code, 'where');
@@ -185,9 +192,10 @@ test('http: find_chargers searches the whole country only when a filter keeps th
 
 test('http: list_operators groups the NAP operators and narrows by filter and name', async () => {
   const all = (await call('list_operators', {})).structuredContent;
-  // Same size: by name (Galp before Modelo Continente).
-  assert.deepEqual(all.operators.map(o => [o.operatorId, o.sites]), [['GLPP', 2], ['CONT', 2]]);
-  assert.equal(all.operators[1].maxVoltage, 1000);
+  // By size, then by name; EDPC is the EDP-FAR socket-poor site (components
+  // tests), the nameless row is ZZZ-FAR's "no operator anywhere" site.
+  assert.deepEqual(all.operators.map(o => [o.operatorId, o.sites]), [['CONT', 4], ['GLPP', 2], [undefined, 1], ['EDPC', 1]]);
+  assert.equal(all.operators[0].maxVoltage, 1000);
   assert.ok(all.notes.length >= 1);
   // OpenStreetMap's 1000 V replaces the NAP's 920 V on Galp's CCS.
   assert.deepEqual((await call('list_operators', { min_voltage: 950 })).structuredContent.operators.map(o => o.operatorId), ['GLPP', 'CONT']);
@@ -267,7 +275,7 @@ test('http: /dados with ceme-v2 down goes out without tariffs, cached 1 min only
     const d = await r.json();
     assert.equal(d.partial, true);
     assert.ok(d.ceme.error);
-    assert.equal(d.counts.sites, 4);
+    assert.equal(d.counts.sites, 8);
   } finally { cemeDown = false; }
 });
 
@@ -284,14 +292,127 @@ test('http: /dados is public, cacheable, unindexed, and has nothing that depends
   assert.match(r.headers.get('x-robots-tag'), /noindex/);
   const d = await r.json();
   assert.equal(d.partial, false);
-  assert.equal(d.counts.sites, 4);
+  assert.equal(d.counts.sites, 8);
   assert.deepEqual(d.ceme.tariffs.map(t => t.id), ['edp-bt-x']);
   assert.equal('totalEur' in d.ceme.tariffs[0], false);
   assert.ok(d.operators.some(o => o.id === 'CONT'));
   assert.ok(d.offers.list.length > 0);
 
   const postos = await (await fetch(`${base}/dados/postos.json?op=CONT`)).json();
-  assert.deepEqual(postos.map(s => s.id).sort(), ['CNT-9648PL0001', 'CNT-9648PR0002']);
+  assert.deepEqual(postos.map(s => s.id).sort(), ['CNT-0001PL0002', 'CNT-9648PL0001', 'CNT-9648PL0003', 'CNT-9648PR0002']);
+});
+
+test('http: a site the NAP left nameless is its id prefix\'s operator everywhere, and says so', async () => {
+  const named = (await call('lookup_charger', { query: 'CNT-9648PL0001' })).structuredContent.sites[0];
+  const lent = (await call('lookup_charger', { query: 'CNT-0001PL0002', lang: 'en' })).structuredContent;
+  const [card] = lent.sites;
+  assert.equal(card.operator, named.operator);
+  assert.equal(card.operatorId, 'CONT');
+  assert.equal(card.operatorInferred, true);
+  assert.equal(named.operatorInferred, undefined);
+  assert.deepEqual(card.sockets[0].direct.map(x => x.label), named.sockets[0].direct.map(x => x.label));
+  assert.ok(card.sockets[0].direct.length > 0);
+  assert.ok(lent.notes.some(n => /inferred/.test(n) && n.includes(named.operator)));
+
+  const q = (await call('estimate_charging_cost', { point_id: 'CNT-0001PL0002/0001PL0002.01', battery_kwh: 58, start_pct: 20, lang: 'en' })).structuredContent;
+  assert.equal(q.results[0].operatorInferred, true);
+  assert.ok(q.results[0].assumptions.some(a => /inferred/.test(a)));
+  assert.ok(!q.results[0].options.some(o => /names no operator/.test(o.label)));
+
+  const found = (await call('find_chargers', { query: 'Continente', lang: 'en' })).structuredContent;
+  assert.equal(found.sites.find(s => s.siteId === 'CNT-0001PL0002').operatorInferred, true);
+  assert.ok(found.notes.some(n => /inferred/.test(n)));
+
+  const ops = (await call('list_operators', { query: 'continente', lang: 'en' })).structuredContent;
+  assert.deepEqual(ops.operators.map(o => [o.operatorId, o.sites, o.inferredSites]), [['CONT', 4, 2]]);
+  assert.ok(ops.notes.some(n => n.includes("2 of Modelo Continente Hipermercados, S.A.'s sites (inferredSites)")));
+  assert.ok(!ops.notes.some(n => n.includes('(operatorInferred)')));
+  const glp = (await call('list_operators', { query: 'galp', lang: 'en' })).structuredContent;
+  assert.ok(!glp.notes.some(n => /inferred/.test(n)));
+});
+
+test('http: an inferred socket stays apart from its named sibling, so its assumption survives', async () => {
+  const { results } = (await call('estimate_charging_cost', { site: 'CNT-9648PL0003', battery_kwh: 58, start_pct: 20, lang: 'en', at: '2026-11-02T12:00:00Z' })).structuredContent;
+  const lent = results.filter(q => q.siteId === 'CNT-9648PL0003');
+  assert.ok(lent.length >= 1);
+  assert.ok(lent.every(q => q.assumptions.some(a => /inferred/.test(a))));
+  assert.ok(results.some(q => q.siteId === 'CNT-9648PL0001' && !q.operatorInferred));
+});
+
+test('http: lookup_charger says each note once in its text', async () => {
+  const r = await call('lookup_charger', { query: 'Continente', limit: 10, lang: 'en' });
+  assert.ok(r.structuredContent.sites.filter(s => s.operatorInferred).length >= 2);
+  const summary = r.content[0].text.split('\n\n')[0];
+  assert.equal(summary.split('\n').filter(l => /inferred/.test(l)).length, 1);
+});
+
+test('http: a site with nobody to lend it an operator stays nameless, and /dados still lists it', async () => {
+  const [card] = (await call('lookup_charger', { query: 'ZZZ-FAR-00001' })).structuredContent.sites;
+  assert.equal(card.operator, null);
+  assert.equal(card.operatorInferred, undefined);
+
+  const { operators } = await (await fetch(`${base}/dados.json`)).json();
+  const row = operators.find(o => !o.id);
+  assert.equal(row.sites, 1);
+  assert.ok(row.name);
+  const cont = operators.find(o => o.id === 'CONT');
+  assert.equal(cont.inferred, 2);
+  assert.equal(cont.inferredNote, '2 locais sem operador no PAN, atribuídos pelo prefixo do id');
+  // The nameless first site of a group doesn't leave the row nameless.
+  assert.equal(cont.name, 'Modelo Continente Hipermercados, S.A.');
+  const postos = await (await fetch(`${base}/dados/postos.json?op=${encodeURIComponent(row.key)}`)).json();
+  assert.deepEqual(postos.map(s => s.id), ['ZZZ-FAR-00001']);
+  // No key, no chargers: not every nameless site by accident.
+  assert.deepEqual(await (await fetch(`${base}/dados/postos.json`)).json(), []);
+});
+
+// The order of the next tests matters: the server keeps the tariff list for
+// minutes, so this one has to come before anything that fetches it, and three
+// failures in a row stop all calls to ceme-v2 for a while, so the full outage
+// test has to come after everything that needs ceme-v2.
+test('http: with ceme-v2 down, list_ceme_tariffs says so in plain words', async () => {
+  cemeDown = true;
+  try {
+    const t = await call('list_ceme_tariffs', {});
+    assert.equal(t.isError, true);
+    assert.equal(t.structuredContent.code, 'ceme');
+    assert.doesNotMatch(t.content[0].text, /fetch failed|HTTP 503/);
+  } finally { cemeDown = false; }
+});
+
+test('http: list_ceme_tariffs matches accents either way', async () => {
+  for (const query of ['luzigas', 'luzigás', 'LUZIGAS']) {
+    assert.equal((await call('list_ceme_tariffs', { query })).structuredContent.count, 70, query);
+  }
+});
+
+test('http: list_ceme_tariffs says so when it cuts the list, and only then', async () => {
+  const all = await call('list_ceme_tariffs', { lang: 'pt' });
+  assert.equal(all.structuredContent.count, 71);
+  assert.equal(all.structuredContent.tariffs.length, 60);
+  assert.match(all.structuredContent.notes[0], /60 dos 71.*query/);
+  assert.match(all.content[0].text, /^.*60 dos 71/);
+  const narrow = await call('list_ceme_tariffs', { query: 'edp' });
+  assert.equal(narrow.structuredContent.count, 1);
+  assert.equal(narrow.structuredContent.notes, undefined);
+  // Already narrowed: telling it to call again with query would go in circles.
+  for (const lang of ['en', 'pt']) {
+    const [note] = (await call('list_ceme_tariffs', { query: 'luzigas', lang })).structuredContent.notes;
+    assert.match(note, /60 .*70/);
+    assert.doesNotMatch(note, /query/);
+  }
+});
+
+test('http: a socket with no published power or plug reads "?" in the summary lines', async () => {
+  const unknown = /\(?\? kW \?\)? \[EDP-FAR-00001\/FAR-00001-01\]/;
+  const ranked = await call('find_cheapest_charging', { place: 'Faro', ...car });
+  assert.match(ranked.content[0].text.split('\n\n')[0], unknown);
+  const single = await call('estimate_charging_cost', { site: 'EDP-FAR-00001', ...car });
+  assert.match(single.content[0].text.split('\n\n')[0], unknown);
+  const found = await call('lookup_charger', { query: 'EDP-FAR-00001' });
+  assert.match(found.content[0].text.split('\n\n')[0], /1× \? kW \?$/m);
+  // Only the text: the data keeps what the dataset says.
+  assert.equal(single.structuredContent.results[0].connector, 'nan');
 });
 
 test('http: with ceme-v2 down, the other ways to pay still come back, flagged', async () => {
@@ -302,10 +423,6 @@ test('http: with ceme-v2 down, the other ways to pay still come back, flagged', 
     assert.equal(r.structuredContent.cemeUnavailable, true);
     const mobie = r.structuredContent.results.filter(q => q.regime === 'mobie');
     assert.ok(mobie.every(q => q.cemeUnavailable && q.total === null));
-    const t = await call('list_ceme_tariffs', {});
-    assert.equal(t.isError, true);
-    assert.equal(t.structuredContent.code, 'ceme');
-    assert.doesNotMatch(t.content[0].text, /fetch failed|HTTP 503/);
   } finally { cemeDown = false; }
 });
 

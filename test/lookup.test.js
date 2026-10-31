@@ -29,6 +29,68 @@ const ds = new Dataset({
 });
 const ids = (q, opts) => ds.lookup(q, opts).results.map(h => h.site.id);
 
+test('a nameless site takes the operator of its id prefix, marked as inferred', () => {
+  const s = ds.siteById.get('CNT-0001PL0002');
+  assert.equal(s.operator, 'Modelo Continente Hipermercados, S.A.');
+  assert.equal(s.operatorId, 'CONT');
+  assert.equal(s.operatorInferred, true);
+  assert.equal(ds.siteById.get('CNT-9648PL0001').operatorInferred, undefined);
+});
+
+test('two named operators without ids sharing a prefix lend nothing', () => {
+  const lent = new Dataset({ sites: [
+    site('NON-1', '1', 'A', '', 'One', null, 40, -8), site('NON-2', '2', 'A', '', 'Two', null, 40, -8),
+    site('NON-3', '3', 'A', '', null, null, 40, -8),
+  ] }).siteById;
+  assert.equal(lent.get('NON-3').operator, null);
+});
+
+test('a prefix lends its most common spelling, and the lent name does not vote', () => {
+  const data = new Dataset({ sites: [
+    site('SPL-1', '1', 'A', '', 'Usual', 'SPL', 40, -8), site('SPL-2', '2', 'A', '', 'Usual', 'SPL', 40, -8),
+    site('SPL-3', '3', 'A', '', 'Rare', 'SPL', 40, -8), site('SPL-4', '4', 'A', '', 'Usual', 'SPL', 40, -8, { region: 'MAD' }),
+    site('SPL-5', '5', 'A', '', null, null, 40, -8), site('SPL-6', '6', 'A', '', null, null, 40, -8),
+    site('SPL-7', '7', 'A', '', null, null, 40, -8), site('LON-1', '8', 'A', '', null, null, 40, -8, { region: 'AZO' }),
+    site('SPL-8', '9', 'A', '', null, null, 40, -8, { region: 'AZO' }),
+  ] });
+  assert.equal(data.siteById.get('SPL-5').operator, 'Usual');
+  const [op] = data.operators().filter(o => o.operatorId === 'SPL');
+  assert.equal(op.name, 'Usual');
+  assert.deepEqual(op.otherNames, ['Rare']);
+  // Where a filter leaves only inferred sites, the lent name still names it.
+  assert.deepEqual(data.operators({ region: 'AZO' }).map(o => o.name).sort(), ['?', 'Usual']);
+});
+
+test('a nameless site of the same operator does not hide the lent name', () => {
+  const data = new Dataset({ sites: [
+    site('AAA-1', '1', 'A', '', 'One', 'ONE', 40, -8),
+    site('AAA-2', '2', 'A', '', null, null, 40, -8, { region: 'AZO' }),
+    // A published id its prefix can't name: it stays nameless, under ONE.
+    site('BBB-1', '3', 'A', '', null, 'ONE', 40, -8, { region: 'AZO' }),
+    site('CCC-1', '4', 'A', '', null, null, 40, -8, { region: 'MAD' }),
+  ] });
+  assert.equal(data.siteById.get('BBB-1').operator, null);
+  assert.deepEqual(data.operators({ region: 'AZO' }).map(o => [o.operatorId, o.name, o.otherNames]), [['ONE', 'One', undefined]]);
+  assert.equal(data.operators({ region: 'MAD' })[0].name, '?');
+});
+
+test('an id prefix lends only what is safe to lend', () => {
+  const lent = new Dataset({ sites: [
+    site('MIX-1', '1', 'A', '', 'One', 'ONE', 40, -8), site('MIX-2', '2', 'A', '', 'Two', 'TWO', 40, -8),
+    site('MIX-3', '3', 'A', '', null, null, 40, -8),
+    site('ONE-1', '4', 'A', '', 'One', 'ONE', 40, -8),
+    site('ONE-2', '5', 'A', '', null, 'TWO', 40, -8),
+    site('LON-1', '6', 'A', '', null, null, 40, -8),
+  ] }).siteById;
+  // Two operators share the prefix: it says nothing.
+  assert.equal(lent.get('MIX-3').operator, null);
+  // A published id wins over the prefix.
+  assert.equal(lent.get('ONE-2').operator, null);
+  assert.equal(lent.get('ONE-2').operatorId, 'TWO');
+  // Nobody with a name has the prefix.
+  assert.equal(lent.get('LON-1').operatorInferred, undefined);
+});
+
 test('lookup: a MOBI.E code, however it is written', () => {
   for (const q of ['LRA-00156', 'lra 156', 'LRA00156', 'GLP-LRA-00156', 'MOBI-LRA-00156', 'o posto LRA-00156 em Leiria']) {
     assert.deepEqual(ids(q), ['GLP-LRA-00156'], q);
@@ -100,6 +162,36 @@ test('lookup: filters and radius', () => {
 test('resolvePlace: the town before a comma', () => {
   assert.ok(ds.resolvePlace('Leiria, Portugal'));
   assert.equal(ds.resolvePlace(', '), null);
+});
+
+test('resolvePlace: a city that ends in punctuation still matches exactly', () => {
+  const two = new Dataset({ schema: 1, generatedAt: '2026-10-28T00:00:00Z', sites: [
+    site('X-MAD-1', 'MAD-1', 'Calheta (Madeira)', 'Rua A', 'Op', 'OPOP', 32.7, -17.1),
+    site('X-AZO-1', 'AZO-1', 'Calheta (Açores)', 'Rua B', 'Op', 'OPOP', 38.6, -28.0),
+  ] });
+  assert.equal(two.resolvePlace('Calheta (Madeira)').lat, 32.7);
+});
+
+test('resolvePlace: punctuation around the name is not part of it', () => {
+  for (const name of ['Leiria.', 'Leiria!', '"Leiria"', 'Leiria?', 'leiria...']) assert.ok(ds.resolvePlace(name), name);
+  assert.equal(ds.resolvePlace('...'), null);
+  assert.equal(ds.resolvePlace('Rua.'), null, 'still not a place');
+  for (const name of ['(Leiria)', ', Leiria', 'Leiria (Pombal)', 'Leiria. (Pombal)']) assert.ok(ds.resolvePlace(name), name);
+});
+
+test('resolvePlace: a city with its own comma is still found whole', () => {
+  const lagoas = new Dataset({ schema: 1, generatedAt: 'x', sites: [
+    site('A', 'A', 'Lagoa, Faro', 'Rua', 'X', 'XX', 37.13, -8.45),
+    site('B', 'B', 'Lagoa, Azores', 'Rua', 'X', 'XX', 37.74, -25.57),
+  ] });
+  for (const name of ['Lagoa, Faro', 'Lagoa, Faro.', '(Lagoa, Faro)']) assert.ok(lagoas.resolvePlace(name)?.lat < 38, name);
+});
+
+test('resolvePlace: handles long names', () => {
+  const start = performance.now();
+  assert.equal(ds.resolvePlace(`a${'!'.repeat(200_000)}a`), null);
+  assert.ok(ds.resolvePlace(`Leiria${'!'.repeat(200_000)}`));
+  assert.ok(performance.now() - start < 1000);
 });
 
 test('resolvePlace: whole words from the start, never a substring anywhere', () => {
