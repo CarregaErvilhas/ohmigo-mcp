@@ -58,6 +58,13 @@ period, OMIE quarter, losses and TAR day. ohmigo never works out a period or
 an OMIE price itself; that math stays in ceme-v2, with its tests for the
 clock changes, Saturdays and the islands.
 
+There's a limit on how long a session can run (`MAX_SESSION_HOURS` in
+`profile.js`), because every quarter-hour is one more slice. A socket that
+would take longer gets no quote: it's left out with a note, or, if that's every
+socket, you get a `tooLong` error. A socket whose data says 0 kW has its power
+blanked when the dataset loads (`data.js`), so it counts as unknown power, like
+one with no figure at all.
+
 Everything is in UTC instants, so the clock changes need no special case:
 in October the 01:00-02:00 hour happens twice, and a 60-minute session that
 spans it still has four quarters. Local times are only for showing

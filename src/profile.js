@@ -17,6 +17,11 @@
 
 export const QUARTER_MS = 15 * 60_000;
 
+// The longest session laid out, in hours. Each quarter-hour is one slice in
+// memory and in the ceme-v2 call, so this bounds both. It's well past anything
+// real: a 120 kWh battery from empty on a 3.7 kW socket takes under 40 hours.
+export const MAX_SESSION_HOURS = 72;
+
 // Time zone of each region, for showing local times to the driver.
 export const REGION_TZ = { CONT: 'Europe/Lisbon', MAD: 'Atlantic/Madeira', AZO: 'Atlantic/Azores' };
 
@@ -24,7 +29,10 @@ export const REGION_TZ = { CONT: 'Europe/Lisbon', MAD: 'Atlantic/Madeira', AZO: 
 // start:    Date when the session starts
 // -> [{ at: ISO, kwh, minutes, kw }], one slice per quarter-hour touched.
 //    The first starts at `start` itself, the others on quarter boundaries.
+//    Throws past MAX_SESSION_HOURS; quotePoint checks first and answers politely.
 export function sessionProfile(segments, start) {
+  const total = segments.reduce((sum, seg) => sum + seg.minutes, 0);
+  if (!(total <= MAX_SESSION_HOURS * 60)) throw new RangeError(`session of ${total} minutes`);
   const out = [];
   let t = start.getTime();
   let slice = { at: t, kwh: 0, ms: 0 };
