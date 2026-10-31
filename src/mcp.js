@@ -596,7 +596,7 @@ export function createServer(getDataset, live) {
 
   server.registerTool('list_operators', {
     title: 'List charger operators',
-    description: 'Lists the companies that operate public EV chargers in Portugal (OPCs on MOBI.E and the operators outside it, as the NAP publishes them), biggest first: sites, sockets, DC sockets, max power and voltage, regions, and whether they are on MOBI.E. Filters narrow it to the operators with such chargers ("who runs 800 V chargers in Madeira?").',
+    description: 'Lists the companies that operate public EV chargers in Portugal (OPCs on MOBI.E and the operators outside it, as the NAP publishes them), biggest first: sites, sockets, DC sockets, max power and voltage, regions, and whether they are on MOBI.E. Filters narrow it to the operators with such chargers ("who runs 800 V chargers in Madeira?"). Use it for "how many operators are there" too, even when the user says licensed: it is the operators with chargers on the NAP, not the DGEG\'s licensing registry, so say that.',
     inputSchema: z.object({
       query: z.string().max(100).optional().describe('Only operators whose name or NAP operatorId contains this, e.g. "galp", "IONY"'),
       ...Filter, ...Region, ...Lang,
