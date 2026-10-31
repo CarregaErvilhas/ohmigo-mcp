@@ -87,8 +87,10 @@ export function estimateSession(point, car, t = translator('en')) {
     carKw = point.dc ? DEFAULTS.carDcKw : DEFAULTS.carAcKw;
     assumptions.push(t('assume.carLimitUnknown', { kind: point.dc ? 'DC' : 'AC', kw: carKw }));
   }
-  const chargerKw = point.kw ?? (Number.isFinite(carKw) ? carKw : DEFAULTS.carDcKw);
-  if (point.kw == null) assumptions.push(t('assume.chargerKwUnknown'));
+  // A socket can't deliver 0 kW: in the data that's a blank, not a measurement.
+  const socketKw = point.kw > 0 ? point.kw : null;
+  const chargerKw = socketKw ?? (Number.isFinite(carKw) ? carKw : DEFAULTS.carDcKw);
+  if (socketKw == null) assumptions.push(t('assume.chargerKwUnknown'));
   const peak = Math.min(chargerKw, carKw);
 
   let minutes;

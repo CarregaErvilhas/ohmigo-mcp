@@ -28,6 +28,7 @@ import { siteOpen } from './hours.js';
 import { describePlan } from './opc.js';
 import { byBest, quotePoint, rank, tariffKey } from './quote.js';
 import { fold } from './lookup.js';
+import { MAX_SESSION_HOURS } from './profile.js';
 import { logged } from './stats.js';
 import { SITE_URL } from './site.js';
 import { VERSION } from './version.js';
@@ -107,12 +108,18 @@ const inWindow = s => {
   return ms >= -AT_PAST_DAYS * 86_400_000 && ms <= AT_AHEAD_DAYS * 86_400_000;
 };
 
+// The least a car takes, kW. AC charging can't go below 6 A on one phase
+// (1.4 kW under IEC 61851) and DC chargers start well above that, so this
+// only turns away figures that aren't a car's. charging.js floors a curve at
+// the same 1 kW.
+const MIN_CAR_KW = 1;
+
 const Car = {
   battery_kwh: z.number().positive().max(250).describe('Usable battery capacity, kWh (look it up from the car model)'),
   start_pct: z.number().min(0).max(100).describe('Battery now, %'),
   target_pct: z.number().min(1).max(100).default(80).describe('Target battery, % (default 80; DC slows down above it)'),
-  car_ac_kw: z.number().positive().max(43).optional().describe("Car's max AC power, kW (on-board charger)"),
-  car_dc_kw: z.number().positive().max(500).optional().describe("Car's max DC power, kW"),
+  car_ac_kw: z.number().min(MIN_CAR_KW).max(43).optional().describe("Car's max AC power, kW (on-board charger)"),
+  car_dc_kw: z.number().min(MIN_CAR_KW).max(500).optional().describe("Car's max DC power, kW"),
   dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes: makes the duration far better than the generic curve"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
     .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]"),
@@ -653,7 +660,8 @@ export function createServer(getDataset, live) {
       monthKwh: await monthKwh(a),
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
-    if (!ranked.length) return err(t('err.noneLeft'), 'noneLeft');
+    const tooLong = { hours: MAX_SESSION_HOURS, n: ranked.tooLong };
+    if (!ranked.length) return ranked.tooLong ? err(t('err.tooLong', tooLong), 'tooLong') : err(t('err.noneLeft'), 'noneLeft');
     const top = ranked.slice(0, a.limit);
     // Any MOBI.E socket without its CEME price was ranked on its other
     // prices only (or last): say so even when the top rows are all outside
@@ -670,6 +678,7 @@ export function createServer(getDataset, live) {
       ...(cemeDown ? [t('note.noCeme')] : []),
       ...voltageNotes(ds, a, t),
       ...(truncated ? [t('note.truncated', { n: candidates.length, total })] : []),
+      ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
       ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
       ...moreWays(top, t),
     ];
@@ -702,12 +711,16 @@ export function createServer(getDataset, live) {
       monthKwh: await monthKwh(a) };
     // Quoting is cheap once the first one has called ceme-v2 (simCache), so
     // every kind is priced and the cheapest are kept.
-    const results = (await Promise.all(targets.map(hit => quotePoint(hit, car(a), opts)))).sort(byBest).slice(0, MAX_KINDS);
+    const quoted = await Promise.all(targets.map(hit => quotePoint(hit, car(a), opts)));
+    const priced = quoted.filter(Boolean);
+    const tooLong = { hours: MAX_SESSION_HOURS, n: quoted.length - priced.length };
+    if (!priced.length) return err(t('err.tooLong', tooLong), 'tooLong');
+    const results = priced.sort(byBest).slice(0, MAX_KINDS);
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${q.kw} kW ${q.connector} [${q.pointId}]`);
-    const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...moreWays(results, t)];
+    const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));
   });

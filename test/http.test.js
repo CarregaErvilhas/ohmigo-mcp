@@ -350,6 +350,32 @@ test('http: the view gets the bridge, the version and no raw coordinates', async
   assert.match(html, /renderError/);
 });
 
+test('http: car powers below a real on-board charger or charger are refused; the lowest real one is priced', async () => {
+  for (const args of [{ car_ac_kw: 1e-9 }, { car_dc_kw: 1e-9 }, { car_ac_kw: 0.5 }, { car_dc_kw: 0.5 }]) {
+    const r = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, ...args });
+    assert.equal(r.isError, true, JSON.stringify(args));
+    assert.match(r.content[0].text, /car_(ac|dc)_kw/);
+  }
+  const ok = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, car_ac_kw: 1, car_dc_kw: 1 });
+  assert.equal(ok.isError, undefined);
+});
+
+test('http: a session past the limit is a business error in the user\'s language; other sockets still price', async () => {
+  const slow = { battery_kwh: 250, start_pct: 0, target_pct: 100, car_ac_kw: 1, car_dc_kw: 1 };
+  for (const [lang, text] of [['en', /would take over 72 hours/], ['pt', /demoraria mais de 72 horas/]]) {
+    const r = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...slow, lang });
+    assert.equal(r.isError, true);
+    assert.equal(r.structuredContent.code, 'tooLong');
+    assert.match(r.content[0].text, text);
+  }
+  const ranking = await call('find_cheapest_charging', { place: 'Leiria', ...slow, lang: 'en' });
+  assert.equal(ranking.structuredContent.code, 'tooLong');
+  // Only the AC sockets are too slow here: they're left out, and the note says so.
+  const some = (await call('estimate_charging_cost', { site: 'GLP-LRA-00156', battery_kwh: 250, start_pct: 0, target_pct: 100, car_ac_kw: 1, lang: 'en' })).structuredContent;
+  assert.ok(some.results.length > 0 && some.results.every(q => q.dc));
+  assert.ok(some.notes.some(n => /left out/.test(n)));
+});
+
 test('http: a request target that does not parse gets a 400, is logged, and the server keeps answering', async () => {
   for (const target of ['//', '//:', '/\\', 'http://[']) {
     assert.match(await get(target), /^HTTP\/1\.1 400 /, target);

@@ -39,7 +39,7 @@ import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
 import { cardPayment } from './data.js';
 import { siteOpen } from './hours.js';
-import { localOffset, localTime, REGION_TZ, sessionProfile } from './profile.js';
+import { localOffset, localTime, MAX_SESSION_HOURS, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
@@ -214,9 +214,11 @@ export const directOptionsForTest = (direct, session, lang, region) => directOpt
 //           ceme-v2 and what came back).
 //   monthKwh: { ceme-v2 tariff id: kWh the user already charged with it this
 //           month }, for free-kWh promotions (see ceme.js expandMonthKwh).
+// -> the quote, or null when the session would run past MAX_SESSION_HOURS.
 export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, detail = false, qa = false, monthKwh = null, audiences = [], simCache = new Map() } = {}) {
   const t = translator(lang);
   const session = estimateSession(point, car, t);
+  if (!(session.minutes <= MAX_SESSION_HOURS * 60)) return null;
   // The session starts at `at` (or now), to the minute so points share the
   // ceme-v2 call, and runs for `minutes`.
   const start = new Date(Math.floor((at ?? new Date()).getTime() / 60_000) * 60_000);
@@ -413,11 +415,13 @@ export const byBest = (a, b) => sortKey(a) - sortKey(b);
 
 // Ranks sites by `best` (see sortKey), one row per site (its cheapest
 // point). MOBI.E and the networks outside it share one list: no network is
-// preferred, the price decides.
+// preferred, the price decides. `tooLong` on the list counts the sockets left
+// out because the session there would run past MAX_SESSION_HOURS.
 export async function rank(candidates, car, opts = {}) {
   const simCache = new Map();
-  const all = await Promise.all(candidates.flatMap(({ site, points, ...dist }) =>
-    points.map(point => quotePoint({ site, point }, car, { ...opts, simCache }).then(q => ({ ...q, ...dist })))));
+  const quoted = await Promise.all(candidates.flatMap(({ site, points, ...dist }) =>
+    points.map(point => quotePoint({ site, point }, car, { ...opts, simCache }).then(q => q && { ...q, ...dist }))));
+  const all = quoted.filter(Boolean);
   let quotes = opts.maxMinutes ? all.filter(q => q.session.minutes <= opts.maxMinutes) : all;
   if (opts.availableOnly) quotes = quotes.filter(q => USABLE.has(q.status));
   const best = list => {
@@ -428,5 +432,5 @@ export async function rank(candidates, car, opts = {}) {
     }
     return [...bySite.values()].sort((a, b) => sortKey(a) - sortKey(b));
   };
-  return best(quotes);
+  return Object.assign(best(quotes), { tooLong: quoted.length - all.length });
 }
