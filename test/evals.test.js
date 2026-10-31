@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { callMatches, checkCase, checkJudge, dated, matchValue } from '../evals/lib.mjs';
 
 const { cases } = JSON.parse(readFileSync(new URL('../evals/cases.json', import.meta.url), 'utf8'));
-const TOOLS = ['list_ceme_tariffs', 'lookup_charger', 'find_chargers', 'find_cheapest_charging', 'estimate_charging_cost'];
+const TOOLS = ['list_ceme_tariffs', 'lookup_charger', 'find_chargers', 'list_operators', 'find_cheapest_charging', 'estimate_charging_cost'];
 
 test('evals: matchers', () => {
   assert.equal(matchValue(undefined, false), true);

@@ -6,10 +6,43 @@
       "why": "Never ask for a charger id: the user's words go to lookup_charger or straight to estimate_charging_cost as site. Car specs are looked up, not asked.",
       "message": "Quanto me custa carregar no Continente Bom Dia de Leiria, na Rua Vale de Lobos? Tenho um Renault Zoe ZE50, estou com 30% e quero ir até aos 80%.",
       "expect": {
-        "calls": [{ "tool": "estimate_charging_cost", "args": { "site": "continente|cnt-|9648|vale de lobos", "battery_kwh": [48, 56], "start_pct": [30, 30], "target_pct": [80, 80] } }],
-        "every": { "args": { "lang": "^pt" } },
-        "answer": { "match": ["€"], "noMatch": ["identificador do posto", "qual [ée] a capacidade"] },
-        "judge": ["Does the reply give an estimated total in euros and how long the charge takes?"]
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "site": "continente|cnt-|9648|vale de lobos",
+              "battery_kwh": [
+                48,
+                56
+              ],
+              "start_pct": [
+                30,
+                30
+              ],
+              "target_pct": [
+                80,
+                80
+              ]
+            }
+          }
+        ],
+        "every": {
+          "args": {
+            "lang": "^pt"
+          }
+        },
+        "answer": {
+          "match": [
+            "€"
+          ],
+          "noMatch": [
+            "identificador do posto",
+            "qual [ée] a capacidade"
+          ]
+        },
+        "judge": [
+          "Does the reply give an estimated total in euros and how long the charge takes?"
+        ]
       }
     },
     {
@@ -17,9 +50,35 @@
       "why": "Ranking near a town, with the car's battery from the assistant's own knowledge; presentation: more ways to pay, the walk-up price.",
       "message": "Onde é que me fica mais barato carregar perto de Coimbra? Tenho um Tesla Model 3 Long Range e estou com 20%.",
       "expect": {
-        "calls": [{ "tool": "find_cheapest_charging", "args": { "*": "coimbra|\"lat\":40\\.[12]", "battery_kwh": [70, 82], "start_pct": [20, 20] } }],
-        "every": { "args": { "lang": "^pt" } },
-        "answer": { "match": ["€"], "noMatch": ["qual [ée] a capacidade"] },
+        "calls": [
+          {
+            "tool": "find_cheapest_charging",
+            "args": {
+              "*": "coimbra|\"lat\":40\\.[12]",
+              "battery_kwh": [
+                70,
+                82
+              ],
+              "start_pct": [
+                20,
+                20
+              ]
+            }
+          }
+        ],
+        "every": {
+          "args": {
+            "lang": "^pt"
+          }
+        },
+        "answer": {
+          "match": [
+            "€"
+          ],
+          "noMatch": [
+            "qual [ée] a capacidade"
+          ]
+        },
         "judge": [
           "Does the reply mention that the chargers have more ways to pay than the ones it shows (other cards or apps, subscriptions), or offer to list them?",
           "If the tool results include paying by bank card or QR code at the charger (an \"adhoc\" option, or a walk-up / no-account option), does the reply mention it? Answer n/a if no such option appears in the results."
@@ -30,34 +89,90 @@
       "id": "ceme-card",
       "why": "The user's card goes through list_ceme_tariffs to a tariff_id, then into the cost call.",
       "message": "Pago com o cartão Via Verde. Quanto me custa carregar no posto LRA-00156 com um Kia EV6 de 77 kWh, de 25% a 80%?",
-      "requires": [{ "tariff": "via verde", "id": "^viaverde-" }],
+      "requires": [
+        {
+          "tariff": "via verde",
+          "id": "^viaverde-"
+        }
+      ],
       "expect": {
         "calls": [
-          { "tool": "list_ceme_tariffs" },
-          { "tool": "estimate_charging_cost", "args": { "site": "LRA-00156", "tariff_ids": "viaverde-", "battery_kwh": [74, 78], "start_pct": [25, 25] } }
+          {
+            "tool": "list_ceme_tariffs"
+          },
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "site": "LRA-00156",
+              "tariff_ids": "viaverde-",
+              "battery_kwh": [
+                74,
+                78
+              ],
+              "start_pct": [
+                25,
+                25
+              ]
+            }
+          }
         ],
-        "answer": { "match": ["via verde"] }
+        "answer": {
+          "match": [
+            "via verde"
+          ]
+        }
       }
     },
     {
       "id": "motorway-ask-direction",
       "why": "A service area with a charger on each side of the road: without a direction, ask where the user is heading; never guess one.",
       "message": "Vou parar na área de serviço da Galp em Pombal, na A1, para carregar. Quanto me vai custar? Tenho um VW ID.4 Pro (77 kWh) e estou com 15%.",
-      "requires": [{ "site": "GLP-PBL-00029" }],
+      "requires": [
+        {
+          "site": "GLP-PBL-00029"
+        }
+      ],
       "expect": {
-        "noCalls": [{ "args": { "towards": true } }],
-        "answer": { "match": ["\\?"] },
-        "judge": ["Does the reply ask the user which way they're driving (where they're heading), instead of assuming which side of the motorway they'll be on?"]
+        "noCalls": [
+          {
+            "args": {
+              "towards": true
+            }
+          }
+        ],
+        "answer": {
+          "match": [
+            "\\?"
+          ]
+        },
+        "judge": [
+          "Does the reply ask the user which way they're driving (where they're heading), instead of assuming which side of the motorway they'll be on?"
+        ]
       }
     },
     {
       "id": "motorway-with-direction",
       "why": "The same service area when the user already said where they're going: pass it as towards, don't ask.",
       "message": "Vou de Lisboa para o Porto pela A1 e quero carregar na área de serviço da Galp em Pombal. Quanto me custa? VW ID.4 Pro (77 kWh), estou com 15%.",
-      "requires": [{ "site": "GLP-PBL-00029" }],
+      "requires": [
+        {
+          "site": "GLP-PBL-00029"
+        }
+      ],
       "expect": {
-        "calls": [{ "tool": "estimate_charging_cost|lookup_charger", "args": { "towards": "porto|\"lat\":41\\." } }],
-        "answer": { "match": ["€"] }
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "towards": "porto|\"lat\":41\\."
+            }
+          }
+        ],
+        "answer": {
+          "match": [
+            "€"
+          ]
+        }
       }
     },
     {
@@ -65,18 +180,41 @@
       "why": "\"Sou colaborador\" alone doesn't say which group: ask which company, never pick one.",
       "message": "Sou colaborador e acho que tenho um preço especial. Quanto me custa carregar no posto LRA-00156? Nissan Leaf de 40 kWh, de 20% a 80%.",
       "expect": {
-        "noCalls": [{ "args": { "audiences": true } }],
-        "judge": ["Does the reply ask the user which company they work for, instead of assuming one?"]
+        "noCalls": [
+          {
+            "args": {
+              "audiences": true
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply ask the user which company they work for, instead of assuming one?"
+        ]
       }
     },
     {
       "id": "edp-staff",
       "why": "The user said they belong to a group with its own prices: pass it in audiences and say whom the price is for.",
       "message": "Trabalho na EDP. Quanto me custa carregar no posto LRA-00156? Nissan Leaf de 40 kWh, de 20% a 80%.",
-      "requires": [{ "tariff": "edp", "audience": "edp-staff" }],
+      "requires": [
+        {
+          "tariff": "edp",
+          "audience": "edp-staff"
+        }
+      ],
       "expect": {
-        "calls": [{ "tool": "estimate_charging_cost", "args": { "site": "LRA-00156", "audiences": "edp-staff" } }],
-        "judge": ["Does the reply say that the price it gives (or one of them) is for EDP employees?"]
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "site": "LRA-00156",
+              "audiences": "edp-staff"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply say that the price it gives (or one of them) is for EDP employees?"
+        ]
       }
     },
     {
@@ -84,8 +222,21 @@
       "why": "A ride-hailing driver on another platform is not in the Uber drivers' group: never infer a group.",
       "message": "Sou motorista TVDE na Bolt. Quanto me custa carregar no posto LRA-00156? Nissan Leaf de 40 kWh, de 20% a 80%.",
       "expect": {
-        "calls": [{ "tool": "estimate_charging_cost", "args": { "site": "LRA-00156" } }],
-        "noCalls": [{ "args": { "audiences": "uber" } }]
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "site": "LRA-00156"
+            }
+          }
+        ],
+        "noCalls": [
+          {
+            "args": {
+              "audiences": "uber"
+            }
+          }
+        ]
       }
     },
     {
@@ -93,7 +244,11 @@
       "why": "A private charger (DPC) isn't in the NAP: no charger search, say ohmigo can't price it and that the cost is the CEME tariff without an operator fee.",
       "message": "Quanto me custa carregar na wallbox da garagem do meu condomínio com o cartão EDP? O carro é um MG4 de 64 kWh e vou de 20% a 80%.",
       "expect": {
-        "noCalls": [{ "tool": "find_chargers|find_cheapest_charging|estimate_charging_cost|lookup_charger" }],
+        "noCalls": [
+          {
+            "tool": "find_chargers|find_cheapest_charging|estimate_charging_cost|lookup_charger"
+          }
+        ],
         "judge": [
           "Does the reply say that ohmigo can't price a private charger (home, condominium or workplace)?",
           "Does the reply say that the cost there is the user's CEME tariff (the energy price of their EDP card) without a charger operator's fee?"
@@ -105,9 +260,19 @@
       "why": "There's no IONITY in Mealhada: say so instead of passing another charger off as it. And English in, English out (lang).",
       "message": "How much would it cost to charge at IONITY Mealhada? I drive a VW ID.3 with a 58 kWh battery, I'm at 10% and want 80%.",
       "expect": {
-        "every": { "args": { "lang": "^en" } },
-        "answer": { "noMatch": ["\\b(carregar|carregamento|quanto custa)\\b"] },
-        "judge": ["Does the reply make clear that no IONITY charger was found in Mealhada (or that what it found isn't an exact match), instead of presenting a different charger as IONITY Mealhada?"]
+        "every": {
+          "args": {
+            "lang": "^en"
+          }
+        },
+        "answer": {
+          "noMatch": [
+            "\\b(carregar|carregamento|quanto custa)\\b"
+          ]
+        },
+        "judge": [
+          "Does the reply make clear that no IONITY charger was found in Mealhada (or that what it found isn't an exact match), instead of presenting a different charger as IONITY Mealhada?"
+        ]
       }
     },
     {
@@ -115,7 +280,14 @@
       "why": "On a trip, in a hurry: limit the session time (max_minutes) or ask for fast chargers, or the cheapest is a slow AC socket.",
       "message": "Estou a meio de uma viagem e tenho pressa. Onde carrego mais barato perto de Leiria? Skoda Enyaq 80 (77 kWh), estou com 12%.",
       "expect": {
-        "calls": [{ "tool": "find_cheapest_charging", "args": { "*": "\"max_minutes\"|\"dc_only\":true|\"min_kw\"" } }]
+        "calls": [
+          {
+            "tool": "find_cheapest_charging",
+            "args": {
+              "*": "\"max_minutes\"|\"dc_only\":true|\"min_kw\""
+            }
+          }
+        ]
       }
     },
     {
@@ -123,8 +295,19 @@
       "why": "A plain list of chargers, no car and no price asked: find_chargers with the plug filter.",
       "message": "Que postos com tomada CCS há perto de Leiria?",
       "expect": {
-        "calls": [{ "tool": "find_chargers", "args": { "connectors": "CCS" } }],
-        "noCalls": [{ "tool": "estimate_charging_cost" }]
+        "calls": [
+          {
+            "tool": "find_chargers",
+            "args": {
+              "connectors": "CCS"
+            }
+          }
+        ],
+        "noCalls": [
+          {
+            "tool": "estimate_charging_cost"
+          }
+        ]
       }
     },
     {
@@ -132,7 +315,14 @@
       "why": "The NAP says Galp, OpenStreetMap says Lidl: say who operates it, and credit OpenStreetMap when its data is used.",
       "message": "Quanto custa carregar no Lidl de Coimbra? Tenho um Peugeot e-208 com bateria de 50 kWh e estou com 20%.",
       "expect": {
-        "calls": [{ "tool": "lookup_charger|estimate_charging_cost|find_cheapest_charging", "args": { "*": "lidl" } }],
+        "calls": [
+          {
+            "tool": "lookup_charger|estimate_charging_cost|find_cheapest_charging",
+            "args": {
+              "*": "lidl"
+            }
+          }
+        ],
         "judge": [
           "Does the reply make clear that the charger(s) at the Lidl are operated by Galp?",
           "If the reply uses OpenStreetMap data (for example that the place is a Lidl, its opening hours or parking), does it credit OpenStreetMap? Answer n/a if it uses none."
@@ -143,10 +333,23 @@
       "id": "tesla-peak",
       "why": "Tesla publishes only its peak price on the NAP: it's the most the session can cost, not the price.",
       "message": "Quanto custa carregar no Supercharger da Tesla em Fátima? Tenho um Model Y Long Range, de 10% a 80%.",
-      "requires": [{ "site": "TSL-381a4acf-82a3-4799-bd23-291aa7c319a6" }],
+      "requires": [
+        {
+          "site": "TSL-381a4acf-82a3-4799-bd23-291aa7c319a6"
+        }
+      ],
       "expect": {
-        "calls": [{ "tool": "estimate_charging_cost|lookup_charger|find_cheapest_charging", "args": { "*": "tesla|tsl-|f[aá]tima" } }],
-        "judge": ["Does the reply make clear that the price shown is the most it can cost (the day's peak price) and that it can be cheaper at other hours, instead of presenting it as the price the user will pay?"]
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger|find_cheapest_charging",
+            "args": {
+              "*": "tesla|tsl-|f[aá]tima"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply make clear that the price shown is the most it can cost (the day's peak price) and that it can be cheaper at other hours, instead of presenting it as the price the user will pay?"
+        ]
       }
     },
     {
@@ -154,19 +357,52 @@
       "why": "Monthly free kWh: the assistant keeps the count and passes month_kwh (8 + 4 = 12 kWh this month) with the tariff.",
       "memory": "Paga com o tarifário GoldEnergy «Clientes Goldenergy» (tariff_id goldenergy-bt-clientesgold), que dá os primeiros kWh de cada mês grátis. Carregamentos com esse tarifário em {{month}} de {{year}}: um de 8 kWh e outro de 4 kWh.",
       "message": "Quanto me custa carregar hoje no posto LRA-00156? BYD Dolphin de 60 kWh, de 30% a 80%.",
-      "requires": [{ "tariff": "goldenergy", "id": "clientesgold" }, { "promo": "KWH_GRATIS" }],
+      "requires": [
+        {
+          "tariff": "goldenergy",
+          "id": "clientesgold"
+        },
+        {
+          "promo": "KWH_GRATIS"
+        }
+      ],
       "expect": {
-        "calls": [{ "tool": "estimate_charging_cost", "args": { "tariff_ids": "goldenergy", "month_kwh": "goldenergy[^\"]*\":12(\\.0+)?[,}]" } }]
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "tariff_ids": "goldenergy",
+              "month_kwh": "goldenergy[^\"]*\":12(\\.0+)?[,}]"
+            }
+          }
+        ]
       }
     },
     {
       "id": "new-customers-tip",
       "why": "A promotion only for new sign-ups is a tip, never the price.",
       "message": "Quanto me custa carregar no Powerdot da Rua Virgílio Vieira da Cunha, em Leiria? Fiat 500e de 42 kWh, de 20% a 80%.",
-      "requires": [{ "site": "HRZ-LRA-00075" }, { "promo": ".", "newCustomers": true }],
+      "requires": [
+        {
+          "site": "HRZ-LRA-00075"
+        },
+        {
+          "promo": ".",
+          "newCustomers": true
+        }
+      ],
       "expect": {
-        "calls": [{ "tool": "estimate_charging_cost|lookup_charger", "args": { "*": "virg[ií]lio|HRZ-LRA-0007[56]|powerdot" } }],
-        "judge": ["If the tool results include a price or promotion only for new customers (newCustomers or newCustomersOnly: true), does the reply present it as a tip for people who aren't clients yet (for example \"if you sign up by …\"), not as the price to pay? Answer n/a if the results have none."]
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "virg[ií]lio|HRZ-LRA-0007[56]|powerdot"
+            }
+          }
+        ],
+        "judge": [
+          "If the tool results include a price or promotion only for new customers (newCustomers or newCustomersOnly: true), does the reply present it as a tip for people who aren't clients yet (for example \"if you sign up by …\"), not as the price to pay? Answer n/a if the results have none."
+        ]
       }
     },
     {
@@ -175,8 +411,32 @@
       "memory": "Carro: Hyundai Ioniq 5 de 77,4 kWh (bateria útil cerca de 74 kWh), AC até 10,9 kW, DC até cerca de 230 kW, 10-80% DC em 18 minutos. Paga com o Cartão EDP Charge (Simples), tariff_id edp-bt-cartoedp.",
       "message": "Estou com 35%. Quanto me custa carregar até 80% no posto da Galp da Avenida 25 de Abril, em Leiria?",
       "expect": {
-        "calls": [{ "tool": "estimate_charging_cost", "args": { "battery_kwh": [72, 78], "start_pct": [35, 35], "target_pct": [80, 80], "tariff_ids": "cartoedp" } }],
-        "answer": { "noMatch": ["qual (é )?o (modelo|carro)", "que carro"] }
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "battery_kwh": [
+                72,
+                78
+              ],
+              "start_pct": [
+                35,
+                35
+              ],
+              "target_pct": [
+                80,
+                80
+              ],
+              "tariff_ids": "cartoedp"
+            }
+          }
+        ],
+        "answer": {
+          "noMatch": [
+            "qual (é )?o (modelo|carro)",
+            "que carro"
+          ]
+        }
       }
     },
     {
@@ -184,7 +444,160 @@
       "why": "\"How was the price built\" at a given time: detail plus at.",
       "message": "Porque é que o preço muda com a hora? Explica-me como fica o preço de carregar hoje às 21h no posto LRA-00156, com um Nissan Leaf de 40 kWh, de 20% a 80%.",
       "expect": {
-        "calls": [{ "tool": "estimate_charging_cost", "args": { "detail": true, "at": "T2[01]:00" } }]
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "detail": true,
+              "at": "T2[01]:00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "operators-region",
+      "why": "\"Who runs chargers in X\" is list_operators with the region, not a charger search.",
+      "message": "Que empresas operam postos de carregamento na Madeira?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "list_operators",
+            "args": {
+              "region": "MAD"
+            }
+          }
+        ],
+        "noCalls": [
+          {
+            "tool": "find_cheapest_charging|estimate_charging_cost"
+          }
+        ]
+      }
+    },
+    {
+      "id": "operators-not-dgeg",
+      "why": "list_operators covers the operators on the NAP, not the DGEG's registry: say so when asked about licensing.",
+      "message": "Quantos operadores de pontos de carregamento estão licenciados pela DGEG em Portugal?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "list_operators"
+          }
+        ],
+        "judge": [
+          "Does the reply make clear that its list or count comes from the chargers published on the NAP and is not the DGEG's registry of licensed operators?"
+        ]
+      }
+    },
+    {
+      "id": "nationwide-800v",
+      "why": "A property across the whole country: find_chargers with the filter and no place.",
+      "message": "O meu carro tem bateria de 800 V. Onde é que há postos de 800 V em Portugal?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_chargers",
+            "args": {
+              "min_voltage": [
+                750,
+                1000
+              ],
+              "place": false,
+              "lat": false,
+              "route": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "level-not-voltage",
+      "why": "\"level\" (BTN/BTE/MT) is the grid connection, not the socket's voltage: answer in volts.",
+      "message": "A que tensão trabalha a tomada DC do posto LRA-00156? Quero saber se é de 800 V.",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|find_chargers|estimate_charging_cost",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "answer": {
+          "match": [
+            "\\b500\\s?V\\b"
+          ]
+        },
+        "judge": [
+          "Does the reply give the DC socket's voltage in volts, without presenting the grid connection level (BTN, BTE, MT, low or medium voltage) as the socket's voltage?"
+        ]
+      }
+    },
+    {
+      "id": "bring-cable",
+      "why": "An AC socket without a fixed cable: tell the user to bring their own.",
+      "message": "Quanto me custa carregar no Powerdot da Estrada de Condeixa, em Coimbra? Renault Zoe ZE50, de 20% a 100%, vou deixar lá o carro a tarde toda.",
+      "requires": [
+        {
+          "site": "HRZ-CBR-00032"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "condeixa|HRZ-CBR-00032"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply tell the user they need to bring their own charging cable (the sockets have no cable attached)?"
+        ]
+      }
+    },
+    {
+      "id": "closed-at-night",
+      "why": "A charger in a car park that closes (the NAP says 24/7, OpenStreetMap 09:00-22:00): warn before the user goes at night.",
+      "message": "Posso ir carregar hoje às 23h ao posto do Centro Colombo, no piso -3? Quanto me custa? Tesla Model 3 Long Range, de 30% a 80%.",
+      "requires": [
+        {
+          "site": "CAP-LSB-00380"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "colombo|CAP-LSB-0038"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply warn that the charger may be closed at 23:00 because of the car park's opening hours, or tell the user to check the hours before going?"
+        ]
+      }
+    },
+    {
+      "id": "card-payment-near",
+      "why": "\"Pay with a bank card at the charger\" is the card_payment filter.",
+      "message": "Onde é que posso carregar perto de Leiria pagando com o cartão multibanco no próprio posto, sem apps nem cartões de carregamento?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_chargers|find_cheapest_charging|lookup_charger",
+            "args": {
+              "card_payment": true
+            }
+          }
+        ]
       }
     }
   ]

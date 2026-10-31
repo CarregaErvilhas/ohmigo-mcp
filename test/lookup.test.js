@@ -24,6 +24,7 @@ const ds = new Dataset({
     site('TSL-d9df0db6-fea7-4f68-be57-13dbb28dbae1', 'd9df0db6-fea7-4f68-be57-13dbb28dbae1', 'Mealhada', 'R. São Domingos', 'Tesla', 'TSLA', 40.37, -8.48),
     site('LDL-CBR-00001', 'CBR-00001', 'Coimbra', 'Rua do Brasil', 'Helexia II Energy Services, Lda.', 'HELX', 40.2, -8.42, { osm: { brand: 'Lidl' } }),
     site('SMF-VFR-00001', 'VFR-00001', 'Santa Maria da Feira', 'Rua Central', 'EDP Comercial', 'EDPC', 40.92, -8.54),
+    site('CAP-LSB-00380', 'LSB-00380', 'Lisboa', 'CC Colombo - Piso -3 Zona Laranja', 'Capwatt Services, S.A.', 'CAPW', 38.75, -9.19),
   ],
 });
 const ids = (q, opts) => ds.lookup(q, opts).results.map(h => h.site.id);
@@ -117,4 +118,12 @@ test('resolvePlace: a prefix of several towns is ambiguous, and says which', () 
   assert.equal(two.resolvePlace('viana'), null);
   assert.deepEqual(two.placeCandidates('viana'), ['Viana do Castelo', 'Viana do Alentejo']);
   assert.ok(two.resolvePlace('Viana do Castelo'));
+});
+
+test('lookup: "centro comercial" is the kind of place, not part of its name', () => {
+  // The NAP writes "CC Colombo"; people say "Centro Colombo" or "Centro
+  // Comercial Colombo", and "comercial" must not pull in "EDP Comercial".
+  for (const q of ['Centro Colombo', 'Centro Comercial Colombo', 'CC Colombo', 'o shopping Colombo']) {
+    assert.deepEqual(ids(q), ['CAP-LSB-00380'], q);
+  }
 });
