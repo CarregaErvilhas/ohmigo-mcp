@@ -14,13 +14,14 @@
 // with no session id. "Stateless" means any request can land on any instance,
 // and a restart loses nothing, because there's nothing to lose.
 
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer as createHttp } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { cemeHealth } from './ceme.js';
 import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
-import { chargers, dump } from './dump.js';
+import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
 import { LEGAL, LEGAL_PAGES, PAGES, SITEMAP, SITE_URL } from './site.js';
 import { statsSummary } from './stats.js';
@@ -64,7 +65,7 @@ if (!process.env.DATASET_PATH && ds.etag !== undefined) {
   setInterval(async () => {
     try {
       const next = await Dataset.load({ etag: ds.etag });
-      if (next) { ds = next; console.log(`[ohmigo] new dataset, data as of ${ds.generatedAt}`); }
+      if (next) { ds = next; forgetDump(); console.log(`[ohmigo] new dataset, data as of ${ds.generatedAt}`); }
     } catch (e) { console.warn('[ohmigo] dataset check failed, keeping the current one:', e.message); }
   }, DATASET_CHECK_MS).unref();
 }
@@ -119,7 +120,11 @@ const SITE_HEADERS = {
   'cache-control': 'public, max-age=300',
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'strict-origin-when-cross-origin',
-  'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  // No clipboard here: the landing page's copy buttons use it.
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'cross-origin-opener-policy': 'same-origin',
+  'cross-origin-resource-policy': 'same-origin',
+  'content-security-policy': csp("'unsafe-inline'"),
 };
 // Privacy and support, also rendered at boot, one copy per URL (src/site.js).
 // Directories and assistants' review forms want a stable URL for each. These
@@ -136,13 +141,48 @@ const send = (res, status, body, type = 'application/json') => {
 
 // Browser-based clients (MCP Inspector, claude.ai's connector check) send
 // CORS preflights. The server holds no user data and needs no cookies, so
-// any origin may call it.
+// any origin may call it, on the paths a client has a reason to read: /mcp,
+// the public JSON and images, and /.well-known, where MCP clients look for
+// OAuth metadata before connecting (at the root or under /mcp) and need to be
+// able to read the 404.
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
   'access-control-allow-headers': 'content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id, authorization',
   'access-control-expose-headers': 'mcp-session-id, mcp-protocol-version',
 };
+const corsOpen = path => path === '/mcp' || path.startsWith('/mcp/') || path === '/og.png' || path === '/dados.json' || path === '/dados/postos.json'
+  || !!ICONS[path] || path.startsWith('/.well-known/');
+// Images go inside assistants' apps, some of which only load what says it may
+// be embedded elsewhere.
+const IMAGE_HEADERS = { 'cache-control': 'public, max-age=86400', 'cross-origin-resource-policy': 'cross-origin' };
+
+// Hoisted: SITE_HEADERS above uses it too.
+function csp(scriptSrc) {
+  return `default-src 'self'; script-src ${scriptSrc}; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+}
+// Inline scripts allowed by hash instead of 'unsafe-inline'. <script> with no
+// attributes skips the JSON blocks, which browsers don't run. Change a script
+// and its hash follows. The landing page's script is the same in both languages.
+const inlineScripts = html => [...new Set([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+  .map(m => `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`))].join(' ');
+const LANDING_HEADERS = { ...SITE_HEADERS, 'content-security-policy': csp(inlineScripts(Object.values(PAGES).join(''))) };
+const DADOS_PAGE_HEADERS = { ...SITE_HEADERS, ...DADOS_CACHE, 'content-security-policy': csp(inlineScripts(DADOS.toString())) };
+
+// RFC 9116. Expires is required and a fixed date would rot, so each answer
+// counts from today.
+const securityTxt = () => `Contact: mailto:info@ocarroeletrico.com
+Expires: ${new Date(Date.now() + 180 * 86_400_000).toISOString()}
+Canonical: ${SITE_URL}/.well-known/security.txt
+Preferred-Languages: pt, en
+`;
+
+// The detail on /healthz is for whoever runs the server. Hashing first gives
+// timingSafeEqual two buffers of the same length, whatever was sent. No token
+// configured means nobody gets the detail.
+const HEALTHZ_TOKEN = process.env.HEALTHZ_TOKEN || null;
+const sha256 = s => createHash('sha256').update(s).digest();
+const healthzAllowed = given => !!HEALTHZ_TOKEN && timingSafeEqual(sha256(given ?? ''), sha256(HEALTHZ_TOKEN));
 
 // ok: every dependency answers. degraded: answering, but the last live feed
 // refresh failed, or CEME prices are off (the tools say so in their results).
@@ -150,20 +190,25 @@ const CORS = {
 // quiet server has an old one. Always
 // 200 while the server can answer at all, so a ceme-v2 outage doesn't make
 // the platform restart a healthy container; monitors read `status`.
-function health() {
+// `problems` is public, so it names what's wrong without the raw error, which
+// is in `live.error` for whoever has the token.
+function health(detail) {
   const lv = live.info(), ceme = cemeHealth();
   const problems = [
-    ...(lv.error ? ['live: ' + lv.error] : []),
+    ...(lv.error ? ['live: last refresh failed'] : []),
     ...(ceme.openUntil ? ['ceme-v2: unavailable'] : []),
   ];
   const ageH = (Date.now() - Date.parse(ds.generatedAt)) / 3600_000;
   // The dataset is rebuilt weekly; past ~9 days the pipeline has missed one.
   if (ageH > 9 * 24) problems.push('dataset: older than 9 days');
-  const mem = process.memoryUsage();
-  return {
+  const summary = {
     ok: true, status: problems.length ? 'degraded' : 'ok', problems, version: VERSION,
     dataAsOf: ds.generatedAt, dataAgeHours: Math.round(ageH * 10) / 10,
-    live: lv, ceme, tools: statsSummary(),
+  };
+  if (!detail) return summary;
+  const mem = process.memoryUsage();
+  return {
+    ...summary, live: lv, ceme, tools: statsSummary(),
     memoryMb: { rss: Math.round(mem.rss / 1048576), heapUsed: Math.round(mem.heapUsed / 1048576) },
   };
 }
@@ -180,16 +225,16 @@ function parseTarget(target) {
 }
 
 async function handle(req, res) {
-  for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
   const url = parseTarget(req.url);
   if (!url) {
     console.warn('[ohmigo] bad request target:', JSON.stringify(req.url.slice(0, 200)));
     return send(res, 400, 'bad request\n', 'text/plain; charset=utf-8');
   }
+  if (corsOpen(url.pathname)) for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   // Health check for the hosting platform (and for you: it shows how fresh
   // the data is).
-  if (url.pathname === '/healthz') return send(res, 200, health());
+  if (url.pathname === '/healthz') return send(res, 200, health(healthzAllowed(req.headers['x-healthz-token'])));
   const get = req.method === 'GET' || req.method === 'HEAD';
   if ((url.pathname === '/' || url.pathname === '/en') && get) {
     // Old links chose the language with ?lang=; each language has its own URL now.
@@ -199,15 +244,15 @@ async function handle(req, res) {
       res.writeHead(301, { location: (want === 'en' ? '/en' : '/') + url.search });
       return res.end();
     }
-    res.writeHead(200, SITE_HEADERS);
+    res.writeHead(200, LANDING_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : PAGES[url.pathname === '/en' ? 'en' : 'pt']);
   }
   if (url.pathname === '/og.png' && get) {
-    res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' });
+    res.writeHead(200, { ...IMAGE_HEADERS, 'content-type': 'image/png' });
     return res.end(req.method === 'HEAD' ? undefined : OG_IMAGE);
   }
   if (ICONS[url.pathname] && get) {
-    res.writeHead(200, { 'content-type': ICONS[url.pathname].type, 'cache-control': 'public, max-age=86400' });
+    res.writeHead(200, { ...IMAGE_HEADERS, 'content-type': ICONS[url.pathname].type });
     return res.end(req.method === 'HEAD' ? undefined : ICONS[url.pathname].body);
   }
   if (url.pathname === '/sitemap.xml') return send(res, 200, SITEMAP, 'application/xml; charset=utf-8');
@@ -225,11 +270,12 @@ async function handle(req, res) {
     return res.end(req.method === 'HEAD' ? undefined : LEGAL_PAGES[url.pathname]);
   }
   if (url.pathname === '/dados' && (req.method === 'GET' || req.method === 'HEAD')) {
-    res.writeHead(200, { ...SITE_HEADERS, ...DADOS_CACHE });
+    res.writeHead(200, DADOS_PAGE_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : DADOS);
   }
   // A broken dump page must not take the MCP server down with it.
   if (url.pathname === '/dados.json' || url.pathname === '/dados/postos.json') {
+    if (!get) { res.setHeader('allow', 'GET, HEAD'); return send(res, 405, { error: 'method not allowed' }); }
     try {
       const body = url.pathname === '/dados.json' ? await dump(ds) : chargers(ds, url.searchParams.get('op') || '');
       return sendDados(res, JSON.stringify(body), !!body.partial);
@@ -239,6 +285,7 @@ async function handle(req, res) {
     }
   }
   if (url.pathname === '/robots.txt') return send(res, 200, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
+  if (url.pathname === '/.well-known/security.txt' && get) return send(res, 200, securityTxt(), 'text/plain; charset=utf-8');
   if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
   // Someone pasted the MCP address into a browser. MCP clients never ask for
   // text/html, so send the person to the page that explains what to do.
