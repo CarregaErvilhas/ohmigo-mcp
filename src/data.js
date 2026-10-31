@@ -136,9 +136,11 @@ export class Dataset {
 
   placeHits(name) {
     // "Leiria, Portugal" or "Leiria (Pombal)": the town is the first part.
-    const q = fold(String(name).split(/[,(]/)[0]);
+    // Punctuation around the name isn't part of it: "Leiria." is Leiria.
+    const clean = text => fold(text).replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
+    const q = clean(String(name).split(/[,(]/)[0]);
     if (q.length < MIN_PLACE) return null;
-    const words = text => fold(text).split(/[^a-z0-9]+/);
+    const words = text => fold(text).split(/[^a-z0-9]+/).filter(Boolean);
     const prefix = text => {
       const w = words(text), qs = q.split(/[^a-z0-9]+/);
       // Every word of the query starts a word of the text, in order.
@@ -146,7 +148,7 @@ export class Dataset {
       return false;
     };
     // Some NAP cities carry their own comma ("Lagoa, Faro" and "Lagoa, Azores").
-    const full = fold(String(name));
+    const full = clean(String(name));
     let hits = this.sites.filter(s => fold(s.city) === full);
     if (!hits.length) hits = this.sites.filter(s => fold(s.city) === q);
     if (hits.length) return hits;

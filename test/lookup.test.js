@@ -102,6 +102,12 @@ test('resolvePlace: the town before a comma', () => {
   assert.equal(ds.resolvePlace(', '), null);
 });
 
+test('resolvePlace: punctuation around the name is not part of it', () => {
+  for (const name of ['Leiria.', 'Leiria!', '"Leiria"', 'Leiria?', 'leiria...']) assert.ok(ds.resolvePlace(name), name);
+  assert.equal(ds.resolvePlace('...'), null);
+  assert.equal(ds.resolvePlace('Rua.'), null, 'still not a place');
+});
+
 test('resolvePlace: whole words from the start, never a substring anywhere', () => {
   assert.equal(ds.resolvePlace('a'), null, 'too short');
   assert.equal(ds.resolvePlace('eir'), null, 'inside a word: not Leiria');
