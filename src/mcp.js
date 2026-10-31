@@ -79,7 +79,7 @@ export const QA_NOTE = `
 QA MODE (test server): results carry "timeline" and "debug". Also show the session window, the headline tariff's timeline and anything in "debug" that looks wrong, so the tester can check the math; list all of each charger's tariffs (up to ${QA_SHOWN}), not just 3.`;
 
 const Detail = {
-  detail: z.boolean().optional().describe('Add the timeline (kWh delivered and, per CEME tariff shown, period, price and OMIE over the session), when the user asks how the price was built or why it changes with the time. In a ranking only the first results carry it.'),
+  detail: z.boolean().optional().describe("Add the timeline (kWh, period, price and OMIE over the session) and each CEME option's \"components\" (its bill line by line) when the user asks how the price was built. In a ranking only the first results carry it."),
 };
 
 // Prices only some people can get (offers/audiences.json). Never guessed:
@@ -664,7 +664,10 @@ export function createServer(getDataset, live) {
       q.km = rnd(q.km); q.offRouteKm = rnd(q.offRouteKm); q.alongKm = rnd(q.alongKm);
       // The timeline is for "how was this price built", a question about one
       // charger: ten of them were ~100 KB. The first few keep it.
-      if (i >= DETAIL_IN_RANKING) delete q.timeline;
+      if (i >= DETAIL_IN_RANKING) {
+        delete q.timeline;
+        for (const o of q.options) delete o.components;
+      }
     }
     const notes = [
       ...(cemeDown ? [t('note.noCeme')] : []),
