@@ -96,7 +96,7 @@
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
   .chip { font-size: 15px; font-weight: 700; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; }
   .mascot-stage { position: relative; display: grid; place-items: center; min-height: 340px; }
-  .mascot-stage::before { content: ""; position: absolute; width: 88%; aspect-ratio: 1; border-radius: 50%;
+  .mascot-stage::before { content: ""; position: absolute; width: min(88%, 380px); aspect-ratio: 1; border-radius: 50%;
     background: radial-gradient(circle at 40% 35%, var(--yellow-soft), var(--green-soft) 70%); }
   .mascot { position: relative; width: min(320px, 78vw); animation: bob 3.2s ease-in-out infinite; filter: drop-shadow(0 18px 18px rgba(15,23,42,.15)); }
   .arm-wave { transform-origin: 196px 150px; animation: wave 1.6s ease-in-out infinite; }
@@ -244,6 +244,7 @@
     .hero-grid, .demo-grid { grid-template-columns: 1fr; }
     .hero-grid .mascot-stage { order: -1; min-height: 250px; }
     .mascot { width: min(220px, 60vw); }
+    .mascot-stage::before { width: min(88%, 280px); }
     .prompts { grid-template-columns: 1fr; }
     .btn { width: 100%; }
     .urlbox .btn { width: auto; flex: 1 1 auto; }
