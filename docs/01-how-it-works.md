@@ -56,7 +56,8 @@ Follow one `find_cheapest_charging` call through the code:
    Each way to pay becomes one entry in `options` ([02](02-cost-math.md)).
 6. Still in `quote.js`, `rank` drops busy or broken chargers, keeps the
    cheapest plug per site, and sorts sites by `best`: the cheapest option
-   anyone can use.
+   the user can use or, with `tariff_ids`, a tariff the user listed, and never
+   a CEME tariff they didn't list.
    If ceme-v2 doesn't answer, plugs on MOBI.E come back without a CEME total
    (`cemeUnavailable`) and the other ways to pay still rank.
 7. `mcp.js` returns the top results as `structuredContent`, and the same
@@ -165,6 +166,15 @@ a filter on top of the place or route ("Continente" near Leiria).
 charger and bills its fee. The owner can be someone else: Lidl's chargers are
 owned by Lidl and operated by Galp, so the NAP says Galp and OSM's brand says
 Lidl. Both are right, and both are searchable.
+
+**Sites the NAP leaves nameless.** Some operators publish part of their sites
+with neither `operator` nor `operatorId` (Continente's `CNT-0001PL0002`). When
+you load a dataset, `lendOperators` (`src/lookup.js`) gives such a site the
+operator of its id prefix, if the named sites with that prefix all have one
+operator, and marks it `operatorInferred`. From there on it's that operator's
+site for search, offers, promotions, labels, `list_operators` and `/dados`;
+the answers say the operator was inferred (`assume.operatorInferred`). A site
+with nobody to lend it a name stays nameless: on `/dados` those share one row.
 
 ## Motorways: which side of the road
 

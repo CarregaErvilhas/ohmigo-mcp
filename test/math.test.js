@@ -139,6 +139,13 @@ test('pickTariffs: user tariff whose id ends with the voltage matches the other 
   assert.equal(t.missing, false);
 });
 
+test('pickTariffs: naming a card holds every billing cycle of it', () => {
+  const quotes = [q('edp-bt-cartoedp-4', 6), q('edp-bt-cartoedp-5', 5), q('edp-bt-socio', 3)];
+  const t = pickTariffs(quotes, { level: 'BTN', dc: false }, ['edp-bt-cartoedp']);
+  assert.deepEqual(t.options.map(o => o.id), ['edp-bt-cartoedp-4', 'edp-bt-cartoedp-5']);
+  assert.deepEqual(pickTariffs(quotes, { level: 'BTN', dc: false }, ['edp-bt-cartoedp-4']).options.map(o => o.id), ['edp-bt-cartoedp-4', 'edp-bt-cartoedp-5']);
+});
+
 test('pickTariffs: default is top 3 popular, headline skips ones needing another contract', () => {
   const quotes = [
     q('a-bt-x', 4, { popular: true, bundle: true }), q('b-bt-y', 5), q('c-bt-z', 6, { popular: true }),

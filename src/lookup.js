@@ -90,25 +90,48 @@ function oneEdit(a, b) {
 const hits = (token, ws) => ws.some(w => w === token || (token.length >= 3 && w.startsWith(token))
   || (token.length >= 5 && w.length >= 4 && oneEdit(token, w.length > token.length + 1 ? w.slice(0, token.length) : w)));
 
+// What tells one operator from another: the NAP's operatorId, or the name for
+// sites without one (all the sites with neither fall under one key).
+export const operatorKey = s => s.operatorId || `name:${s.operator || '?'}`;
+
+// Some operators publish part of their sites without a name (Continente's
+// "CNT-0001PL0002" sites have no operator). Their id prefix is shared with the
+// named ones, so a prefix that belongs to one operator lends it to them, under
+// the spelling most of its sites use. That makes it a guess, so the site keeps
+// `operatorInferred` for the answers to say so. A prefix two operators share
+// says nothing, and an operatorId the NAP did publish is never replaced.
+// Dataset calls this first, so everything downstream (search, offers,
+// promotions, labels) sees the same operator.
+export function lendOperators(sites) {
+  const prefixOp = new Map();
+  for (const s of sites) {
+    if (!s.operator) continue;
+    const p = s.id.split('-')[0];
+    const key = operatorKey(s);
+    const cur = prefixOp.get(p);
+    if (cur === null) continue;
+    if (cur && cur.key !== key) { prefixOp.set(p, null); continue; }
+    const op = cur ?? { key, operatorId: s.operatorId, names: new Map() };
+    op.names.set(s.operator, (op.names.get(s.operator) || 0) + 1);
+    prefixOp.set(p, op);
+  }
+  for (const s of sites) {
+    if (s.operator) continue;
+    const op = prefixOp.get(s.id.split('-')[0]);
+    if (!op || (s.operatorId && s.operatorId !== op.operatorId)) continue;
+    const [[operator]] = [...op.names].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    Object.assign(s, { operator, operatorId: op.operatorId, operatorInferred: true });
+  }
+}
+
 // The search index: what each site can be found by. Built once per dataset.
 export class Index {
   constructor(sites) {
     const brands = brandNames();
-    // Some operators publish part of their sites without a name (Continente's
-    // "CNT-0001PL0002" sites have no operator). Their id prefix is shared with
-    // the named ones, so a prefix that belongs to one operator lends its name.
-    const prefixOp = new Map();
-    for (const s of sites) {
-      if (!s.operator) continue;
-      const p = s.id.split('-')[0];
-      const cur = prefixOp.get(p);
-      prefixOp.set(p, cur === undefined || (cur && cur.operatorId === s.operatorId) ? { operator: s.operator, operatorId: s.operatorId } : null);
-    }
     this.byCode = new Map();
     this.entries = sites.map(site => {
-      const op = site.operator ? site : prefixOp.get(site.id.split('-')[0]) || {};
       const fields = {
-        operator: words([op.operator, op.operatorId, ...(brands.get(op.operatorId) || [])].join(' ')),
+        operator: words([site.operator, site.operatorId, ...(brands.get(site.operatorId) || [])].join(' ')),
         // The NAP's own name for the site ("Auchan Cascais").
         name: words(site.name),
         osm: words([site.osm?.name, site.osm?.brand, site.osm?.operator].join(' ')),

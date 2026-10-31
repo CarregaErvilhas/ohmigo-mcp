@@ -64,7 +64,7 @@ const fold = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLow
 const PERIODS = ['VAZIO', 'FORA_VAZIO', 'CHEIAS', 'PONTA', 'SIMPLES'];
 const REGIME = { mobie: 'MOBI.E', mobie_sem_tarifa: 'MOBI.E sem tarifa OPC', sem_ceme: 'fora MOBI.E' };
 let D, tab = location.hash.slice(1) || 'resumo', q = '';
-const opOpen = new Map(); // operatorId -> chargers (loaded on demand)
+const opOpen = new Map(); // operator key -> chargers (loaded on demand)
 
 // Each tab: count for the nav, and a render(filter) that returns HTML.
 const TABS = {
@@ -191,9 +191,9 @@ function operadores(f) {
       <td class="num">${o.sites}</td><td class="num">${o.points}</td><td class="num">${o.dc}</td><td class="num">${o.maxKw}</td>
       <td>${reg(o)}</td><td>${plans(o.plans)}</td><td>${plans(o.adhoc, 2)}</td>
       <td class="num">${o.napPrice ? (o.napPrice.min === o.napPrice.max ? eur(o.napPrice.min) : `${eur(o.napPrice.min)}–${eur(o.napPrice.max)}`) : ''}</td>
-      <td>${o.offers.map(x => tag(x, 'ok')).join('')}${o.note ? tag('nota NAP', 'warn') : ''}</td>
-      <td><button class="lnk" data-op="${esc(o.id)}">${opOpen.has(o.id) ? 'fechar' : 'postos'}</button></td>
-    </tr>${opOpen.has(o.id) ? `<tr class="sub"><td colspan="11">${postos(opOpen.get(o.id))}</td></tr>` : ''}`).join('')}
+      <td>${o.offers.map(x => tag(x, 'ok')).join('')}${o.note ? tag('nota NAP', 'warn') : ''}${o.inferredNote ? tag(o.inferredNote, 'warn') : ''}</td>
+      <td><button class="lnk" data-op="${esc(o.key)}">${opOpen.has(o.key) ? 'fechar' : 'postos'}</button></td>
+    </tr>${opOpen.has(o.key) ? `<tr class="sub"><td colspan="11">${postos(opOpen.get(o.key))}</td></tr>` : ''}`).join('')}
   </table>`;
 }
 

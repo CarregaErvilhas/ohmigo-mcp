@@ -8,7 +8,7 @@
 //
 // Shape (one JSON file, ~6 MB):
 //   { schema, generatedAt, sites: [{ id, code, lat, lon, region, city, address,
-//     operator, name?, hours?, locationDescription?, phone?, osm?,
+//     operator, operatorId, name?, hours?, locationDescription?, phone?, osm?,
 //     points: [{ id, kw, v, a, cable, connector, dc, phases, level, regime, opc, osm? }] }] }
 // `v`/`a` are the connector's voltage and max current as the operator
 // declares them on the NAP; `level` is the grid's voltage level (BTN/BTE/MT),
@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
-import { fold, Index } from './lookup.js';
+import { fold, Index, lendOperators, operatorKey } from './lookup.js';
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 // The dataset format this code understands. nap-dashboard bumps SCHEMA in
@@ -37,6 +37,8 @@ const SCHEMA = 1;
 // a partial match is too generic to be a place (Lisboa, the biggest city, is
 // ~10 %).
 const MIN_PLACE = 3;
+// No town has a name this long, and placeHits' cost grows fast with the length.
+const MAX_PLACE_CHARS = 200;
 const MAX_PLACE_SHARE = 0.15;
 
 const localFile = () => {
@@ -48,6 +50,7 @@ export class Dataset {
   constructor(raw) {
     this.generatedAt = raw.generatedAt;
     this.sites = raw.sites;
+    lendOperators(this.sites);
     this.siteById = new Map();
     this.pointById = new Map();
     for (const s of this.sites) {
@@ -139,10 +142,13 @@ export class Dataset {
   }
 
   placeHits(name) {
+    // Punctuation around the name isn't part of it: "Leiria." is Leiria.
+    const clean = text => fold(text).replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
+    const full = clean(String(name).slice(0, MAX_PLACE_CHARS));
     // "Leiria, Portugal" or "Leiria (Pombal)": the town is the first part.
-    const q = fold(String(name).split(/[,(]/)[0]);
+    const q = clean(full.split(/[,(]/)[0]);
     if (q.length < MIN_PLACE) return null;
-    const words = text => fold(text).split(/[^a-z0-9]+/);
+    const words = text => fold(text).split(/[^a-z0-9]+/).filter(Boolean);
     const prefix = text => {
       const w = words(text), qs = q.split(/[^a-z0-9]+/);
       // Every word of the query starts a word of the text, in order.
@@ -150,9 +156,9 @@ export class Dataset {
       return false;
     };
     // Some NAP cities carry their own comma ("Lagoa, Faro" and "Lagoa, Azores").
-    const full = fold(String(name));
-    let hits = this.sites.filter(s => fold(s.city) === full);
-    if (!hits.length) hits = this.sites.filter(s => fold(s.city) === q);
+    // Cleaned on both sides: a city can end in punctuation too.
+    let hits = this.sites.filter(s => clean(s.city ?? '') === full);
+    if (!hits.length) hits = this.sites.filter(s => clean(s.city ?? '') === q);
     if (hits.length) return hits;
     hits = this.sites.filter(s => prefix(s.city ?? ''));
     if (!hits.length && q.length >= 4) {
@@ -251,7 +257,8 @@ export class Dataset {
   // as the NAP publishes it, biggest first. Grouped by operatorId: the name
   // is not a key (Atlante appears with 7 spellings), so each operator gets
   // its most common spelling and the others in `otherNames`. Sites without
-  // an operatorId group by name.
+  // an operatorId group by name. `inferredSites`: how many of its sites the
+  // NAP left nameless and the id prefix attributes to it (lookup.js).
   operators({ region, ...filter } = {}) {
     const ok = this.pointFilter(filter);
     const by = new Map();
@@ -259,12 +266,17 @@ export class Dataset {
       if (region && s.region !== region) continue;
       const points = s.points.filter(p => ok(p, s));
       if (!points.length) continue;
-      const key = s.operatorId || `name:${s.operator ?? '?'}`;
+      const key = operatorKey(s);
       let o = by.get(key);
-      if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {} });
-      o.names.set(s.operator ?? '?', (o.names.get(s.operator ?? '?') || 0) + 1);
+      if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, inferredSites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {} });
+      // A lent name isn't a spelling the NAP published, so it doesn't vote; it
+      // only names an operator whose sites here are all inferred (a region
+      // or filter can leave just those).
+      if (s.operatorInferred) o.lentName ??= s.operator;
+      else if (s.operator) o.names.set(s.operator, (o.names.get(s.operator) || 0) + 1);
       if (s.website) o.websites.add(s.website);
       o.sites++;
+      if (s.operatorInferred) o.inferredSites++;
       o.regions[s.region] = (o.regions[s.region] || 0) + 1;
       for (const p of points) {
         o.points++;
@@ -277,8 +289,8 @@ export class Dataset {
     return [...by.values()].map(o => {
       const names = [...o.names].sort((x, y) => y[1] - x[1]).map(([n]) => n);
       return {
-        operatorId: o.operatorId, name: names[0], otherNames: names.length > 1 ? names.slice(1) : undefined,
-        website: [...o.websites][0], sites: o.sites, points: o.points, dcPoints: o.dcPoints,
+        operatorId: o.operatorId, name: names[0] ?? o.lentName ?? '?', otherNames: names.length > 1 ? names.slice(1) : undefined,
+        website: [...o.websites][0], sites: o.sites, inferredSites: o.inferredSites || undefined, points: o.points, dcPoints: o.dcPoints,
         maxKw: o.maxKw || undefined, maxVoltage: o.maxV || undefined, regions: o.regions, regimes: o.regimes,
       };
     }).sort((x, y) => y.sites - x.sites || x.name.localeCompare(y.name));

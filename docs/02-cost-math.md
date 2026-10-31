@@ -79,7 +79,12 @@ What the driver gets:
   so ceme-v2 used the period's average). Quarters that look the same (same
   power, or same period, price and OMIE) are merged into runs with `from`,
   `to`, `quarters` and `kwh`, so a long AC session at one price is one line.
-  In `find_cheapest_charging` only the first few results carry it;
+  Each CEME option also gets `components`, the CEME's bill line by line as
+  ceme-v2 rounds it (`energyTar`, split into `energy` and `tar` when known,
+  `iec`, `activation` (EGME), `support`, `base`, `vatEur`, `total`); the
+  operator fee is in `opc.parts`. With a promotion in the total they describe
+  the tariff without it (`promoApplied`).
+  In `find_cheapest_charging` only the first few results carry both;
 - in QA mode (`OHMIGO_QA=1`, [06](06-run-and-deploy.md)): the timeline on
   every result, plus `debug` with the segments, the profile sent and what
   ceme-v2 said about it.
@@ -210,10 +215,14 @@ bank card / QR, and when the NAP price is missing (live feed down) the
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the
   cheapest popular one that needs no other contract);
-- **`best`**: the cheapest option anyone can use right now, meaning no
-  subscription and no other contract. **The ranking sorts by
-  `best`.** That's how an IONITY whose own app beats every CEME ends up where
-  it belongs.
+- **`best`**: the cheapest option the user can use right now, meaning no
+  subscription and no other contract. With `tariff_ids`, a tariff the user
+  listed counts even with conditions (`listed`: they have it), and a cheaper
+  CEME tariff they didn't list is never `best`: it stays in `options` as a tip
+  (`cheaperElsewhere`, `notYours`) with a note saying so. Direct offers aren't
+  affected, since `tariff_ids` says nothing about which apps the user has.
+  **The ranking sorts by `best`.** That's how an IONITY whose own app beats
+  every CEME ends up where it belongs.
 
 ## 4. Ranking (`quote.js`, `rank`)
 

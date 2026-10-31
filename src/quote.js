@@ -32,8 +32,11 @@
 //             cheapest popular one that needs no other contract).
 //   best      the cheapest option ANYONE can pay right now: no subscription
 //             fee, no other contract, not a tariff only for new sign-ups
-//             (a client the CEME already has can't get it). Chargers are ranked by it,
-//             so an IONITY whose own app beats every CEME ranks where it should.
+//             (a client the CEME already has can't get it). With tariff_ids,
+//             the tariffs the user listed count even with conditions, and one
+//             they didn't list never does: that's a tip (notYours). Chargers
+//             are ranked by it, so an IONITY whose own app beats every CEME
+//             ranks where it should.
 
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
@@ -56,6 +59,11 @@ const pct = (vat, t) => t.num(r4((vat - 1) * 100), 1);
 // user doesn't care which. Dropping the voltage gives the "same tariff" key.
 export const tariffKey = id => id.replace(/-(bt|mt)(?=-|$)/, '');
 
+// The same card in another billing cycle ("edp-bt-cartoedp-4", "-5"...) ends
+// in a number. A driver who names their card holds one cycle of it and may not
+// know which, so for "is this tariff theirs" all cycles of a card are one.
+const cardKey = id => tariffKey(id).replace(/-\d+$/, '');
+
 export const DEFAULT_SHOWN = 3;
 
 // Which CEME tariffs to price at this point, cheapest first.
@@ -71,8 +79,8 @@ export const DEFAULT_SHOWN = 3;
 // the condition); for someone in that audience the condition is met, so it
 // can headline.
 export function eligible(quotes, audiences = [], tariffIds = []) {
-  const want = new Set((tariffIds || []).map(tariffKey));
-  return quotes.filter(q => forAudiences(q, audiences) || want.has(tariffKey(q.id)))
+  const want = new Set((tariffIds || []).map(cardKey));
+  return quotes.filter(q => forAudiences(q, audiences) || want.has(cardKey(q.id)))
     .map(q => q.audience ? { ...q, bundle: false } : q);
 }
 
@@ -80,8 +88,8 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
   const ok = applicable(quotes, point);
   const best = ok.find(t => !t.newCustomers) || null;
   if (tariffIds?.length) {
-    const want = new Set(tariffIds.map(tariffKey));
-    const options = ok.filter(t => want.has(tariffKey(t.id)));
+    const want = new Set(tariffIds.map(cardKey));
+    const options = ok.filter(t => want.has(cardKey(t.id)));
     return { options, headline: options[0] || null, best, missing: !options.length };
   }
   const seen = new Set();
@@ -94,6 +102,27 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
   return { options, headline, best, missing: false };
 }
 
+// The CEME's own bill, line by line, as ceme-v2 builds it (same rounding, so
+// the lines add up to its total). Euros, VAT excluded except `vatEur`:
+//   energyTar   energy + network access (TAR) for the kWh; `energy` and `tar`
+//               split it when the CEME publishes the split (else null)
+//   iec         electricity excise tax per kWh
+//   activation  EGME activation fee, once per session; `support` a CEME's
+//               own per-session charge. activationStale: the CEME still
+//               publishes last year's legal EGME value (egmeLegal)
+//   base        sum of the lines above; vatEur the VAT on it; total = base + vatEur
+// With a promotion in the total (`promoApplied`) these lines are the tariff
+// without it: they won't add up to `energyEur`.
+function cemeComponents(t, w) {
+  const { energyTar, energy, tar, iec, activation, support, base, vatEur } = t.parts;
+  return {
+    energyTar, energy, tar, iec, activation, support, base, vatEur, total: t.totalEur,
+    ...(t.egme_legal != null && { egmeLegal: t.egme_legal }),
+    ...(t.activation_stale && { activationStale: true }),
+    ...(w.final || w.energyEur !== t.totalEur ? { promoApplied: true } : {}),
+  };
+}
+
 // One CEME tariff as a way to pay here: ceme-v2's energy total plus the
 // operator fee with VAT, with the tariff's promotions for every customer at
 // this network already in (promos.js; new-customer ones never are). An
@@ -103,7 +132,7 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
 // (each tariff has its own cycle, so one session can cross for one and not
 // for another): { VAZIO: 12.4, FORA_VAZIO: 20.1 }.
 //   opc: { low, high } operator fee excl. VAT; vat: the region's multiplier
-function cemeOption(t, { site, opc, vat }) {
+function cemeOption(t, { site, opc, vat, detail }) {
   const promos = promosHere(t, site).filter(appliesToCustomers);
   const w = withPromos(promos, { energyEur: t.totalEur, opc, vat });
   return {
@@ -112,6 +141,7 @@ function cemeOption(t, { site, opc, vat }) {
     tariffId: t.id, ceme: t.ceme, name: t.name, tariffKind: t.kind, period: t.period,
     ...(t.kwhByPeriod && Object.keys(t.kwhByPeriod).length > 1 && { kwhByPeriod: t.kwhByPeriod }),
     requiresOtherContract: !!t.bundle, ...(t.audience && { audience: t.audience }), energyEur: w.energyEur,
+    ...(detail && t.parts && { components: cemeComponents(t, w) }),
     // A tariff only for people who sign up now, often a dated campaign
     // (`until`: its last day). Never the headline or `best` by default.
     ...(t.newCustomers && { newCustomersOnly: true }), ...(t.valid_until && { until: t.valid_until }),
@@ -204,6 +234,14 @@ function directOptions(direct, session, t, region) {
   })).sort((a, b) => a.total - b.total);
 }
 
+// A tariff the user put in tariff_ids: they have it (see eligible()), so its
+// conditions stay on the option but don't keep it from `best`.
+const listed = o => ({ ...o, listed: true });
+
+// A cheaper CEME tariff than any the user listed in tariff_ids. It stays visible and says so, but it's not
+// a price they can pay today, so it's never `best` (bestOption).
+const notYours = (o, t) => ({ ...o, notYours: true, note: t(o.requiresOtherContract ? 'option.notYours.contract' : 'option.notYours') });
+
 export const directOptionsForTest = (direct, session, lang, region) => directOptions(direct, session, translator(lang), region);
 
 // Quotes one point. `simCache` lets a caller ranking many points share the
@@ -227,7 +265,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   const lp = live?.get(site.id, point.id) ?? null;
   const base = {
     pointId: `${site.id}/${point.id}`, siteId: site.id, code: site.code,
-    operator: site.operator, address: site.address, city: site.city,
+    operator: site.operator, ...(site.operatorInferred && { operatorInferred: true }), address: site.address, city: site.city,
     lat: site.lat, lon: site.lon, region: site.region,
     kw: point.kw, ...(point.napKw !== undefined && { napKw: point.napKw }), volts: point.v ?? undefined,
     cable: point.cable ?? undefined, connector: point.connector, dc: point.dc, regime: point.regime,
@@ -244,6 +282,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   // Power from OpenStreetMap instead of the NAP (data.js): it sets the
   // duration and the price band, so the estimate says so.
   if (point.napKw !== undefined) base.assumptions.push(t('assume.osmKw', { kw: point.kw, nap: point.napKw }));
+  if (site.operatorInferred) base.assumptions.push(t('assume.operatorInferred', { operator: site.operator }));
   const hours = siteOpen(site, start);
   if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: [hours.nap, hours.osm].filter(Boolean).join(' / ') }));
   const direct = offersAt(site, point, audiences);
@@ -348,14 +387,13 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (opc.low !== opc.high) base.assumptions.push(t('assume.feeRange'));
   if (plan?.time?.length) base.assumptions.push(t('assume.perMinute'));
 
-  const ctx = { site, opc, vat };
-  const shownOpts = picked.options.map(o => cemeOption(o, ctx));
+  const ctx = { site, opc, vat, detail: want };
+  const shownOpts = picked.options.map(o => cemeOption(o, ctx)).map(o => tariffIds?.length ? listed(o) : o);
   // The headline, now that promotions may have changed the order: with the
   // user's tariffs, the cheapest of them; otherwise the cheapest shown one
   // that needs no other contract (pickTariffs' pick when none qualifies).
   // Without promotions this is pickTariffs' headline: every option pays the
   // same operator fee, so the energy order is the total order.
-  const cheapest = list => list.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
   const head = (tariffIds?.length ? cheapest(shownOpts) : cheapest(shownOpts.filter(o => !o.requiresOtherContract && !o.newCustomersOnly)))
     ?? cemeOption(ceme, ctx);
   // complete: false when the operator fee is unknown, so the total is only
@@ -372,11 +410,15 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (!base.options.some(o => o.tariffId === head.tariffId)) base.options.unshift(head);
   if (picked.best && !picked.options.some(o => o.id === picked.best.id)) {
     const b = cemeOption(picked.best, ctx);
-    if (b.total < head.total) base.options.push({ ...b, cheaperElsewhere: true });
+    if (b.total < head.total) {
+      const tip = { ...b, cheaperElsewhere: true };
+      base.options.push(tariffIds?.length ? notYours(tip, t) : tip);
+    }
   }
   // Promotions: the ones already in a shown total get an assumption; all of
   // them at this network (new-customer ones included) are listed as tips.
-  const applied = new Set(base.options.flatMap(o => o.promos || []));
+  // A tip's promotion isn't in any price the user pays: its note discloses it.
+  const applied = new Set(base.options.filter(o => !o.notYours).flatMap(o => o.promos || []));
   const shownIds = new Set(base.options.map(o => o.tariffId));
   const tips = promoTips(applicable(quotes, point), site, { opc, vat, applied, shown: shownIds }, t);
   for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));
@@ -395,12 +437,16 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   return base;
 }
 
-// The cheapest option open to anyone. A CEME option only counts when its
-// total is complete (operator fee known).
+// The cheapest of a list of options, the first one on a tie.
+const cheapest = list => list.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
+
+// The cheapest option the driver can use now: open to anyone, or a tariff
+// they listed, and never a tariff they'd have to switch to (notYours). A CEME
+// option only counts when its total is complete (operator fee known).
 function bestOption(options, total) {
-  const open = options.filter(o => !o.requiresOtherContract && !o.subscription && !o.newCustomersOnly
-    && (o.kind !== 'ceme' || total?.complete));
-  return open.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
+  const open = o => !o.requiresOtherContract && !o.newCustomersOnly;
+  return cheapest(options.filter(o => !o.notYours && !o.subscription && (o.listed || open(o))
+    && (o.kind !== 'ceme' || total?.complete)));
 }
 
 // Statuses where a car can plug in now. "unknown" stays in (a lot of the

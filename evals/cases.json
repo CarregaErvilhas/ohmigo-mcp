@@ -156,6 +156,21 @@
       }
     },
     {
+      "id": "tariff-list-cut",
+      "why": "list_ceme_tariffs cuts a long list and says so in its notes: the assistant doesn't present the rows as every tariff there is.",
+      "message": "Quantos tarifários CEME há ao todo? Lista-mos todos.",
+      "expect": {
+        "calls": [
+          {
+            "tool": "list_ceme_tariffs"
+          }
+        ],
+        "judge": [
+          "Does the answer give the total number of tariffs and make clear that any list it shows is not the whole list, or that it can look up a specific CEME? Answer n/a if the tool's result was complete and the answer lists every tariff."
+        ]
+      }
+    },
+    {
       "id": "motorway-ask-direction",
       "why": "A service area with a charger on each side of the road: without a direction, ask where the user is heading; never guess one.",
       "message": "Vou parar na área de serviço da Galp em Pombal, na A1, para carregar. Quanto me vai custar? Tenho um VW ID.4 Pro (77 kWh) e estou com 15%.",
@@ -472,6 +487,56 @@
       }
     },
     {
+      "id": "best-is-what-they-hold",
+      "why": "With tariff_ids, a cheaper CEME tariff the user didn't list is a tip that says they'd have to switch to it, never the price they lead with.",
+      "memory": "Carro: Fiat 500e de 42 kWh (37 kWh úteis). Paga com o Cartão EDP Charge (Simples), tariff_id edp-bt-cartoedp.",
+      "message": "Estou com 20%. Onde me fica mais barato carregar até 80% em Leiria?",
+      "requires": [
+        {
+          "tariff": "edp",
+          "id": "^edp-bt-cartoedp$"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_cheapest_charging",
+            "args": {
+              "tariff_ids": "cartoedp"
+            }
+          }
+        ],
+        "judge": [
+          "Is the price the reply leads with something other than a CEME tariff marked notYours in the results?",
+          "If the reply mentions a cheaper CEME tariff marked notYours, does it say the user would have to switch to it or sign up first? Answer n/a if it mentions none."
+        ]
+      }
+    },
+    {
+      "id": "only-held-tariff",
+      "why": "tariff_ids carries only the tariffs the user holds, not every row list_ceme_tariffs returned for their CEME.",
+      "message": "Só tenho o Cartão EDP Charge (Simples). Quanto me custa carregar no posto LRA-00156 com um Nissan Leaf de 40 kWh, de 20% a 80%?",
+      "requires": [
+        {
+          "tariff": "edp",
+          "id": "^edp-bt-cartoedp$"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "list_ceme_tariffs"
+          },
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "tariff_ids": "^\\[\"edp-(bt|mt)-cartoedp\"\\]$"
+            }
+          }
+        ]
+      }
+    },
+    {
       "id": "how-price-built",
       "why": "\"How was the price built\" at a given time: detail plus at.",
       "message": "Porque é que o preço muda com a hora? Explica-me como fica o preço de carregar hoje às 21h no posto LRA-00156, com um Nissan Leaf de 40 kWh, de 20% a 80%.",
@@ -519,6 +584,29 @@
         ],
         "judge": [
           "Does the reply make clear that its list or count comes from the chargers published on the NAP and is not the DGEG's registry of licensed operators?"
+        ]
+      }
+    },
+    {
+      "id": "operator-inferred",
+      "why": "A site the NAP left nameless is priced as its id prefix's operator: the answer says that operator is inferred, not published.",
+      "message": "Quanto me custa carregar no posto CNT-0001PL0002? Tenho um Renault Zoe ZE50, estou com 30% e quero ir até aos 80%.",
+      "requires": [
+        {
+          "site": "CNT-0001PL0002"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "0001PL0002"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply make clear that the NAP does not name this charger's operator and that the operator was inferred, rather than presenting it as published?"
         ]
       }
     },
