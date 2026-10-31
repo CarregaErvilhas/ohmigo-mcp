@@ -440,6 +440,27 @@ test('http: a JSON-RPC batch is refused with a JSON-RPC error, on any protocol v
   }
 });
 
+test('http: free-text arguments have a length limit', async () => {
+  const at = n => 'a'.repeat(n);
+  const cases = [
+    ['find_chargers', { place: at(201) }, 'place'],
+    ['find_cheapest_charging', { place: at(201), ...car }, 'place'],
+    ['estimate_charging_cost', { point_id: at(201), ...car }, 'point_id'],
+    ['list_ceme_tariffs', { query: at(201) }, 'query'],
+    ['estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, tariff_ids: [at(101)] }, 'tariff_ids'],
+  ];
+  for (const [tool, args, field] of cases) {
+    const r = await call(tool, args);
+    assert.equal(r.isError, true, `${tool} ${field}`);
+    assert.match(r.content[0].text, new RegExp(field), `${tool} ${field}`);
+  }
+  // At the limit they're ordinary arguments, answered as usual.
+  assert.equal((await call('find_chargers', { place: at(200) })).structuredContent.code, 'place');
+  assert.equal((await call('estimate_charging_cost', { point_id: at(200), ...car })).structuredContent.code, 'point');
+  assert.ok((await call('list_ceme_tariffs', { query: at(200) })).structuredContent);
+  assert.equal((await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, tariff_ids: [at(100)] })).isError, undefined);
+});
+
 // Last: it stops the server.
 test('http: SIGTERM lets the process exit cleanly', async () => {
   server.kill('SIGTERM');

@@ -123,7 +123,7 @@ const Car = {
   dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes: makes the duration far better than the generic curve"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
     .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]"),
-  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), all of them: each charger is priced with the cheapest. Omit to show the popular ones"),
+  tariff_ids: z.array(z.string().max(100)).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), all of them: each charger is priced with the cheapest. Omit to show the popular ones"),
   tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs shown per charger'),
   at: z.string().refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
     .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`).optional()
@@ -135,7 +135,7 @@ const Car = {
 const Where = {
   lat: z.number().min(30).max(43).optional().describe('Latitude of the user or search centre'),
   lon: z.number().min(-32).max(-6).optional().describe('Longitude of the user or search centre'),
-  place: z.string().optional().describe('Town or municipality, when lat/lon are unknown (e.g. "Leiria"). Only towns and NAP addresses: for a shopping centre, street or service area, pass its lat/lon'),
+  place: z.string().max(200).optional().describe('Town or municipality, when lat/lon are unknown (e.g. "Leiria"). Only towns and NAP addresses: for a shopping centre, street or service area, pass lat/lon'),
   radius_km: z.number().positive().max(50).default(5).describe('Search radius, km'),
   route: z.array(z.object({ lat: z.number(), lon: z.number() })).min(2).max(200).optional()
     .describe('Waypoints from origin to destination, to search along the route instead'),
@@ -477,7 +477,7 @@ export function createServer(getDataset, live) {
   server.registerTool('list_ceme_tariffs', {
     title: 'List CEME tariffs',
     description: 'Lists the CEME tariffs (the EV charging cards/apps of the electricity retailers on MOBI.E, Portugal), to turn what the user pays with ("EDP", "Via Verde") into tariff_ids for the cost tools. Also lists the CEMEs\' current promotions at specific charging networks.',
-    inputSchema: z.object({ query: z.string().optional().describe('Text in the CEME or tariff name, e.g. "edp", "via verde"'), ...Audience, ...Lang }),
+    inputSchema: z.object({ query: z.string().max(200).optional().describe('Text in the CEME or tariff name, e.g. "edp", "via verde"'), ...Audience, ...Lang }),
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, async ({ query, audiences, lang: l }, ctx) => {
     const t = translator(langOf({ lang: l }, ctx));
@@ -694,7 +694,7 @@ export function createServer(getDataset, live) {
     description: 'Estimated cost and duration of a charging session at one public EV charger in Portugal (site) or one socket (point_id), with the full breakdown and every way to pay. Each kind of socket at the site is priced, cheapest first.',
     inputSchema: z.object({
       site: z.string().max(200).optional().describe('The charger: siteId from lookup_charger or the other tools (e.g. "GLP-LRA-00156"), its sticker code ("LRA-00156"), or the user\'s words for one site'),
-      point_id: z.string().optional().describe('One socket, "SITE/POINT" from the other tools; only when the user picked one'),
+      point_id: z.string().max(200).optional().describe('One socket, "SITE/POINT" from the other tools; only when the user picked one'),
       ...Towards, ...Filter, ...Car, ...Audience, ...Detail, ...Lang,
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
