@@ -119,7 +119,7 @@ test('a ranking that fails gives its place back', async () => {
 });
 
 test('a price served from the last good answer says so, with its age', async () => {
-  const seven = Date.now() - 7 * 60_000;
+  const seven = Date.now() - 6.5 * 60_000; // rounded up: "7 min"
   globalThis.fetch = async (url, init) => { const b = JSON.parse(init.body); return new Response(JSON.stringify({ ...REPLY(b), staleSince: seven }), { status: 200 }); };
   for (const lang of ['en', 'pt']) {
     const [q] = await rank(speeds(1), car, { at: when(), lang });

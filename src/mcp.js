@@ -674,12 +674,21 @@ export function createServer(getDataset, live) {
     await withLive(live, ctx, t);
     const { total, results } = ds.search({ ...w, ...filterOf(a), limit: Infinity });
     if (!results.length) return err(t('err.noMatch'), 'noMatch');
-    const { candidates, truncated } = rankCandidates(results, live, w.route != null);
-    const ranked = await rank(candidates, car(a), {
-      at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences,
-      monthKwh: await monthKwh(a),
-      maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
-    });
+    const { candidates, truncated: pointsCut } = rankCandidates(results, live, w.route != null);
+    const month = await monthKwh(a);
+    let ranked;
+    try {
+      ranked = await rank(candidates, car(a), {
+        at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live, lang, audiences: a.audiences,
+        monthKwh: month,
+        maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
+      });
+    } catch (e) {
+      if (e.busy) return err(t('err.busy'), 'busy');
+      throw e;
+    }
+    // Two cuts, one note: too many sockets, or too many ceme-v2 calls.
+    const truncated = pointsCut || ranked.sitesPriced < candidates.length;
     const tooLong = { hours: MAX_SESSION_HOURS, n: ranked.tooLong };
     // err.tooLong only when no socket could be priced at all: with any priced
     // socket dropped by a filter, raising the filter is the advice.
@@ -702,12 +711,12 @@ export function createServer(getDataset, live) {
     const notes = [
       ...(cemeDown ? [t('note.noCeme')] : []),
       ...voltageNotes(ds, a, t),
-      ...(truncated ? [t('note.truncated', { n: candidates.length, total })] : []),
+      ...(truncated ? [t('note.truncated', { n: ranked.sitesPriced, total })] : []),
       ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
       ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
       ...moreWays(top, t),
     ];
-    const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
+    const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: ranked.sitesPriced,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // Summary lines on top of the JSON in the text (see ok).
     const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` (+${waysToPay(q) - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q)}) [${q.pointId}]`);

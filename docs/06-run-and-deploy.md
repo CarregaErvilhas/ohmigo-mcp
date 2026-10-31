@@ -165,13 +165,60 @@ user's IP from `X-Forwarded-For`, that IP isn't Cloudflare's, and every
 request gets 403. Direct requests to the origin must answer 403; through
 Cloudflare, 200.
 
-## Rate limiting
+## Rate limiting and load
 
-Not built in. Calls from ChatGPT and Claude come from their servers, not from
-the user's device, so a per-IP limit would throttle all of a platform's users
-as one. The expensive part is the ceme-v2 call, and it's cached (same kWh to
-0.1 and same quarter-hour = same answer, for 5 minutes); after a few failures in
-a row the client stops calling for a while (`BREAKER_*` in `src/ceme.js`)
-and the tools answer without CEME prices. A ranking quotes a capped number
-of plugs, nearest first (`MAX_RANKED_POINTS` in `src/mcp.js`). Put Cloudflare in
-front for DDoS protection; add per-client limits only if abuse shows up.
+There's no per-client limit, on purpose. Calls from ChatGPT and Claude come from
+their servers, not from the user's device, so a per-IP limit would throttle all
+of a platform's users as one. What the server protects instead is the ceme-v2
+key everyone shares, and its own process.
+
+**The key.** The expensive part is the ceme-v2 call, so `src/ceme.js` keeps it
+from running away:
+
+- *Cache.* Replies are kept for `TTL_MS`, capped by entries and by total bytes
+  (`MAX_CACHE_*`); `detail` replies past `MAX_DETAIL_CACHE_BYTES` aren't kept.
+  What counts as the same answer depends on the call. Without a slice profile
+  (only `/dados` and empty sessions): the same kWh to 0.1 and the same
+  quarter-hour. With one, which is every tool: the same kWh in every slice, and
+  the same quarter-hour for the start. So sockets of one charging speed share a
+  call, but a session that spans quarter-hours and starts a minute later doesn't
+  reuse anything: its first slice holds other kWh. The cache mostly saves
+  repeats and the work inside a ranking, not calls between different users.
+- *Quota.* A 429 isn't an outage: it stays out of the breaker. No call goes out
+  until `Retry-After` has passed (bounded, `RETRY_AFTER_*`). Meanwhile a call
+  whose exact key was answered within `STALE_MS` gets that last good answer, and
+  a quote built on it says how old it is. Any other call fails as unavailable and
+  the tools answer without CEME prices. Since a session starts at the current
+  minute, a repeat of a "now" question has a new key after a minute, so the last
+  good answer mostly helps questions with a fixed `at`, `/dados` and the tariff
+  list.
+- *Outages.* After a few 5xx or timeouts in a row the client stops calling for a
+  while (`BREAKER_*`) and the tools answer without CEME prices.
+- *Concurrency.* Every call goes through one line per process: `MAX_CONCURRENT`
+  at once, `MAX_QUEUED` waiting, first come first served. Past that a call fails
+  as unavailable, which doesn't touch the breaker.
+- *One ranking's share.* A ranking makes one call per distinct charging speed, up
+  to `MAX_SIMS_PER_CALL` in `src/quote.js`. It stops there and reports the cut
+  in `note.truncated`, like the cut on the number of sockets
+  (`MAX_RANKED_POINTS` in `src/mcp.js`). The speeds past it aren't priced from the
+  nearest one: that reply is for other kWh, so it would need math that belongs to
+  ceme-v2.
+
+**The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets on the event
+loop. `rank()` in `src/quote.js` lets `MAX_RANKINGS` run at once and
+`MAX_RANKINGS_QUEUED` wait; past that the tool says to try again in a few
+seconds. It also yields every `RANK_CHUNK` sockets, so `/healthz` keeps
+answering while it works. All of these limits are per process, and shared by
+everyone: a burst from one client still slows the others, and can get them
+refused.
+
+**What this doesn't do.** None of it stops anyone from sending requests, or
+keeps one client from spending the shared quota. For that you need a limit at the
+edge: a Cloudflare rate limiting rule on `POST /mcp`, set high enough to pass a
+whole platform's traffic. That rule isn't in this repo and isn't set up by a
+deploy; it's the maintainer's to add in the Cloudflare dashboard. Cloudflare's
+DDoS protection is in front either way.
+
+While the quota is spent, `/healthz` is `degraded` with `ceme-v2: rate limited`
+in `problems`. With the token, `ceme` shows `rateLimitedUntil` and the size of the
+cache.

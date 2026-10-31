@@ -119,7 +119,8 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/charging.js` | Session energy and duration, as constant-power segments |
 | `src/profile.js` | Lays the session on the clock: kWh per quarter-hour, local times |
 | `src/opc.js` | Operator fee math (flat, per kWh, per-minute tiers) |
-| `src/ceme.js` | Client for ceme-v2's API, with a cache and a circuit breaker |
+| `src/ceme.js` | Client for ceme-v2's API, with a cache, a circuit breaker, 429 handling and a limit on calls at once |
+| `src/limit.js` | A small first-come-first-served line with a bounded queue, for ceme-v2 calls and rankings |
 | `src/offers.js` | Loads the direct offers, picks the ones for a charger; finds missing operators |
 | `src/promos.js` | CEME promotions at one network: which hold at a charger, and what they do to the price |
 | `src/offers-parse.js` | Parses the custofinal blog's price tables |

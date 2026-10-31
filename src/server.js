@@ -194,6 +194,7 @@ function health(detail) {
   const problems = [
     ...(lv.error ? ['live: last refresh failed'] : []),
     ...(ceme.openUntil ? ['ceme-v2: unavailable'] : []),
+    ...(ceme.rateLimitedUntil ? ['ceme-v2: rate limited'] : []),
   ];
   const ageH = (Date.now() - Date.parse(ds.generatedAt)) / 3600_000;
   // The dataset is rebuilt weekly; past ~9 days the pipeline has missed one.
