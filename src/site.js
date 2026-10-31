@@ -56,9 +56,8 @@ function head(lang) {
     `<meta property="og:image:height" content="630">`,
     `<meta property="og:image:alt" content="${attr(text(t['meta.ogalt']))}">`,
     `<meta name="twitter:card" content="summary_large_image">`,
-    `<meta name="twitter:title" content="${attr(text(t['meta.title']))}">`,
-    `<meta name="twitter:description" content="${attr(text(t['meta.desc']))}">`,
-    `<meta name="twitter:image" content="${SITE_URL}/og.png">`,
+    // X falls back to og:* for title, description and image, but not for alt.
+    `<meta name="twitter:image:alt" content="${attr(text(t['meta.ogalt']))}">`,
     // JSON in a script tag: "<" escaped so no string can close it.
     `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>`,
   ].join('\n');
@@ -88,4 +87,21 @@ export const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 ${Object.values(PATHS).map(p => `  <url><loc>${SITE_URL + p}</loc>${Object.entries(PATHS).map(([l, q]) => `<xhtml:link rel="alternate" hreflang="${HTML_LANG[l]}" href="${SITE_URL + q}"/>`).join('')}</url>`).join('\n')}
 ${['/privacidade', '/privacy', '/suporte', '/support'].map(p => `  <url><loc>${SITE_URL + p}</loc></url>`).join('\n')}
 </urlset>
+`;
+
+// What ohmigo is, for AI crawlers (llmstxt.org). English only on purpose: it's
+// read by models, not by the people the two-language pages are for.
+export const LLMS_TXT = `# ohmigo
+
+> ohmigo is a free MCP server that gives AI assistants the prices at every public EV charger in Portugal published on the National Access Point (NAP), MOBI.E and the networks outside it. It estimates what a charging session costs for each way to pay and whether the charger is available now. No account, no sign-up, no authentication. All prices are estimates.
+
+MCP server (Streamable HTTP): ${SITE_URL}/mcp
+
+## Pages
+
+- [Home, in Portuguese](${SITE_URL + PATHS.pt}): what ohmigo is and how to add it to an assistant
+- [Home, in English](${SITE_URL + PATHS.en})
+- [Privacy](${SITE_URL}/privacy)
+- [Support](${SITE_URL}/support)
+- [Source code](https://github.com/CarregaErvilhas/ohmigo-mcp)
 `;

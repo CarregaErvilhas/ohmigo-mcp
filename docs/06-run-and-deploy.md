@@ -42,7 +42,7 @@ privacy page first.
 reporting a security problem. It's generated per request (`securityTxt` in
 `src/server.js`), so `Expires` is always ahead of today.
 
-`GET /llms.txt` is a short plain-text summary for AI crawlers: edit `site/llms.txt`.
+`GET /llms.txt` is a short plain-text summary for AI crawlers, in English only on purpose: edit `LLMS_TXT` in `src/site.js`.
 
 `GET /healthz` shows how the server is doing: `status` is `ok`, or
 `degraded` with the reasons in `problems` (the last live feed refresh failed,

@@ -500,7 +500,7 @@ test('http: with ceme-v2 down, the other ways to pay still come back, flagged', 
 test('http: the landing page is rendered in each language at its own URL, for crawlers', async () => {
   const pt = await (await fetch(`${base}/`)).text();
   assert.match(pt, /<html lang="pt-PT">/);
-  assert.match(pt, /<h1 data-i="hero.title">Pergunta ao teu assistente/);
+  assert.match(pt, /<h1 [^>]*data-i="hero.title">Pergunta ao teu assistente/);
   assert.match(pt, /<link rel="canonical" href="https:\/\/ohmigo\.ocarroeletrico\.com\/">/);
   assert.match(pt, /hreflang="en" href="https:\/\/ohmigo\.ocarroeletrico\.com\/en"/);
   assert.match(pt, /og:image" content="https:\/\/ohmigo\.ocarroeletrico\.com\/og\.png"/);
@@ -547,12 +547,9 @@ test('http: /healthz, robots.txt, favicon and 404', async () => {
 test('http: the landing page has its link preview tags and labels in each language', async () => {
   for (const [path, alt, skip, langs] of [['/', 'A mascote do ohmigo', 'Saltar para o conteúdo', 'Idioma'], ['/en', "ohmigo's mascot", 'Skip to content', 'Language']]) {
     const page = await (await fetch(`${base}${path}`)).text();
-    const title = page.match(/<title>([^<]*)<\/title>/)[1];
-    const description = page.match(/<meta name="description" content="([^"]*)">/)[1];
     assert.ok(page.includes(`<meta property="og:image:alt" content="${alt}`), `${path} og:image:alt`);
-    assert.ok(page.includes(`<meta name="twitter:title" content="${title}">`), `${path} twitter:title`);
-    assert.ok(page.includes(`<meta name="twitter:description" content="${description}">`), `${path} twitter:description`);
-    assert.ok(page.includes('<meta name="twitter:image" content="https://ohmigo.ocarroeletrico.com/og.png">'), `${path} twitter:image`);
+    assert.ok(page.includes(`<meta name="twitter:image:alt" content="${alt}`), `${path} twitter:image:alt`);
+    assert.ok(page.includes('ChatGPT · Claude · Grok'), `${path} the alt reads the image's first line`);
     assert.ok(page.includes(`data-i="a11y.skip">${skip}</a>`), `${path} skip link`);
     assert.ok(page.includes(`aria-label="${langs}"`), `${path} language group`);
     assert.doesNotMatch(page, /data-aria=/);
@@ -565,6 +562,11 @@ test('http: robots.txt, sitemap.xml and llms.txt get a short public cache', asyn
     assert.equal(r.status, 200, path);
     assert.match(r.headers.get('content-type'), type, path);
     assert.equal(r.headers.get('cache-control'), 'public, max-age=3600', path);
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff', path);
+    assert.equal((await fetch(`${base}${path}`, { method: 'HEAD' })).status, 200, path);
+    const post = await fetch(`${base}${path}`, { method: 'POST' });
+    assert.equal(post.status, 404, path);
+    assert.equal(post.headers.get('cache-control'), 'no-store', path);
   }
 });
 
@@ -574,9 +576,8 @@ test('http: llms.txt names the MCP address and only pages that answer', async ()
   assert.match(txt, /https:\/\/ohmigo\.ocarroeletrico\.com\/mcp\n/);
   const paths = [...txt.matchAll(/\]\(https:\/\/ohmigo\.ocarroeletrico\.com(\/[^)]*)\)/g)].map(m => m[1]);
   assert.ok(paths.length >= 1);
+  assert.ok(!paths.includes('/dados'), 'noindex, and empty without a script');
   for (const path of paths) assert.equal((await fetch(`${base}${path}`)).status, 200, path);
-  assert.equal((await fetch(`${base}/llms.txt`, { method: 'HEAD' })).status, 200);
-  assert.equal((await fetch(`${base}/llms.txt`, { method: 'POST' })).status, 404);
 });
 
 test('http: the view gets the bridge, the version and no raw coordinates', async () => {

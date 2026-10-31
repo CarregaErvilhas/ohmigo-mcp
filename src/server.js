@@ -23,7 +23,7 @@ import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
 import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
-import { PAGES, SITEMAP, SITE_URL } from './site.js';
+import { LLMS_TXT, PAGES, SITEMAP, SITE_URL } from './site.js';
 import { statsSummary } from './stats.js';
 import { VERSION } from './version.js';
 
@@ -86,7 +86,6 @@ function readJson(req) {
 // The landing page, one copy per language rendered at boot (src/site.js),
 // and its link-preview image.
 const OG_IMAGE = readFileSync(new URL('../site/og.png', import.meta.url));
-const LLMS_TXT = readFileSync(new URL('../site/llms.txt', import.meta.url));
 // The mascot as an icon. Assistants (ChatGPT's app list, Claude's connector
 // list) show the one the MCP server declares in serverInfo.icons (src/mcp.js)
 // or, failing that, the site's favicon, so every URL must answer with an image.
@@ -137,12 +136,13 @@ const send = (res, status, body, type = 'application/json') => {
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 };
 // robots.txt, sitemap.xml and llms.txt only change with a deploy.
-const sendPublic = (res, body, type) => { res.writeHead(200, { 'content-type': type, 'cache-control': 'public, max-age=3600' }); res.end(body); };
+const PUBLIC_TEXT_CACHE = 'public, max-age=3600';
+const sendPublic = (res, body, type) => { res.writeHead(200, { 'content-type': type, 'cache-control': PUBLIC_TEXT_CACHE, 'x-content-type-options': 'nosniff' }); res.end(body); };
 
 // Browser-based clients (MCP Inspector, claude.ai's connector check) send
 // CORS preflights. The server holds no user data and needs no cookies, so
 // any origin may call it, on the paths a client has a reason to read: /mcp,
-// the public JSON and images, and /.well-known, where MCP clients look for
+// the public JSON, llms.txt and images, and /.well-known, where MCP clients look for
 // OAuth metadata before connecting (at the root or under /mcp) and need to be
 // able to read the 404.
 const CORS = {
@@ -151,7 +151,7 @@ const CORS = {
   'access-control-allow-headers': 'content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id, authorization',
   'access-control-expose-headers': 'mcp-session-id, mcp-protocol-version',
 };
-const corsOpen = path => path === '/mcp' || path.startsWith('/mcp/') || path === '/og.png' || path === '/dados.json' || path === '/dados/postos.json'
+const corsOpen = path => path === '/mcp' || path.startsWith('/mcp/') || path === '/og.png' || path === '/llms.txt' || path === '/dados.json' || path === '/dados/postos.json'
   || !!ICONS[path] || path.startsWith('/.well-known/');
 // Images go inside assistants' apps, some of which only load what says it may
 // be embedded elsewhere.
@@ -255,7 +255,7 @@ async function handle(req, res) {
     res.writeHead(200, { ...IMAGE_HEADERS, 'content-type': ICONS[url.pathname].type });
     return res.end(req.method === 'HEAD' ? undefined : ICONS[url.pathname].body);
   }
-  if (url.pathname === '/sitemap.xml') return sendPublic(res, SITEMAP, 'application/xml; charset=utf-8');
+  if (url.pathname === '/sitemap.xml' && get) return sendPublic(res, SITEMAP, 'application/xml; charset=utf-8');
   if (LEGAL_PATHS.has(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, SITE_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : LEGAL);
@@ -275,7 +275,7 @@ async function handle(req, res) {
       return send(res, 500, { error: 'dados unavailable' });
     }
   }
-  if (url.pathname === '/robots.txt') return sendPublic(res, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
+  if (url.pathname === '/robots.txt' && get) return sendPublic(res, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
   if (url.pathname === '/llms.txt' && get) return sendPublic(res, LLMS_TXT, 'text/plain; charset=utf-8');
   if (url.pathname === '/.well-known/security.txt' && get) return send(res, 200, securityTxt(), 'text/plain; charset=utf-8');
   if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
