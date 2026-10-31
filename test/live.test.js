@@ -324,5 +324,6 @@ test('http: when an old copy leaves no charger, the error says how old it is', l
   assert.equal(r.structuredContent.code, 'noneLeft');
   assert.match(r.structuredContent.notes.join(), /published \d+ min ago/);
   assert.match(r.content[0].text, /published \d+ min ago/);
+  assert.doesNotMatch(r.structuredContent.message, /min ago/, 'the view prints message to the driver');
   await idle();
 });

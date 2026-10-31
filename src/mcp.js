@@ -344,7 +344,7 @@ export const moreWays = (results, t) => results.some(q => waysToPay(q) > 1) ? [t
 // What a support question needs to reproduce an answer: which server, which
 // data, which live copy.
 const meta = (ds, live, lang) => ({ version: VERSION, lang, dataAsOf: ds.generatedAt, live: liveMeta(live), ...(QA && { qa: true }) });
-const liveMeta = live => { const { publishedAt, checkedAt, fresh, refreshing, points, error } = live.info(); return { publishedAt, checkedAt, fresh, refreshing, points, error }; };
+const liveMeta = live => { const { publishedAt, checkedAt, fresh, outdated, refreshing, points, error } = live.info(); return { publishedAt, checkedAt, fresh, outdated, refreshing, points, error }; };
 
 // Gets the live status to answer with, which is all a tool should read from
 // then on (see LiveStatus.snapshot). If that means waiting for the feed, tell
@@ -690,8 +690,11 @@ export function createServer(getDataset, live) {
     if (!ranked.length) {
       // "Everything is busy" may be the old status talking: this is where its
       // age matters most.
-      const notes = liveNotes(status, t);
-      return err([t('err.noneLeft'), ...notes].join('\n'), 'noneLeft', notes.length ? { notes } : undefined);
+      // The note is for the assistant, so not in `message`: the view prints that.
+      const notes = a.available_only ? liveNotes(status, t) : [];
+      const none = err(t('err.noneLeft'), 'noneLeft', notes.length ? { notes } : undefined);
+      none.content[0].text = [none.content[0].text, ...notes].join('\n');
+      return none;
     }
     const top = ranked.slice(0, a.limit);
     // Any MOBI.E socket without its CEME price was ranked on its other

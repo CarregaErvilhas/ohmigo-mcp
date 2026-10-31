@@ -37,10 +37,11 @@ question. Then:
    (in their language), if their chat app shows progress messages.
 
 **So live data can be as old as `LIVE_MAX_STALE_SECONDS`**, and older while
-the feed is down (see the backoff below). The answer never hides it: whenever
-`live.fresh` is false, or the data was published longer ago than the TTL, the
-result carries a note, errors included, with how many minutes ago it was
-published, for the assistant to pass on. It covers NAP prices as well as
+the feed is down (see the backoff below). With a copy, the answer doesn't hide
+it: when `live.fresh` is false, or the data was published well past the TTL
+ago (`outdated`), the result carries a note with how many minutes ago it was
+published, for the assistant to pass on, and so does the error when an old
+status leaves no charger. It covers NAP prices as well as
 status, and `available_only` and the choice among identical sockets went by
 that status. The age counts from `publishedAt`, not from our last check,
 because a publisher that has stalled keeps answering `304` and our copy looks

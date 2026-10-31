@@ -213,8 +213,9 @@ export class LiveStatus {
   // the same old file. fetchedAt only stands in if the time doesn't parse.
   ageMs() {
     if (this.fetchedAt == null) return null;
+    // Never less than since we fetched it: a clock ahead of ours can't make it new.
     const published = Date.parse(this.publicationTime);
-    return Date.now() - (Number.isNaN(published) ? this.fetchedAt : published);
+    return Date.now() - (published < this.fetchedAt ? published : this.fetchedAt);
   }
 
   info() {
@@ -224,7 +225,9 @@ export class LiveStatus {
       ageMs,
       // Worth telling the user. Goes beyond !fresh for that stalled publisher:
       // the copy is fresh, what it says isn't.
-      outdated: ageMs != null && (!this.fresh() || ageMs > this.ttlMs),
+      // Half a TTL on top, so the feed's normal lag behind a copy near the end
+      // of its TTL doesn't count as a stall.
+      outdated: ageMs != null && (!this.fresh() || ageMs > this.ttlMs * 1.5),
       checkedAt: this.fetchedAt && new Date(this.fetchedAt).toISOString(),
       fresh: this.fresh(),
       refreshing: !!this.running,
