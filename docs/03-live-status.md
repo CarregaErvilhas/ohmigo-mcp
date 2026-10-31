@@ -5,7 +5,7 @@
 
 ## The problem
 
-The feed is **one XML file of ~38 MB** with the status of every charger in the
+The feed is **one big XML file** (`bytesLast` in `/healthz` has its size) with the status of every charger in the
 country. There's no compression, no way to ask for part of it, and no way to
 ask for one charger. A download takes 13-30 seconds, and now and then the
 connection drops halfway through.
@@ -19,7 +19,7 @@ question. Then:
 
 1. If our copy is **less than 5 minutes old** (`LIVE_TTL_SECONDS`, ±10 %
    so instances drift apart), we use it, with no network at all. 5 minutes
-   matches how often the NAP publishes (about every 5 minutes). Every refresh is a full 38 MB
+   matches how often the NAP publishes (about every 5 minutes). Every refresh is a full
    download (see below), but only while someone is asking: with no users,
    there is no traffic. Results carry
    `live.publishedAt`, so the assistant can say how old the status is.
@@ -36,13 +36,13 @@ question. Then:
 **Cheap re-checks.** Every download sends the `ETag` of the copy we have
 (`If-None-Match`). When the file hasn't changed, MOBI.E answers `304 Not
 Modified` with no body. It still takes their server a few seconds, but we
-don't download 38 MB again. In practice MOBI.E regenerates the file every
+don't download the file again. In practice MOBI.E regenerates the file every
 minute or two (the ETag and size change between checks), so a 304 is rare.
 The feed has no gzip; asking MOBI.E to compress it would cut ~90 %.
 
 **Streaming parse.** We read the XML as it arrives, piece by piece (with the
 `saxes` parser), and keep only a small map: `"SITE/POINT" → { status, fees }`.
-The 38 MB never sit in memory as one string. Parsing takes about 0.2 s; the
+The file never sits in memory as one string. Parsing takes about 0.2 s; the
 download is the slow part.
 
 **One retry** when the download arrives cut short (the parser fails with an
@@ -58,7 +58,7 @@ random 0-20 s after start so two instances don't download together.
 ## Why not a poller?
 
 A background job downloading the feed every few minutes would make every
-answer instant. It would also pull ~38 MB twelve times an hour, all day,
+answer instant. It would also pull the whole file twelve times an hour, all day,
 mostly for nobody. While traffic is low, on demand is the better trade: the
 first user after a quiet spell waits up to ~25 s, and everyone in the next 5
 minutes gets an instant answer.

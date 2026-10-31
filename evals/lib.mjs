@@ -11,10 +11,6 @@ export const ROOT = dirname(EVALS);
 export const CACHE = join(EVALS, '.cache');
 export const RUNS = join(EVALS, 'runs');
 
-// Some clients cut the server's instructions. Claude Code keeps this many
-// characters; the "cut" variant shows the assistant exactly that.
-export const CUT_AT = 4096;
-
 export const readJson = (p, fallback) => existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : fallback;
 export const readLines = p => existsSync(p) ? readFileSync(p, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
 export const rel = p => relative(ROOT, p) || '.';

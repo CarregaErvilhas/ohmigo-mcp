@@ -22,6 +22,8 @@
 // offerProblems() throw, so a change in the blog's layout (or a typo in it)
 // fails the weekly job loudly instead of quietly publishing wrong prices.
 
+import { fold } from './lookup.js';
+
 // Where every scraped offer must come from.
 export const BLOG_HOST = 'custofinal.blogspot.com';
 
@@ -148,7 +150,6 @@ export function parseTables(html) {
   return out;
 }
 
-const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
 const slug = s => fold(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // "Atlante - App MyAtlante" -> { provider: "Atlante", plan: "App MyAtlante" }
