@@ -116,7 +116,7 @@ const Car = {
   dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes: makes the duration far better than the generic curve"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
     .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]"),
-  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only those they hold, not every row returned: each charger uses the cheapest. Omit to show the popular ones"),
+  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only those they hold: each charger uses the cheapest. Omit to show the popular ones"),
   tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs shown per charger'),
   at: z.string().refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
     .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`).optional()
