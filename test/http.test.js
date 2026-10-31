@@ -101,11 +101,13 @@ test('http: with tariff_ids, a tariff the user lacks is a tip in both cost tools
       const tip = q.options.find(o => o.tariffId === 'nope-mt-y');
       assert.equal(tip.cheaperElsewhere, true);
       assert.equal(tip.notYours, true);
-      assert.match(tip.note, /sign up first/);
+      assert.match(tip.note, /switch to it first/);
       assert.notEqual(q.best?.tariffId, 'nope-mt-y');
     }
     const open = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...args, tariff_ids: undefined, battery_kwh: 62 });
-    assert.ok(open.structuredContent.results.every(q => !q.options.some(o => o.notYours)), 'without tariff_ids nothing is tagged');
+    const options = open.structuredContent.results.flatMap(q => q.options);
+    assert.ok(options.some(o => o.cheaperElsewhere), 'the tip is there');
+    assert.ok(!options.some(o => o.notYours), 'without tariff_ids nothing is tagged');
   } finally { cheapTip = false; }
 });
 
@@ -354,8 +356,8 @@ test('http: the view gets the bridge, the version and no raw coordinates', async
   assert.doesNotMatch(html, /__BRIDGE__|__VERSION__/);
   assert.doesNotMatch(html, /data-lat="\$\{q\.lat\}"/);
   assert.match(html, /renderError/);
-  assert.match(html, /not your card/);
-  assert.match(html, /não é o teu cartão/);
+  assert.match(html, /not your tariff/);
+  assert.match(html, /não é o teu tarifário/);
 });
 
 // Last: it stops the server.

@@ -116,7 +116,7 @@ const Car = {
   dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes: makes the duration far better than the generic curve"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
     .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]"),
-  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), all of them: each charger is priced with the cheapest. Omit to show the popular ones"),
+  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only those they hold, not every row returned: each charger uses the cheapest. Omit to show the popular ones"),
   tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs shown per charger'),
   at: z.string().refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
     .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`).optional()
@@ -331,7 +331,9 @@ const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 // A cost answer leads with one price, and assistants tend to stop there: the
 // evals caught them leaving out every other way to pay. When a charger has
 // more than its best, the result itself says so.
-const moreWays = (results, t) => results.some(q => q.options?.length > 1) ? [t('note.moreWays')] : [];
+// A tariff the user would have to switch to (notYours) isn't a way to pay yet.
+const waysToPay = q => (q.options ?? []).filter(o => !o.notYours).length;
+const moreWays = (results, t) => results.some(q => waysToPay(q) > 1) ? [t('note.moreWays')] : [];
 
 // What a support question needs to reproduce an answer: which server, which
 // data, which live copy.
@@ -676,7 +678,7 @@ export function createServer(getDataset, live) {
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
     // Summary lines on top of the JSON in the text (see ok).
-    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (q.options?.length > 1 ? ` (+${q.options.length - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
+    const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` (+${waysToPay(q) - 1} more ways to pay)` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : 'n/a'} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${q.kw} kW ${q.connector}) [${q.pointId}]`);
     return ok(data, [...notes, ...lines].join('\n'));
   });
 

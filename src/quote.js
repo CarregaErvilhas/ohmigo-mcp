@@ -33,9 +33,10 @@
 //   best      the cheapest option ANYONE can pay right now: no subscription
 //             fee, no other contract, not a tariff only for new sign-ups
 //             (a client the CEME already has can't get it). With tariff_ids,
-//             never a CEME tariff the user didn't list: that one is a tip
-//             (notYours). Chargers are ranked by it, so an IONITY whose own
-//             app beats every CEME ranks where it should.
+//             the tariffs the user listed count even with conditions, and one
+//             they didn't list never does: that's a tip (notYours). Chargers
+//             are ranked by it, so an IONITY whose own app beats every CEME
+//             ranks where it should.
 
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
@@ -206,9 +207,14 @@ function directOptions(direct, session, t, region) {
   })).sort((a, b) => a.total - b.total);
 }
 
-// A cheaper CEME tariff than any the user listed in tariff_ids. It stays
-// visible and says so, but it's not a price they can pay today, so it's never
-// `best` (bestOption) and no assumption claims its promotions.
+// A tariff the user put in tariff_ids: they have it (see eligible()), so its
+// conditions don't keep it from `best`. requiresOtherContract stays, it's
+// true; newCustomersOnly goes, it says the price isn't theirs and it is.
+const listed = ({ newCustomersOnly, ...o }) => ({ ...o, listed: true });
+
+// A cheaper CEME tariff than any the user listed in tariff_ids, sometimes
+// another cycle of their own card. It stays visible and says so, but it's not
+// a price they can pay today, so it's never `best` (bestOption).
 const notYours = (o, t) => ({ ...o, notYours: true, note: t('option.notYours') });
 
 export const directOptionsForTest = (direct, session, lang, region) => directOptions(direct, session, translator(lang), region);
@@ -354,7 +360,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   if (plan?.time?.length) base.assumptions.push(t('assume.perMinute'));
 
   const ctx = { site, opc, vat };
-  const shownOpts = picked.options.map(o => cemeOption(o, ctx));
+  const shownOpts = picked.options.map(o => cemeOption(o, ctx)).map(o => tariffIds?.length ? listed(o) : o);
   // The headline, now that promotions may have changed the order: with the
   // user's tariffs, the cheapest of them; otherwise the cheapest shown one
   // that needs no other contract (pickTariffs' pick when none qualifies).
@@ -383,9 +389,8 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   }
   // Promotions: the ones already in a shown total get an assumption; all of
   // them at this network (new-customer ones included) are listed as tips.
-  const priced = base.options.filter(o => !o.notYours);
-  const applied = new Set(priced.flatMap(o => o.promos || []));
-  const shownIds = new Set(priced.map(o => o.tariffId));
+  const applied = new Set(base.options.flatMap(o => o.promos || []));
+  const shownIds = new Set(base.options.map(o => o.tariffId));
   const tips = promoTips(applicable(quotes, point), site, { opc, vat, applied, shown: shownIds }, t);
   for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));
   if (tips.length) base.promos = tips;
@@ -406,11 +411,12 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
 // The cheapest of a list of options, the first one on a tie.
 const cheapest = list => list.reduce((a, o) => (a && a.total <= o.total ? a : o), null);
 
-// The cheapest option open to anyone. A CEME option only counts when its
-// total is complete (operator fee known). notYours: a tariff the user would
-// have to sign up for, tagged only when they listed theirs in tariff_ids.
+// The cheapest option the driver can use now: open to anyone, or a tariff
+// they listed, and never a tariff they'd have to switch to (notYours). A CEME
+// option only counts when its total is complete (operator fee known).
 function bestOption(options, total) {
-  return cheapest(options.filter(o => !o.notYours && !o.requiresOtherContract && !o.subscription && !o.newCustomersOnly
+  const open = o => !o.requiresOtherContract && !o.newCustomersOnly;
+  return cheapest(options.filter(o => !o.notYours && !o.subscription && (o.listed || open(o))
     && (o.kind !== 'ceme' || total?.complete)));
 }
 

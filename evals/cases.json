@@ -441,7 +441,7 @@
     },
     {
       "id": "best-is-what-they-hold",
-      "why": "With tariff_ids, a cheaper CEME tariff the user didn't list is a tip that says they'd have to sign up, never the price they lead with.",
+      "why": "With tariff_ids, a cheaper CEME tariff the user didn't list is a tip that says they'd have to switch to it, never the price they lead with.",
       "memory": "Carro: Fiat 500e de 42 kWh (37 kWh úteis). Paga com o Cartão EDP Charge (Simples), tariff_id edp-bt-cartoedp.",
       "message": "Estou com 20%. Onde me fica mais barato carregar até 80% em Leiria?",
       "requires": [
@@ -461,7 +461,7 @@
         ],
         "judge": [
           "Is the price the reply leads with something other than a CEME tariff marked notYours in the results?",
-          "If the reply mentions a cheaper CEME tariff marked notYours, does it say the user would have to sign up first? Answer n/a if it mentions none."
+          "If the reply mentions a cheaper CEME tariff marked notYours, does it say the user would have to switch to it or sign up first? Answer n/a if it mentions none."
         ]
       }
     },

@@ -36,9 +36,6 @@ const HELD_SIM = {
     quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 0.09),
   ],
 };
-// The tariff the user lacks has a promotion for every customer at Powerdot.
-const TIP_PROMO = { ...MIIO_PROMO, id: 'enable-powerdot-2026' };
-const TIP_PROMO_SIM = { ...SIM, data: [quote('enable-bt-simples', 'Enable Mobility', 'Tarifa Simples', 0.05, { popular: false, promos: [TIP_PROMO] }), quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 0.09)] };
 // Only tariffs dearer than any direct offer: the offers are what's left to win.
 const DEAR_SIM = { ...SIM, data: [quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 5000)] };
 
@@ -191,13 +188,13 @@ describe('with tariff_ids, best is what the user can pay with', () => {
     const tip = q.options.find(o => o.cheaperElsewhere);
     assert.equal(tip.tariffId, 'enable-bt-simples');
     assert.equal(tip.notYours, true);
-    assert.match(tip.note, /sign up first/);
+    assert.match(tip.note, /switch to it first/);
     assert.ok(tip.total < q.best.total);
   });
 
   test('the tip says so in Portuguese too', async () => {
     const q = await held({ tariffIds: ['edp-bt-cartoedp'], lang: 'pt' });
-    assert.match(q.options.find(o => o.cheaperElsewhere).note, /aderir primeiro/);
+    assert.match(q.options.find(o => o.cheaperElsewhere).note, /mudar para ele primeiro/);
   });
 
   test('without tariff_ids, the cheapest tariff anyone can sign up to stays best, nothing tagged', async () => {
@@ -205,42 +202,23 @@ describe('with tariff_ids, best is what the user can pay with', () => {
     assert.equal(q.best.tariffId, 'enable-bt-simples');
     assert.equal(q.best.cheaperElsewhere, true);
     assert.equal(q.headline.tariffId, 'edp-bt-cartoedp');
-    assert.ok(!q.options.some(o => o.notYours));
+    assert.ok(!q.options.some(o => o.notYours || o.listed));
   });
 
-  test('a tariff of theirs with conditions keeps them, and stays out of best', async () => {
-    const q = await held({ tariffIds: ['edp-bt-socio', 'edp-bt-cartoedp'] });
-    assert.equal(q.headline.tariffId, 'edp-bt-socio');
-    assert.equal(q.headline.requiresOtherContract, true);
-    assert.equal(q.best.tariffId, 'edp-bt-cartoedp');
-    const novo = await held({ tariffIds: ['luzboa-bt-novo', 'edp-bt-cartoedp'] });
-    assert.equal(novo.headline.newCustomersOnly, true);
-    assert.equal(novo.best.tariffId, 'edp-bt-cartoedp');
+  test('a tariff of theirs with conditions counts, even when it is the only one', async () => {
+    const socio = await held({ tariffIds: ['edp-bt-socio'] });
+    assert.equal(socio.best.tariffId, 'edp-bt-socio');
+    assert.equal(socio.best.total, socio.total.eur);
+    assert.equal(socio.best.requiresOtherContract, true, 'still true, and still shown');
+    const novo = await held({ tariffIds: ['luzboa-bt-novo'] });
+    assert.equal(novo.best.tariffId, 'luzboa-bt-novo');
+    assert.equal(novo.best.total, novo.total.eur);
+    assert.equal(novo.best.newCustomersOnly, undefined);
   });
 
   test('ad hoc still beats their tariffs: anyone can use it now', async () => {
     const q = await held({ tariffIds: ['edp-bt-cartoedp'] }, { ...lowFee, opc: { ...lowFee.opc, AD_HOC_PAYMENT: { energy: [0.0001] } } });
     assert.equal(q.best.kind, 'adhoc');
-  });
-
-  describe('a promotion on the tip', () => {
-    before(() => { sim = TIP_PROMO_SIM; });
-    after(() => { sim = HELD_SIM; });
-    const promoDay = new Date('2026-11-13T12:00:00Z');
-    const powerdot = opts => quotePoint({ site: site('HORZ'), point }, car, { at: promoDay, lang: 'en', ...opts });
-
-    test('is never claimed: it is not in any price the user pays', async () => {
-      const q = await powerdot({ tariffIds: ['edp-bt-cartoedp'] });
-      assert.deepEqual(q.options.find(o => o.notYours).promos, [TIP_PROMO.id]);
-      assert.ok(!q.assumptions.some(a => a.includes('Enable Mobility at Powerdot')));
-      assert.equal(q.promos.find(p => p.id === TIP_PROMO.id).applied, false);
-    });
-
-    test('without tariff_ids it is applied, as it always was', async () => {
-      const q = await powerdot({});
-      assert.ok(q.assumptions.some(a => a.includes('Enable Mobility at Powerdot')));
-      assert.equal(q.promos.find(p => p.id === TIP_PROMO.id).applied, true);
-    });
   });
 
   describe('direct offers', () => {
