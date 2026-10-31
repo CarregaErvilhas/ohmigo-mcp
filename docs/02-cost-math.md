@@ -240,6 +240,14 @@ Two summary fields:
   **The ranking sorts by `best`.** That's how an IONITY whose own app beats
   every CEME ends up where it belongs.
 
+Without `tariff_ids` you only see the popular tariffs, plus the cheapest of
+all as a tip. **`unlistedCheaper`** counts the other ones left out that would
+cost less than the headline (one per card, never new-sign-up-only ones). It's
+a count, not a list: many of those tariffs need another contract or are
+closed to new sign-ups, so the point is to make the driver say which card
+they hold. The `note.unlisted` note tells the assistant to ask once, and the
+results view shows "+N cheaper tariffs not listed" under the options.
+
 ## 4. Ranking (`quote.js`, `rank`)
 
 1. Price every plug of every site in range.
