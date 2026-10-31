@@ -3,6 +3,7 @@
 # Secrets/vars are set on the service, never in the repo:
 #   CEME_API_KEY  ceme-v2 API key (the value of ceme-v2's CEME_API_KEY)
 #   DATASET_URL   where chargers.json is published (see README)
+#   HEALTHZ_TOKEN unlocks the detail on /healthz (docs/06-run-and-deploy.md)
 #   HOST=0.0.0.0, PORT=3002
 zerops:
   - setup: mcp

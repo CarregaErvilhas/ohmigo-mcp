@@ -46,7 +46,7 @@ before(async () => {
     env: {
       ...process.env, PORT: '0', HOST: '127.0.0.1', DATASET_PATH: 'test/fixtures/chargers.json',
       CEME_API_URL: `http://127.0.0.1:${ceme.address().port}`, CEME_API_KEY: '',
-      NAP_STATUS_URL: 'http://127.0.0.1:9/live', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1',
+      NAP_STATUS_URL: 'http://127.0.0.1:9/live', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1', HEALTHZ_TOKEN: 'test-token',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -455,7 +455,7 @@ test('http: the landing page is rendered in each language at its own URL, for cr
 });
 
 test('http: /healthz, robots.txt, favicon and 404', async () => {
-  const h = await (await fetch(`${base}/healthz`)).json();
+  const h = await (await fetch(`${base}/healthz`, { headers: { 'x-healthz-token': 'test-token' } })).json();
   assert.equal(h.ok, true);
   assert.ok(['ok', 'degraded'].includes(h.status));
   assert.ok(h.problems.some(p => p.startsWith('live:')), 'the fake feed is down');

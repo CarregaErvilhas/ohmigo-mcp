@@ -57,10 +57,15 @@
 <script>
 'use strict';
 const $ = s => document.querySelector(s);
-const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+// URLs here come from the NAP, ceme-v2 and a blog. Only http(s) becomes a link;
+// anything else stays as its text.
+const httpUrl = v => { try { const u = new URL(v); return /^https?:$/.test(u.protocol) ? u.href : null; } catch { return null; } };
+const link = (url, text) => { const u = httpUrl(url); return u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(text)}</a>` : esc(text); };
 const eur = (v, d = 4) => v == null ? '' : Number(v).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: d });
 const tag = (txt, cls = '') => `<span class="tag ${cls}">${esc(txt)}</span>`;
 const fold = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const CEME_DOWN = 'ceme-v2 indisponível de momento.';
 const PERIODS = ['VAZIO', 'FORA_VAZIO', 'CHEIAS', 'PONTA', 'SIMPLES'];
 const REGIME = { mobie: 'MOBI.E', mobie_sem_tarifa: 'MOBI.E sem tarifa OPC', sem_ceme: 'fora MOBI.E' };
 let D, tab = location.hash.slice(1) || 'resumo', q = '';
@@ -109,16 +114,16 @@ function resumo() {
     <tr><th>Dado</th><th>Fonte</th><th>Atualizado</th></tr>
     <tr><td>Postos, tomadas, tarifas OPC, preço NAP</td><td>dataset do nap-dashboard (<code>chargers.json</code>)</td><td class="nw">${esc(D.dataAsOf)}</td></tr>
     <tr><td>Tarifários e promoções CEME</td><td>API ceme-v2 (<code>/v1/simulate</code>, <code>/v1/promos</code>)</td><td class="nw">ao vivo, cache 5 min</td></tr>
-    <tr><td>Ofertas diretas (app/subscrição/TPA)</td><td><a href="${esc(D.offers.source.post)}">custofinal.blogspot.com</a> + <code>offers/manual.json</code></td><td class="nw">${esc(D.offers.source.published?.slice(0, 10))}</td></tr>
+    <tr><td>Ofertas diretas (app/subscrição/TPA)</td><td>${link(D.offers.source.post, 'custofinal.blogspot.com')} + <code>offers/manual.json</code></td><td class="nw">${esc(D.offers.source.published?.slice(0, 10))}</td></tr>
     <tr><td>Correções ao preço do NAP</td><td><code>offers/nap-notes.json</code></td><td class="nw">manual</td></tr>
     <tr><td>Rede → operadores</td><td><code>offers/networks.json</code></td><td class="nw">manual</td></tr>
   </table>
-  ${ce.error ? `<p class="err">ceme-v2 falhou: ${esc(ce.error)}</p>` : ''}
+  ${ce.error ? `<p class="err">${CEME_DOWN}</p>` : ''}
   ${D.offers.orphans?.length ? `<h2>manual.json órfãos</h2><ul>${D.offers.orphans.map(o => `<li>${esc(o)}</li>`).join('')}</ul>` : ''}`;
 }
 
 function tarifarios(f) {
-  if (D.ceme.error) return `<p class="err">${esc(D.ceme.error)}</p>`;
+  if (D.ceme.error) return `<p class="err">${CEME_DOWN}</p>`;
   const all = D.ceme.tariffs;
   const rows = all.filter(t => match(f, t.ceme, t.name, t.id, t.kind));
   shown(rows.length, all.length);
@@ -128,7 +133,7 @@ function tarifarios(f) {
     <tr><th>CEME</th><th>Tarifário</th><th>Tipo</th><th>Tensão</th><th>Horário</th>${per.map(p => `<th class="num">${p.replace('_', ' ').toLowerCase()}</th>`).join('')}<th class="num">Ativação €</th><th>Promos</th><th>Flags</th></tr>
     ${rows.map(t => `<tr>
       <td class="nw">${esc(t.ceme)}</td>
-      <td>${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.name)}</a>` : esc(t.name)}<div class="mut" style="font-size:.75rem">${esc(t.id)}${t.legacyId ? ` · #${t.legacyId}` : ''} · desde ${esc(t.validFrom)}</div></td>
+      <td>${link(t.url, t.name)}<div class="mut" style="font-size:.75rem">${esc(t.id)}${t.legacyId ? ` · #${esc(t.legacyId)}` : ''} · desde ${esc(t.validFrom)}</div></td>
       <td>${esc(t.kind)}</td><td>${esc(t.voltage)}</td><td class="nw">${esc(t.schedule)}<div class="mut" style="font-size:.75rem">${esc(t.cycle)}</div></td>
       ${t.prices ? per.map(p => `<td class="num">${eur(t.prices[p])}</td>`).join('') : `<td colspan="${per.length}">${tag('indexado OMIE', 'warn')}</td>`}
       <td class="num">${eur(t.activation)}</td>
@@ -140,7 +145,7 @@ function tarifarios(f) {
 
 const TARGET = { ENERGIA: 'desconto energia', OPC: '% sobre tarifa OPC', FINAL: 'preço final', KWH_GRATIS: 'kWh grátis/mês' };
 function promos(f) {
-  if (!Array.isArray(D.promos)) return `<p class="err">${esc(D.promos.error)}</p>`;
+  if (!Array.isArray(D.promos)) return `<p class="err">${CEME_DOWN}</p>`;
   const rows = D.promos.filter(p => match(f, p.ceme, p.name, p.network, p.id));
   shown(rows.length, D.promos.length);
   return `<p class="help">Promoções que o ceme-v2 ainda não deu por terminadas. "Rede" é a label que <code>networks.json</code> mapeia para operadores; uma label desconhecida não aplica em lado nenhum.</p>
@@ -148,8 +153,8 @@ function promos(f) {
     <tr><th>CEME</th><th>Promoção</th><th>Rede</th><th>Tipo</th><th class="num">Valor</th><th>Período</th><th>Estado</th><th>Tarifários</th></tr>
     ${rows.map(p => {
       const net = p.network == null ? tag('qualquer MOBI.E') : D.networks[p.network] ? tag(p.network) : tag(p.network + ' (sem mapa!)', 'bad');
-      const v = p.target === 'OPC' ? `${p.pct} %` : p.target === 'KWH_GRATIS' ? `${p.freeKwh} kWh` : `${eur(p.eurKwh)} €/kWh`;
-      return `<tr><td class="nw">${esc(p.ceme)}</td><td>${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name)}<div class="mut" style="font-size:.75rem">${esc(p.id)} · verificado ${esc(p.checked)}</div></td>
+      const v = p.target === 'OPC' ? `${esc(p.pct)} %` : p.target === 'KWH_GRATIS' ? `${esc(p.freeKwh)} kWh` : `${eur(p.eurKwh)} €/kWh`;
+      return `<tr><td class="nw">${esc(p.ceme)}</td><td>${link(p.url, p.name)}<div class="mut" style="font-size:.75rem">${esc(p.id)} · verificado ${esc(p.checked)}</div></td>
       <td>${net}</td><td>${esc(TARGET[p.target] ?? p.target)}</td><td class="num">${v}</td><td class="nw">${esc(p.from)} → ${esc(p.to ?? '…')}</td>
       <td>${p.active ? tag('ativa', 'ok') : tag('futura', 'warn')}${p.newCustomers ? tag('só novos clientes', 'warn') : ''}${p.maxHours ? tag(`máx ${p.maxHours} h`) : ''}</td>
       <td>${(p.tariffs || []).map(t => tag(t)).join('')}</td></tr>`;
@@ -172,7 +177,7 @@ function ofertas(f) {
       ${bands.map(b => `<td class="num">${eur(o.prices?.[b])}</td>`).join('')}
       <td class="num">${o.fee ? `${eur(o.fee.eur, 2)} €/${o.fee.per === 'month' ? 'mês' : o.fee.per === 'year' ? 'ano' : esc(o.fee.per)}` : ''}</td>
       <td>${tag(o.origin, o.origin === 'manual' ? 'warn' : '')}${o.walkUp ? tag('walk-up/TPA', 'ok') : ''}${o.subscription ? tag('subscrição') : ''}${o.stale ? tag('desatualizada', 'bad') : ''}</td>
-      <td class="nw"><a href="${esc(o.source)}" target="_blank" rel="noopener">${esc(o.checkedAt)}</a></td>
+      <td class="nw">${link(o.source, o.checkedAt)}</td>
     </tr>`).join('')}
   </table>`;
 }
@@ -187,7 +192,7 @@ function operadores(f) {
   <table>
     <tr><th>Operador</th><th class="num">Locais</th><th class="num">Tomadas</th><th class="num">DC</th><th class="num">Máx kW</th><th>Regime</th><th>Tarifa OPC (top 3)</th><th>Ad hoc</th><th class="num">Preço NAP €/kWh</th><th>Ofertas / notas</th><th></th></tr>
     ${rows.map(o => `<tr>
-      <td>${esc(o.name)}<div class="mut" style="font-size:.75rem">${esc(o.id)}${o.website ? ` · <a href="${esc(o.website)}" target="_blank" rel="noopener">site</a>` : ''}</div></td>
+      <td>${esc(o.name)}<div class="mut" style="font-size:.75rem">${esc(o.id)}${o.website ? ` · ${link(o.website, 'site')}` : ''}</div></td>
       <td class="num">${o.sites}</td><td class="num">${o.points}</td><td class="num">${o.dc}</td><td class="num">${o.maxKw}</td>
       <td>${reg(o)}</td><td>${plans(o.plans)}</td><td>${plans(o.adhoc, 2)}</td>
       <td class="num">${o.napPrice ? (o.napPrice.min === o.napPrice.max ? eur(o.napPrice.min) : `${eur(o.napPrice.min)}–${eur(o.napPrice.max)}`) : ''}</td>
@@ -198,7 +203,8 @@ function operadores(f) {
 }
 
 function postos(sites) {
-  if (!sites) return 'A carregar…';
+  if (sites === null) return 'A carregar…';
+  if (!Array.isArray(sites)) return '<span class="err">Não foi possível carregar os postos. Fecha e tenta outra vez.</span>';
   // One row per site and distinct socket setup: most sites have N identical
   // sockets, and the ids (Tesla's are UUIDs) say nothing to a person.
   const rows = sites.flatMap(s => {
@@ -215,7 +221,7 @@ function postos(sites) {
     <tr><th>Local</th><th class="num">Tomadas</th><th class="num">kW</th><th>Ficha</th><th>Nível</th><th>Regime</th><th>Tarifa OPC</th><th>Ad hoc</th><th class="num">NAP €/kWh</th><th>Ofertas diretas aqui (€/kWh)</th></tr>
     ${rows.slice(0, max).map(({ s, first, span, p, ids }) => `<tr>
       ${first ? `<td class="wrap-ok" rowspan="${span}"><b>${esc(s.name ?? s.city)}</b> <span class="mut">${esc(s.name ? s.city : '')}</span><div class="mut" style="font-size:.75rem">${esc(s.address)} · ${esc(s.code.length > 16 ? s.code.slice(0, 8) + '…' : s.code)}</div></td>` : ''}
-      <td class="num" title="${esc(ids.join(', '))}">${ids.length}×</td><td class="num">${p.kw}</td><td>${esc(p.connector)}${p.dc ? ' DC' : ''}</td><td>${esc(p.level ?? '')}</td>
+      <td class="num" title="${esc(ids.join(', '))}">${ids.length}×</td><td class="num">${esc(p.kw)}</td><td>${esc(p.connector)}${p.dc ? ' DC' : ''}</td><td>${esc(p.level ?? '')}</td>
       <td>${esc(REGIME[p.regime] ?? p.regime)}</td><td>${esc(p.opc ?? '')}</td><td>${esc(p.adhoc ?? '')}</td><td class="num">${eur(p.napPrice)}</td>
       <td>${p.offers.map(x => `<span class="tag" title="${esc(x.id)}">${esc(x.label)}: ${eur(x.eurPerKwh)}</span>`).join('')}</td>
     </tr>`).join('')}
@@ -228,7 +234,7 @@ function notas(f) {
   <table><tr><th>Âmbito</th><th>Flags</th><th>Porquê</th><th>Verificado</th></tr>
   ${D.napNotes.map(n => `<tr><td>${[...(n.scope.operatorIds || []), ...(n.scope.siteIds || [])].map(x => tag(x)).join('')}</td>
     <td>${n.vatIncluded ? tag('IVA incluído') : ''}${n.timeOfUse ? tag('varia com a hora', 'warn') : ''}${n.walkUp ? tag('TPA mesmo preço', 'ok') : ''}${!n.vatIncluded && !n.timeOfUse ? tag('preço ignorado', 'bad') : ''}</td>
-    <td class="wrap-ok" style="max-width:700px">${esc(n.why)}</td><td class="nw"><a href="${esc(n.source)}" target="_blank" rel="noopener">${esc(n.checkedAt)}</a></td></tr>`).join('')}
+    <td class="wrap-ok" style="max-width:700px">${esc(n.why)}</td><td class="nw">${link(n.source, n.checkedAt)}</td></tr>`).join('')}
   </table>
   <h2>Redes → operadores (<code>networks.json</code>)</h2>
   <table><tr><th>Label</th><th>Operadores NAP</th><th>Nota</th></tr>
@@ -244,18 +250,28 @@ document.addEventListener('click', async e => {
     const id = b.dataset.op;
     if (opOpen.has(id)) { opOpen.delete(id); return draw(); }
     opOpen.set(id, null); draw();
-    const r = await fetch(`/dados/postos.json?op=${encodeURIComponent(id)}`);
-    opOpen.set(id, await r.json()); draw();
+    try {
+      const r = await fetch(`/dados/postos.json?op=${encodeURIComponent(id)}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      opOpen.set(id, await r.json());
+    } catch (e) { console.error(e); opOpen.set(id, false); }
+    draw();
   }
 });
 document.addEventListener('input', e => { if (e.target.id === 'q') { q = e.target.value; draw(); } });
 
-fetch('/dados.json').then(r => r.json()).then(d => {
+fetch('/dados.json').then(r => {
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}).then(d => {
   D = d;
-  if (!TABS[tab]) tab = 'resumo';
+  if (!Object.hasOwn(TABS, tab)) tab = 'resumo';
   $('#meta').textContent = `ohmigo ${d.version} · dataset de ${new Date(d.dataAsOf).toLocaleString('pt-PT')} · gerado ${new Date(d.now).toLocaleString('pt-PT')}`;
   draw();
-}).catch(e => { $('#meta').innerHTML = `<span class="err">Falhou: ${esc(e.message)}</span>`; });
+}).catch(e => {
+  console.error(e);
+  $('#meta').innerHTML = '<span class="err">Não foi possível carregar os dados. Tenta outra vez daqui a pouco.</span>';
+});
 </script>
 </body>
 </html>
