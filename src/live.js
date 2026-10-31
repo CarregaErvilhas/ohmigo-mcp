@@ -28,6 +28,8 @@ const URL_ = process.env.NAP_STATUS_URL || 'https://pgm.mobie.pt/integration/nap
 const TTL_MS = Number(process.env.LIVE_TTL_SECONDS || 300) * 1000;
 const WAIT_MS = Number(process.env.LIVE_WAIT_SECONDS || 25) * 1000;
 const MAX_STALE_MS = Number(process.env.LIVE_MAX_STALE_SECONDS || 3600) * 1000;
+// The NAP regenerates the feed about every 5 minutes.
+const PUBLISH_MS = 6 * 60_000;
 
 // Point ids are only unique within a site (some operators publish bare
 // numbers that repeat), so entries are keyed "SITE/POINT".
@@ -234,9 +236,9 @@ export class LiveStatus {
       ageMs,
       // Worth telling the user. Goes beyond !fresh for that stalled publisher:
       // the copy is fresh, what it says isn't.
-      // Half a TTL on top, so the feed's normal lag behind a copy near the end
-      // of its TTL doesn't count as a stall.
-      outdated: ageMs != null && (!this.fresh() || ageMs > this.ttlMs * 1.5),
+      // Past the TTL with its jitter plus one publish cycle: a fresh copy can
+      // carry that much age on top, so a normal one doesn't read as a stall.
+      outdated: ageMs != null && (!this.fresh() || ageMs > this.ttlMs * 1.1 + PUBLISH_MS),
       checkedAt: this.fetchedAt && new Date(this.fetchedAt).toISOString(),
       fresh: this.fresh(),
       refreshing: !!this.running,
