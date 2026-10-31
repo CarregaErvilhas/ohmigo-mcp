@@ -25,16 +25,19 @@ const SIM = {
 };
 
 // With tariff_ids: Enable is the cheapest tariff around, and the user doesn't
-// have it. It stays out of `options`' popular picks, so it's the cheaper tip.
+// have it. Not popular, so it's only ever the cheaper tip. These sessions cost
+// cents, so no real offer in offers/ can undercut them, whatever it charges.
 const HELD_SIM = {
   ...SIM,
   data: [
-    quote('enable-bt-simples', 'Enable Mobility', 'Tarifa Simples', 5, { popular: false }),
-    quote('edp-bt-socio', 'EDP Comercial', 'Sócios', 6, { popular: false, bundle: true }),
-    quote('luzboa-bt-novo', 'Luzboa', 'Adesão', 7, { popular: false, newCustomers: true }),
-    quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 9),
+    quote('enable-bt-simples', 'Enable Mobility', 'Tarifa Simples', 0.05, { popular: false }),
+    quote('edp-bt-socio', 'EDP Comercial', 'Sócios', 0.06, { popular: false, bundle: true }),
+    quote('luzboa-bt-novo', 'Luzboa', 'Adesão', 0.07, { popular: false, newCustomers: true }),
+    quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 0.09),
   ],
 };
+// Only tariffs dearer than any direct offer: the offers are what's left to win.
+const DEAR_SIM = { ...SIM, data: [quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 5000)] };
 
 let quotePoint, sim = SIM;
 before(async () => {
@@ -173,57 +176,98 @@ test('rank: MOBI.E and outside MOBI.E share one list, the price decides', async 
 describe('with tariff_ids, best is what the user can pay with', () => {
   before(() => { sim = HELD_SIM; });
   after(() => { sim = SIM; });
-  // Another day than the tests above: ceme.js caches by time and kWh. A low
-  // operator fee keeps every tariff under the MOBI.E-wide direct offers.
+  // Another day than the tests above: ceme.js caches by time and kWh.
   const day = new Date('2026-11-11T12:00:00Z');
-  const lowFee = { ...point, opc: { REGULAR: { flat: [0.1], energy: [], time: [] } } };
+  const lowFee = { ...point, opc: { REGULAR: { flat: [0.01], energy: [], time: [] } } };
   const held = (opts, p = lowFee) => quotePoint({ site: site('QQQQ'), point: p }, car, { at: day, lang: 'en', ...opts });
 
   test('a cheaper tariff they do not hold is a tip, not best', async () => {
     const q = await held({ tariffIds: ['edp-bt-cartoedp'] });
     assert.equal(q.best.tariffId, 'edp-bt-cartoedp');
+    assert.equal(q.best.mine, true);
     assert.equal(q.best.total, q.total.eur, 'best is the price the headline states');
     const tip = q.options.find(o => o.cheaperElsewhere);
     assert.equal(tip.tariffId, 'enable-bt-simples');
+    assert.equal(tip.notYours, true);
+    assert.match(tip.note, /sign up first/);
     assert.ok(tip.total < q.best.total);
   });
 
-  test('without tariff_ids, the cheapest tariff anyone can sign up to stays best', async () => {
+  test('the tip says so in Portuguese too', async () => {
+    const q = await held({ tariffIds: ['edp-bt-cartoedp'], lang: 'pt' });
+    assert.match(q.options.find(o => o.cheaperElsewhere).note, /aderir primeiro/);
+  });
+
+  test('without tariff_ids, the cheapest tariff anyone can sign up to stays best, nothing tagged', async () => {
     const q = await held({});
     assert.equal(q.best.tariffId, 'enable-bt-simples');
     assert.equal(q.best.cheaperElsewhere, true);
     assert.equal(q.headline.tariffId, 'edp-bt-cartoedp');
+    assert.ok(!q.options.some(o => o.notYours || o.mine));
   });
 
-  test('a tariff of theirs with conditions counts: they told us they have it', async () => {
-    assert.equal((await held({ tariffIds: ['edp-bt-socio', 'edp-bt-cartoedp'] })).best.tariffId, 'edp-bt-socio');
-    assert.equal((await held({ tariffIds: ['luzboa-bt-novo', 'edp-bt-cartoedp'] })).best.tariffId, 'luzboa-bt-novo');
+  test('a tariff of theirs with conditions counts, and no longer reads as conditional', async () => {
+    const socio = (await held({ tariffIds: ['edp-bt-socio', 'edp-bt-cartoedp'] })).best;
+    assert.equal(socio.tariffId, 'edp-bt-socio');
+    assert.equal(socio.requiresOtherContract, false);
+    const novo = (await held({ tariffIds: ['luzboa-bt-novo', 'edp-bt-cartoedp'] })).best;
+    assert.equal(novo.tariffId, 'luzboa-bt-novo');
+    assert.equal(novo.mine, true);
+    assert.equal(novo.newCustomersOnly, undefined);
   });
 
-  test('a price anyone can use now still beats their tariffs', async () => {
-    const q = await held({ tariffIds: ['edp-bt-cartoedp'] }, { ...lowFee, opc: { ...lowFee.opc, AD_HOC_PAYMENT: { energy: [0.01] } } });
+  test('ad hoc still beats their tariffs: anyone can use it now', async () => {
+    const q = await held({ tariffIds: ['edp-bt-cartoedp'] }, { ...lowFee, opc: { ...lowFee.opc, AD_HOC_PAYMENT: { energy: [0.0001] } } });
     assert.equal(q.best.kind, 'adhoc');
   });
 
-  test('with their tariff unknown here, best is only what anyone can use', async () => {
-    const q = await held({ tariffIds: ['nobody-bt-nada'] });
-    assert.equal(q.total, null);
-    assert.equal(q.best.kind, 'direct');
-    assert.ok(!q.options.some(o => o.kind === 'ceme'));
+  describe('direct offers', () => {
+    before(() => { sim = DEAR_SIM; });
+    after(() => { sim = HELD_SIM; });
+    const dearDay = new Date('2026-11-12T12:00:00Z');
+    // Whichever offers apply at any MOBI.E charger: the rule, not their prices.
+    const isApp = o => o.kind === 'direct' && !o.walkUp;
+
+    test('one that needs an app is a tip; without tariff_ids it can still be best', async () => {
+      const mine = await held({ at: dearDay, tariffIds: ['edp-bt-cartoedp'] });
+      const apps = mine.options.filter(isApp);
+      assert.ok(apps.length, 'offers/ has MOBI.E-wide offers without walk-up');
+      assert.ok(apps.every(o => o.notYours && /sign up first/.test(o.note)));
+      assert.ok(!mine.best || !isApp(mine.best));
+      assert.ok(!mine.options.some(o => o.kind === 'direct' && o.walkUp && o.notYours));
+      const open = await held({ at: dearDay });
+      assert.ok(!open.options.some(o => o.notYours));
+      assert.equal(open.best.kind, 'direct', 'any no-subscription offer beats a 5000 € tariff');
+    });
+
+    test('outside MOBI.E: the NAP price still counts', async () => {
+      const nap = { id: 'p', kw: 50, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
+      const q = await quotePoint({ site: { ...site('XXXX'), operator: 'X' }, point: nap }, car, { at: dearDay, lang: 'en', tariffIds: ['edp-bt-cartoedp'] });
+      assert.equal(q.best.kind, 'opc_direct');
+      assert.equal(q.total.eur, q.best.total);
+    });
+
+    test('with their tariff unknown here, an app is still only a tip', async () => {
+      const q = await held({ at: dearDay, tariffIds: ['nobody-bt-nada'] });
+      assert.equal(q.total, null);
+      assert.ok(!q.options.some(o => o.kind === 'ceme'));
+      assert.ok(!q.best || !isApp(q.best));
+    });
   });
 
   test('without the operator fee, their tariff is not a complete price: never best', async () => {
     const q = await held({ tariffIds: ['edp-bt-cartoedp'] }, { ...point, opc: {} });
     assert.equal(q.total.complete, false);
-    assert.equal(q.best.kind, 'direct');
+    assert.notEqual(q.best?.kind, 'ceme');
   });
 
   test('rank: a charger is placed by their price, not by a tariff they lack', async () => {
     const { rank } = await import('../src/quote.js');
     const opts = { at: day, lang: 'en', tariffIds: ['edp-bt-cartoedp'] };
     const mine = await held(opts);
+    const tip = mine.options.find(o => o.cheaperElsewhere);
     // Between the tip and the user's real price at the MOBI.E charger.
-    const napPrice = (mine.total.eur - 1) / (1.23 * mine.session.kwhBilled);
+    const napPrice = (tip.total + mine.total.eur) / 2 / (1.23 * mine.session.kwhBilled);
     const outside = { id: 'c1', kw: 50, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice };
     const ranked = await rank([{ site: site('QQQQ'), points: [lowFee], km: 1 }, { site: { ...site('XXXX'), operator: 'X' }, points: [outside], km: 2 }], car, opts);
     assert.deepEqual(ranked.map(q => q.regime), ['sem_ceme', 'mobie']);

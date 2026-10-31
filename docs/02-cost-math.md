@@ -203,12 +203,14 @@ bank card / QR, and when the NAP price is missing (live feed down) the
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the
   cheapest popular one that needs no other contract);
-- **`best`**: the cheapest option anyone can use right now, meaning no
-  subscription and no other contract. With `tariff_ids`, the CEME options
-  that count are the user's own, even one with conditions (they have it); a
-  cheaper tariff they don't have stays in `options` as a tip
-  (`cheaperElsewhere`), never `best`. **The ranking sorts by `best`.** That's how an IONITY whose own app beats every CEME ends up where
-  it belongs.
+- **`best`**: without `tariff_ids`, the cheapest option anyone can use right
+  now, meaning no subscription and no other contract. With `tariff_ids`, the
+  cheapest way this user can pay now: their own tariffs (`mine`, conditions
+  cleared since they have them), `adhoc`, walk-up offers and `opc_direct`.
+  What needs a sign-up first (a cheaper tariff, `cheaperElsewhere`, or a
+  direct offer without walk-up) stays in `options` as a tip, tagged `notYours`
+  with a note saying so. **The ranking sorts by `best`.** That's how an IONITY
+  whose own app beats every CEME ends up where it belongs.
 
 ## 4. Ranking (`quote.js`, `rank`)
 

@@ -440,6 +440,26 @@
       }
     },
     {
+      "id": "best-is-what-they-hold",
+      "why": "With tariff_ids, best is what this user can pay with: a cheaper tariff or app they don't have is a tip that says they'd have to sign up.",
+      "memory": "Carro: Fiat 500e de 42 kWh (37 kWh úteis). Paga com o Cartão EDP Charge (Simples), tariff_id edp-bt-cartoedp, e não tem outros cartões nem apps.",
+      "message": "Estou com 20%. Onde me fica mais barato carregar até 80% em Leiria?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_cheapest_charging",
+            "args": {
+              "tariff_ids": "cartoedp"
+            }
+          }
+        ],
+        "judge": [
+          "Is the price the reply leads with one this user can pay now: their Cartão EDP, a bank card or QR at the charger, or the operator's price without an account, and not a tariff or app marked notYours in the results?",
+          "If the reply mentions a cheaper tariff or app the user doesn't have, does it say they'd have to sign up first? Answer n/a if it mentions none."
+        ]
+      }
+    },
+    {
       "id": "how-price-built",
       "why": "\"How was the price built\" at a given time: detail plus at.",
       "message": "Porque é que o preço muda com a hora? Explica-me como fica o preço de carregar hoje às 21h no posto LRA-00156, com um Nissan Leaf de 40 kWh, de 20% a 80%.",

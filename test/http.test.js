@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 
-let ceme, cemeDown = false, server, base;
+let ceme, cemeDown = false, cheapTip = false, server, base;
 
 before(async () => {
   // Fake ceme-v2: one tariff, priced at 0.2 €/kWh.
@@ -24,7 +24,14 @@ before(async () => {
       const b = JSON.parse(body || '{}');
       send({
         at: b.at, kwh: b.kwh, region: b.region, omieSpot: null,
-        data: [{ id: 'edp-bt-x', ceme: 'EDP', name: 'Stub', voltage: 'BT', popular: true, bundle: false, totalEur: b.kwh * 0.2, vat: 1.23, period: 'UNICO', kind: 'FIXED' }],
+        data: [
+          // The fixture's MOBI.E sockets are medium voltage.
+          ...(cheapTip ? [
+            { id: 'nope-mt-y', ceme: 'Nope', name: 'Cheap', voltage: 'MT', popular: false, bundle: false, totalEur: 0.01, vat: 1.23, period: 'UNICO', kind: 'FIXED' },
+            { id: 'edp-mt-x', ceme: 'EDP', name: 'Stub', voltage: 'MT', popular: true, bundle: false, totalEur: b.kwh * 0.2, vat: 1.23, period: 'UNICO', kind: 'FIXED' },
+          ] : []),
+          { id: 'edp-bt-x', ceme: 'EDP', name: 'Stub', voltage: 'BT', popular: true, bundle: false, totalEur: b.kwh * 0.2, vat: 1.23, period: 'UNICO', kind: 'FIXED' },
+        ],
         ...(b.profile && { profile: { slices: b.profile.length, withSpot: 0 } }),
       });
     });
@@ -81,6 +88,25 @@ test('http: the tool list stays small, and every tool says what it is for so too
   // Clients that load tools on demand match the user's request against names
   // and descriptions: each one names the domain in its own words.
   for (const t of tools) assert.match(t.description, /\bEV\b.*\bPortugal\b|\bPortugal\b.*\bEV\b/s, t.name);
+});
+
+test('http: with tariff_ids, a tariff the user lacks is a tip in both cost tools', async () => {
+  cheapTip = true;
+  try {
+    // A battery no other test uses: ceme.js caches by time and kWh.
+    const args = { battery_kwh: 61, start_pct: 20, tariff_ids: ['edp-bt-x'], lang: 'en' };
+    const asked = [await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...args }), await call('find_cheapest_charging', { place: 'Leiria', limit: 20, ...args })];
+    for (const r of asked) {
+      const q = r.structuredContent.results.find(x => x.options.some(o => o.tariffId === 'nope-mt-y'));
+      const tip = q.options.find(o => o.tariffId === 'nope-mt-y');
+      assert.equal(tip.cheaperElsewhere, true);
+      assert.equal(tip.notYours, true);
+      assert.match(tip.note, /sign up first/);
+      assert.notEqual(q.best?.tariffId, 'nope-mt-y');
+    }
+    const open = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...args, tariff_ids: undefined, battery_kwh: 62 });
+    assert.ok(open.structuredContent.results.every(q => !q.options.some(o => o.notYours)), 'without tariff_ids nothing is tagged');
+  } finally { cheapTip = false; }
 });
 
 test('http: estimate_charging_cost answers with structuredContent, and the text carries it too for text-only clients', async () => {
