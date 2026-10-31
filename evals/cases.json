@@ -124,6 +124,21 @@
       }
     },
     {
+      "id": "tariff-list-cut",
+      "why": "list_ceme_tariffs cuts a long list and says so in its notes: the assistant doesn't present the rows as every tariff there is.",
+      "message": "Quantos tarifários CEME há ao todo? Lista-mos todos.",
+      "expect": {
+        "calls": [
+          {
+            "tool": "list_ceme_tariffs"
+          }
+        ],
+        "judge": [
+          "Does the answer give the total number of tariffs and make clear that any list it shows is not the whole list, or that it can look up a specific CEME? Answer n/a if the tool's result was complete and the answer lists every tariff."
+        ]
+      }
+    },
+    {
       "id": "motorway-ask-direction",
       "why": "A service area with a charger on each side of the road: without a direction, ask where the user is heading; never guess one.",
       "message": "Vou parar na área de serviço da Galp em Pombal, na A1, para carregar. Quanto me vai custar? Tenho um VW ID.4 Pro (77 kWh) e estou com 15%.",

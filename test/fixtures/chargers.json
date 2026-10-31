@@ -319,6 +319,30 @@
      "napPrice": 0.37
     }
    ]
+  },
+  {
+   "id": "EDP-FAR-00001",
+   "code": "FAR-00001",
+   "lat": 37.0194,
+   "lon": -7.9304,
+   "region": "CONT",
+   "city": "Faro",
+   "address": "Rua do Socket Sem Dados",
+   "operator": "EDP Comercial",
+   "operatorId": "EDPC",
+   "website": null,
+   "payment": ["rfid"],
+   "points": [
+    {
+     "id": "FAR-00001-01",
+     "kw": null,
+     "connector": "nan",
+     "dc": false,
+     "phases": null,
+     "level": "BT",
+     "regime": "mobie"
+    }
+   ]
   }
  ]
 }
