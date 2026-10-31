@@ -83,3 +83,8 @@ form.
 | `outOfOrder`, `inoperative` | broken | no |
 | `blocked` | blocked | no |
 | `planned` | not built yet | no |
+| `other` | a value ohmigo doesn't know | no |
+
+Any other value in the feed becomes `other` (`src/live.js`), which is not kept
+either: a word we don't know could be a fault. The `[ohmigo] live:` log line
+counts them.

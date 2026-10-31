@@ -103,6 +103,8 @@ Monday.
   `src/data.js` puts them in `kw`/`v`/`a` when it loads the file and keeps the
   NAP's in `napKw`/`napV`/`napA`: filters, the session duration and the price
   band all use OSM's, and every answer that does says so.
+  A value that isn't believable (`src/clean.js`: out of range, or too far from
+  a believable NAP value) is ignored.
 - `level`: the voltage level of the site's grid connection (`BTN`, `BTE`,
   `MT`), which picks the BT or MT version of each CEME tariff. Not the
   socket's voltage (that's `v`).
@@ -123,8 +125,24 @@ Monday.
   or the shop they're at (Lidl owns its chargers, Galp operates them), not
   the OPC that bills the fee (that's the site's `operator`).
   `lookup_charger` searches it and shows it ([01](01-how-it-works.md)).
+  `src/clean.js` keeps only the fields the code or a driver uses: `manufacturer`,
+  `model` and `payment` stay in the file but never reach an answer.
 - `schema`: bumped by nap-dashboard when the format changes incompatibly.
   ohmigo refuses a schema it doesn't know, rather than misreading it.
+
+## Third-party text
+
+Anyone with an OpenStreetMap account can edit what ends up in `osm`, and
+operators type the NAP's text by hand, so neither is trusted as it stands.
+When a file loads, `cleanSite` (`src/clean.js`) runs before anything reads it:
+free text loses control and format characters and gets a length cap, phones,
+emails and websites that don't fit their shape are removed (the field is
+absent), and every tool, sentence and search sees the result. `npm test`
+holds this in `test/third-party.test.js`.
+
+The limits sit well above real values. Each load logs one line with what they
+hit (`[ohmigo] third-party limits: cut address 2, ignored point.osm.kw 1`): if
+those are real values, raise the limit in `src/clean.js`.
 
 ## Building it locally
 
