@@ -109,6 +109,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/server.js` | HTTP server, boot, health check, landing page, weekly dataset swap |
 | `src/mcp.js` | Tools, argument schemas, the instructions the assistant reads |
 | `src/i18n.js` | Every user-facing sentence, in English and Portuguese |
+| `src/clean.js` | Limits third-party text when a dataset loads: which OSM fields pass, the length of free text, the shape of contacts, believable OSM numbers |
 | `src/data.js` | Loads the dataset; searches by distance, along a route or the whole country; town names to coordinates; the operator list (`list_operators`) |
 | `src/geo.js` | Distances: haversine, distance to a route |
 | `src/hours.js` | Opening hours (NAP and OpenStreetMap, both in OSM syntax): is the site open at a given moment, or does it close during a session |

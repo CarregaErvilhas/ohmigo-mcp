@@ -17,6 +17,7 @@
 // OpenStreetMap has for that socket where they differ from the NAP's.
 // `osm` is what OpenStreetMap adds about the site (its name, brand, opening
 // hours...), when the community mapped it with the MOBI.E code.
+// All of this is third-party text and numbers: see clean.js for what's kept.
 //
 // ~9k sites fit in memory easily, and a linear scan per query takes a few
 // milliseconds, so there's no spatial index.
@@ -24,6 +25,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { cleanSite } from './clean.js';
 import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
@@ -50,6 +52,8 @@ export class Dataset {
   constructor(raw) {
     this.generatedAt = raw.generatedAt;
     this.sites = raw.sites;
+    // First: everything below, and every tool, reads the limited text.
+    this.sites.forEach(cleanSite);
     lendOperators(this.sites);
     this.siteById = new Map();
     this.pointById = new Map();
@@ -65,6 +69,7 @@ export class Dataset {
         // (DC sockets declaring a 750 V placeholder, powers V×I can't give).
         // So they replace it everywhere (filters, duration, price band); the
         // NAP's value stays in napKw/napV/napA for the answers to show.
+        // Only the believable ones are still here (clean.js).
         for (const [k, nap] of [['kw', 'napKw'], ['v', 'napV'], ['a', 'napA']]) {
           if (p.osm?.[k] > 0 && p[nap] === undefined) { p[nap] = p[k] ?? null; p[k] = p.osm[k]; }
         }
