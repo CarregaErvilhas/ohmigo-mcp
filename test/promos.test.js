@@ -145,12 +145,51 @@ test('promoTips: a promotion beaten on its own tariff says so instead of offerin
   const big = { ...small, id: 'big', totalEur: 5 };
   const quotes = [{ id: 'a', ceme: 'miio', name: 'miio one', totalEur: 7, promos: [small, big] }];
   const ctx = { opc: { low: 1, high: 1 }, vat: 1.23, applied: new Map([['big', new Set(['a'])]]), shown: new Set(['a']) };
-  for (const [lang, re] of [['en', /doesn't add to a better promotion/], ['pt', /não se soma a outra promoção melhor/]]) {
+  for (const [lang, re] of [['en', /it doesn't add to the promotion already in this price/], ['pt', /não se soma à promoção que já está neste preço/]]) {
     const tips = promoTips(quotes, powerdot, ctx, translator(lang));
     assert.deepEqual(tips.map(p => [p.id, p.applied]), [['big', true], ['small', false]]);
     assert.doesNotMatch(tips[0].note, re);
     assert.match(tips[1].note, re);
+    assert.equal(tips[1].total, tips[0].total, 'the price itself, no competing total');
+    assert.equal(tips[1].saving, 0);
   }
+});
+
+test('promoTips: an all-in price that won, dearer than the sum, beats a discount; a lost all-in price has no all-in note', () => {
+  const opc = { low: 1, high: 1 }, vat = 1.23;
+  const energy = { ...luzigas, id: 'energy', newCustomers: false, totalEur: 6 };
+  const allIn = { ...uve, network: 'Powerdot', id: 'all-in', totalEur: 10 };
+  const cheapAllIn = { ...allIn, id: 'cheap-all-in', totalEur: 7 };
+  const dearAllIn = { ...allIn, id: 'dear-all-in', totalEur: 7.5 };
+  const tip = promos => promoTips([{ id: 'a', ceme: 'X', name: 'Y', totalEur: 7, promos }], powerdot, { opc, vat, applied: new Map([[promos.at(-1).id, new Set(['a'])]]), shown: new Set(['a']) }, translator('en'));
+  const [won, lost] = tip([energy, allIn]);
+  assert.deepEqual([won.id, won.total, won.applied], ['all-in', 10, true]);
+  assert.deepEqual([lost.id, lost.total, lost.saving, lost.applied], ['energy', 10, 0, false]);
+  assert.match(lost.note, /already in this price/);
+  assert.doesNotMatch(lost.note, /better/);
+  const rows = tip([dearAllIn, cheapAllIn]);
+  const dear = rows.find(p => p.id === 'dear-all-in');
+  assert.deepEqual([dear.total, dear.saving], [7, 0]);
+  assert.match(dear.note, /already in this price/);
+  assert.doesNotMatch(dear.note, /replaces the usual/);
+  assert.match(rows.find(p => p.id === 'cheap-all-in').note, /replaces the usual/);
+});
+
+test('promoTips: a new-customer or uncounted free-kWh tip is beaten only by what it would not stack with', () => {
+  const opc = { low: 1, high: 1 }, vat = 1.23;
+  const inPrice = { ...luzigas, id: 'in-price', newCustomers: false, totalEur: 5 };
+  const newSmall = { ...luzigas, id: 'new-small', totalEur: 6 };
+  const newBig = { ...luzigas, id: 'new-big', totalEur: 4 };
+  const uncounted = gold({ id: 'uncounted', monthKwhKnown: false, freeKwhLeft: 7, totalEur: 6 });
+  const ctx = { opc, vat, applied: new Map([['in-price', new Set(['a'])]]), shown: new Set(['a']) };
+  const rows = promoTips([{ id: 'a', ceme: 'X', name: 'Y', totalEur: 7, promos: [inPrice, newSmall, newBig, uncounted, { ...miioOne, id: 'new-opc', newCustomers: true }] }], powerdot, ctx, translator('en'));
+  const row = id => rows.find(p => p.id === id);
+  assert.match(row('new-small').note, /new customers only.*already in this price/);
+  assert.deepEqual([row('new-small').total, row('new-small').saving], [row('in-price').total, 0]);
+  assert.doesNotMatch(row('new-big').note, /already in this price/, 'cheaper than what is in: it would win');
+  assert.doesNotMatch(row('new-opc').note, /already in this price/, 'energy and OPC stack');
+  assert.match(row('uncounted').note, /already in this price/);
+  assert.doesNotMatch(row('uncounted').note, /pass month_kwh/, 'the count would not change it');
 });
 
 test('promoTips: a row with applied true is the tariff it applied on, not a cheaper one', () => {
@@ -181,7 +220,13 @@ test('free kWh: any MOBI.E charger; in the total only when the month count came 
   assert.deepEqual(promoTips(used, galp, ctx, translator('en')), []);
   const [spent] = promoTips(used, galp, { ...ctx, shown: new Set([q.id]) }, translator('en'));
   assert.equal(spent.applied, false);
-  assert.match(spent.note, /0 of this month's 7 free kWh left/);
+  assert.match(spent.note, /all of this month's 7 free kWh are used, so none come off this session/);
+  assert.doesNotMatch(spent.note, /used first/);
+  const [gasto] = promoTips(used, galp, { ...ctx, shown: new Set([q.id]) }, translator('pt'));
+  assert.match(gasto.note, /os 7 kWh grátis deste mês já foram todos gastos, por isso nenhum sai deste carregamento/);
+  // Free kWh left but no saving here isn't "run out": no row, nothing to explain.
+  const idle = [{ ...q, promos: [gold({ monthKwhKnown: true, freeKwhLeft: 2, totalEur: 8 })] }];
+  assert.deepEqual(promoTips(idle, galp, { ...ctx, shown: new Set([q.id]) }, translator('en')), []);
 });
 
 test('promoTips: a tariff shown above wins, so the tip matches the price', () => {

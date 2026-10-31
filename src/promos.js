@@ -58,13 +58,21 @@ export function onNetwork(site, network, networks = NETWORKS) {
   return !!n.operatorIds?.includes(site.operatorId);
 }
 
+// What each target takes off, in words. Also the list of targets we can price.
+const AMOUNT = {
+  ENERGIA: (p, t) => t('promo.energy', { eur: t.num(p.eurKwh, 4, 2) }),
+  OPC: (p, t) => t('promo.opc', { pct: t.num(p.pct, 1) }),
+  FINAL: (p, t) => t('promo.final', { eur: t.num(p.eurKwh, 4, 2) }),
+  KWH_GRATIS: (p, t) => t('promo.free', { kwh: t.num(p.freeKwh, 1) }),
+};
+
 // A target this code can't price (ceme-v2 added one first) is skipped: the
-// tariff still has its price, only without that promotion. One warning per
-// target, or every quote would repeat it.
-const TARGETS = new Set(['ENERGIA', 'OPC', 'FINAL', 'KWH_GRATIS']);
+// tariff still has its price, only without that promotion (unpricedHere is
+// what lets the estimate say so). One warning per target, or every quote
+// would repeat it.
 const warned = new Set();
 function knownTarget(p) {
-  if (TARGETS.has(p.target)) return true;
+  if (Object.hasOwn(AMOUNT, p.target)) return true;
   if (!warned.has(p.target)) {
     warned.add(p.target);
     console.warn(`[ohmigo] CEME promotion ${p.id} skipped: unknown target ${p.target}`);
@@ -74,6 +82,11 @@ function knownTarget(p) {
 
 // The promotions of one ceme-v2 tariff quote that hold at this site.
 export const promosHere = (quote, site, networks) => (quote.promos || []).filter(p => knownTarget(p) && onNetwork(site, p.network, networks));
+
+// Could a promotion we skipped have changed this tariff's total here? Not a
+// new-customer one: those are in no total anyway.
+export const unpricedHere = (quote, site, networks) => (quote.promos || [])
+  .some(p => !Object.hasOwn(AMOUNT, p.target) && !p.newCustomers && onNetwork(site, p.network, networks));
 
 // Does a promotion go into the option's total for whoever pays with that
 // tariff? Not a new-customer one, and not free kWh we can't count.
@@ -104,28 +117,25 @@ export function withPromos(promos, { energyEur, opc, vat }) {
 
 // The promotion as the assistant sees it, with its label and note in the
 // user's language (ceme-v2's own `name` is Portuguese only).
-//   total      this session at this charger with the promotion
-//   saving     against the same tariff without it
+//   total      this session at this charger: with the promotion, or, when
+//              it's applied, beaten or run out, the tariff's actual price
+//   saving     what this promotion alone takes off the tariff, so the rows
+//              of a stacked price add up to what the option saves; 0 if beaten
 //   applied    took effect in the total of this tariff's option
-//   beaten     for every customer of this tariff, but a better promotion on
-//              the same tariff takes its place (they don't stack)
+//   beaten     it doesn't add to what's already in this tariff's price, so
+//              it changes nothing there (the rest of its notes would mislead)
 export function promoOut(p, { quote, total, saving, applied, beaten }, t) {
-  const amount = {
-    ENERGIA: () => t('promo.energy', { eur: t.num(p.eurKwh, 4, 2) }),
-    OPC: () => t('promo.opc', { pct: t.num(p.pct, 1) }),
-    FINAL: () => t('promo.final', { eur: t.num(p.eurKwh, 4, 2) }),
-    KWH_GRATIS: () => t('promo.free', { kwh: t.num(p.freeKwh, 1) }),
-  }[p.target]();
+  const amount = AMOUNT[p.target](p, t);
   const tariff = `${quote.ceme} · ${quote.name}`;
   const notes = [p.newCustomers
     ? t('promo.note.new', { until: p.to, hours: p.maxHours })
     : t(p.network ? 'promo.note.all' : 'promo.note.allAny', { until: p.to, tariff })];
   if (beaten) notes.push(t('promo.note.beaten'));
-  if (p.target === 'FINAL') notes.push(t('promo.note.final'));
-  if (p.target === 'KWH_GRATIS') {
-    notes.push(p.monthKwhKnown
-      ? t('promo.note.freeLeft', { left: t.num(p.freeKwhLeft, 2), free: t.num(p.freeKwh, 1) })
-      : t('promo.note.freeUnknown', { free: t.num(p.freeKwh, 1) }));
+  if (p.target === 'FINAL' && !beaten) notes.push(t('promo.note.final'));
+  if (p.target === 'KWH_GRATIS' && !beaten) {
+    notes.push(!p.monthKwhKnown ? t('promo.note.freeUnknown', { free: t.num(p.freeKwh, 1) })
+      : p.freeKwhLeft === 0 ? t('promo.note.freeSpent', { free: t.num(p.freeKwh, 1) })
+      : t('promo.note.freeLeft', { left: t.num(p.freeKwhLeft, 2), free: t.num(p.freeKwh, 1) }));
   }
   return {
     id: p.id, ceme: quote.ceme, tariffId: quote.id, tariffName: quote.name, requiresOtherContract: !!quote.bundle,
@@ -152,29 +162,39 @@ export function promoOut(p, { quote, total, saving, applied, beaten }, t) {
 //   shown    tariff ids of the CEME options shown
 export function promoTips(quotes, site, { opc, vat, applied = new Map(), shown = new Set(), networks }, t) {
   const inTotal = (p, q) => !!applied.get(p.id)?.has(q.id);
-  const beatenOn = (p, q) => appliesToCustomers(p)
-    && !withPromos(promosHere(q, site, networks).filter(appliesToCustomers), { energyEur: q.totalEur, opc, vat }).applied.includes(p);
   const best = new Map();
   for (const q of quotes) {
-    for (const p of promosHere(q, site, networks)) {
-      const plain = withPromos([], { energyEur: q.totalEur, opc, vat }).high;
-      const total = withPromos([p], { energyEur: q.totalEur, opc, vat }).high;
+    const ctx = { energyEur: q.totalEur, opc, vat };
+    const here = promosHere(q, site, networks);
+    const customers = here.filter(appliesToCustomers);
+    const plain = withPromos([], ctx).high;
+    const price = withPromos(customers, ctx).high; // the option's total (quote.js cemeOption)
+    for (const p of here) {
+      const alone = withPromos([p], ctx).high;
+      const saves = plain - alone > 0;
       // A promotion that saves nothing here (an OPC discount where the fee
       // is unknown, an all-in price above the usual sum, free kWh already
       // used) is left out, unless it's in a shown total, or it's free kWh
       // run out on a shown tariff: the user needs to see why the price is
       // what it is.
-      const spent = p.target === 'KWH_GRATIS' && p.monthKwhKnown && shown.has(q.id);
-      if (!(plain - total > 0) && !inTotal(p, q) && !spent) continue;
+      const spent = p.target === 'KWH_GRATIS' && p.monthKwhKnown && p.freeKwhLeft === 0 && shown.has(q.id);
+      if (!saves && !inTotal(p, q) && !spent) continue;
+      // Would it take effect next to what's already in this tariff's price?
+      // A new-customer or uncounted free-kWh tip joins them to find out: it
+      // goes last, so a tie stays with the promotion already in.
+      const beaten = saves && !withPromos(customers.includes(p) ? customers : [...customers, p], ctx).applied.includes(p);
+      const total = inTotal(p, q) || beaten || spent ? price : alone;
+      const saving = beaten ? 0 : r2(plain - alone);
       const cur = best.get(p.id);
       const rank = x => [inTotal(p, x) ? 0 : 1, shown.has(x.id) ? 0 : 1, x.bundle ? 1 : 0];
       const [a, b] = cur ? [rank(q), rank(cur.q)] : [];
       const first = a?.findIndex((x, i) => x !== b[i]);
       const better = !cur || (first >= 0 ? a[first] < b[first] : total < cur.total);
-      if (better) best.set(p.id, { p, q, total, saving: r2(plain - total) });
+      if (better) best.set(p.id, { p, q, total, saving, beaten });
     }
   }
+  // At one price, the promotion that made it comes before those beaten by it.
   return [...best.values()]
-    .sort((a, b) => a.total - b.total)
-    .map(({ p, q, total, saving }) => promoOut(p, { quote: q, total, saving, applied: inTotal(p, q), beaten: saving > 0 && beatenOn(p, q) }, t));
+    .sort((a, b) => a.total - b.total || inTotal(b.p, b.q) - inTotal(a.p, a.q))
+    .map(({ p, q, total, saving, beaten }) => promoOut(p, { quote: q, total, saving, applied: inTotal(p, q), beaten }, t));
 }

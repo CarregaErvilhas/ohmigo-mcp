@@ -47,7 +47,7 @@ import { translator } from './i18n.js';
 import { napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
 import { forAudiences, isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
-import { appliesToCustomers, promosHere, promoTips, withPromos } from './promos.js';
+import { appliesToCustomers, promosHere, promoTips, unpricedHere, withPromos } from './promos.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 const r4 = x => Math.round(x * 10_000) / 10_000;
@@ -426,6 +426,10 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   const tips = promoTips(applicable(quotes, point), site, { opc, vat, applied, shown: shownIds }, t);
   for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));
   if (tips.length) base.promos = tips;
+  // A promotion we can't price (promos.js) is a guess by omission: name it.
+  for (const q of quotes) {
+    if (shownIds.has(q.id) && unpricedHere(q, site)) base.assumptions.push(t('assume.promoUnknown', { tariff: `${q.ceme} · ${q.name}` }));
+  }
   base.options.push(...extras);
   base.best = bestOption(base.options, base.total);
   base.omieSpotEurKwh = sim.omieSpot?.eurKwh ?? null;

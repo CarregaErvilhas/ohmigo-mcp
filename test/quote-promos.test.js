@@ -198,7 +198,8 @@ describe('only the promotions that moved a total are claimed', () => {
     assert.equal(claims(q).length, 1);
     assert.match(claims(q)[0], /−0\.10 €\/kWh/);
     assert.deepEqual(q.promos.map(p => [p.id, p.applied]), [[BIG.id, true], [SMALL.id, false]]);
-    assert.match(q.promos[1].note, /doesn't add to a better promotion/);
+    assert.match(q.promos[1].note, /it doesn't add to the promotion already in this price/);
+    assert.deepEqual([q.promos[0].total, q.promos[1].total, q.promos[1].saving], [o.total, o.total, 0]);
   });
 
   test('an all-in price overrides the rest: the others are tips, not claims', async () => {
@@ -216,6 +217,11 @@ describe('only the promotions that moved a total are claimed', () => {
     const q = await go([tariff([BIG, MIIO_PROMO])], '03');
     assert.deepEqual(q.headline.promos, [BIG.id, MIIO_PROMO.id]);
     assert.equal(claims(q).length, 2);
+    const fee = 1 + 0.2 * q.session.kwhBilled;
+    assert.equal(q.headline.total, r2(6 + fee * 0.55 * 1.23));
+    assert.deepEqual(q.promos.map(p => p.total), [q.headline.total, q.headline.total], 'each row is the price on the option');
+    const plain = r2(8 + fee * 1.23);
+    assert.ok(Math.abs(q.promos.reduce((sum, p) => sum + p.saving, 0) - (plain - q.headline.total)) < 0.02, 'the savings add up to what the option saves');
   });
 
   test('an OPC discount where the operator fee is unknown is not claimed', async () => {
@@ -232,7 +238,7 @@ describe('only the promotions that moved a total are claimed', () => {
     assert.equal(claims(q).length, 0);
     const row = q.promos.find(p => p.id === gold.id);
     assert.equal(row.applied, false);
-    assert.match(row.note, /0 of this month's 7 free kWh left/);
+    assert.match(row.note, /all of this month's 7 free kWh are used/);
   });
 
   test('a promotion on their tariff and on the cheaper tip: the row and the assumption are about theirs', async () => {
@@ -275,6 +281,19 @@ describe('only the promotions that moved a total are claimed', () => {
     assert.deepEqual(q.options.find(o => o.tariffId === 't-bt-b').promos, [MIIO_PROMO.id]);
     assert.ok(!q.promos.some(p => p.id === 'odd'));
     assert.equal(warn.mock.calls.filter(c => c.arguments.join(' ').includes('FUTURE_TARGET')).length, 1);
+    assert.equal(q.assumptions.filter(a => a.includes("couldn't be applied")).length, 2, 'one per tariff shown');
+    assert.ok(q.assumptions.some(a => a.includes('a promotion on Tariff · A') && a.includes('may differ')));
+  });
+
+  test('an unknown target says so in Portuguese, and only where it could change a total', async t => {
+    t.mock.method(console, 'warn', () => {});
+    const odd = { ...MIIO_PROMO, id: 'odd-2', target: 'FUTURE_TARGET_2' };
+    const q = await go([tariff([odd])], '11', { lang: 'pt' });
+    assert.ok(q.assumptions.some(a => a.includes('uma promoção de Tariff · A') && a.includes('não pôde ser aplicada')));
+    const away = await go([tariff([odd])], '12', {}, point, 'GLPP');
+    assert.ok(!away.assumptions.some(a => a.includes("couldn't be applied")), 'not at this network');
+    const fresh = await go([tariff([{ ...odd, newCustomers: true }])], '13');
+    assert.ok(!fresh.assumptions.some(a => a.includes("couldn't be applied")), 'a new-customer promotion is in no total anyway');
   });
 });
 

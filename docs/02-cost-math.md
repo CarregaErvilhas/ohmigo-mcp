@@ -174,10 +174,14 @@ Then:
 that fits the socket and saves something, one row each, with `applied`
 saying whether it took effect in a shown total (those are always listed, even
 when they cost more, so the user sees why, as are free kWh run out on a shown
-tariff, with `applied: false`). One that lost to a better promotion on its
-tariff stays listed, unapplied, and its note says it doesn't add up. The list
-is absent when there are none. A `target` this code doesn't know is skipped,
-with one warning in the log per target; the tariff keeps its price.
+tariff, with `applied: false`). An applied row's `total` is the option's price
+and its `saving` what that promotion alone takes off, so stacked rows add up.
+A promotion that doesn't add to what's already in its tariff's price (it lost,
+or a new-customer tip wouldn't stack with it) stays listed, unapplied, with
+that price as `total`, `saving: 0` and a note saying so. The list is absent
+when there are none. A `target` this code doesn't know is skipped, with one
+warning in the log per target and an assumption on each option whose total it
+could change.
 
 **`adhoc`** — bank card / QR at the charger: MOBI.E's `AD_HOC_PAYMENT` price
 × the region's VAT (MOBI.E publishes it without VAT, like the operator fee).
