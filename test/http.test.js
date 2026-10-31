@@ -7,10 +7,14 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { moreWays } from '../src/mcp.js';
 import { renderView } from './view-harness.js';
 
-let ceme, cemeDown = false, cheapTip = false, server, base;
+let ceme, cemeDown = false, cheapTip = false, server, base, serverLog = '';
 // Enough rows to pass list_ceme_tariffs' cut, under a name with an accent.
 const manyTariffs = Array.from({ length: 70 }, (_, i) => ({ id: `luzigas-bt-${i}`, ceme: 'LZG', ceme_id: 'LZG', ceme_name: 'Luzigás', name: `Plano ${i}`, kind: 'FIXED' }));
 
@@ -42,27 +46,33 @@ before(async () => {
   }).listen(0, '127.0.0.1');
   await once(ceme, 'listening');
 
-  server = spawn(process.execPath, ['src/server.js'], {
+  ({ proc: server, url: base } = await boot());
+});
+
+after(() => { server.kill('SIGKILL'); ceme.close(); });
+
+async function boot(dataset = 'test/fixtures/chargers.json') {
+  const proc = spawn(process.execPath, ['src/server.js'], {
     cwd: new URL('..', import.meta.url),
     env: {
-      ...process.env, PORT: '0', HOST: '127.0.0.1', DATASET_PATH: 'test/fixtures/chargers.json',
+      ...process.env, PORT: '0', HOST: '127.0.0.1', DATASET_PATH: dataset,
       CEME_API_URL: `http://127.0.0.1:${ceme.address().port}`, CEME_API_KEY: '',
       NAP_STATUS_URL: 'http://127.0.0.1:9/live', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let out = '';
-  server.stdout.on('data', c => { out += c; });
-  base = await new Promise((resolve, reject) => {
-    server.stdout.on('data', () => { const m = out.match(/http:\/\/(\S+?)\/mcp/); if (m) resolve(`http://${m[1]}`); });
-    server.on('exit', code => reject(new Error(`server exited ${code}: ${out}`)));
+  proc.stdout.on('data', c => { out += c; });
+  proc.stderr.on('data', c => { serverLog += c; });
+  const url = await new Promise((resolve, reject) => {
+    proc.stdout.on('data', () => { const m = out.match(/http:\/\/(\S+?)\/mcp/); if (m) resolve(`http://${m[1]}`); });
+    proc.on('exit', code => reject(new Error(`server exited ${code}: ${out}`)));
   });
-});
+  return { proc, url };
+}
 
-after(() => { server.kill('SIGKILL'); ceme.close(); });
-
-async function call(name, args) {
-  const r = await fetch(`${base}/mcp`, {
+async function call(name, args, url = base) {
+  const r = await fetch(`${url}/mcp`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'mcp-protocol-version': '2025-06-18' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: name === 'tools/list' ? name : 'tools/call', params: name === 'tools/list' ? {} : { name, arguments: args } }),
@@ -72,6 +82,24 @@ async function call(name, args) {
 }
 
 const car = { battery_kwh: 58, start_pct: 20 };
+
+// fetch() cleans a URL up before sending it, so odd request targets need a
+// socket. Sends `head`, then `body` if any, and resolves with what came back
+// by the time the server closes the connection.
+function rawRequest(head, body = '') {
+  return new Promise((resolve, reject) => {
+    const { hostname, port } = new URL(base);
+    const socket = connect(Number(port), hostname);
+    let got = '';
+    socket.on('data', c => { got += c; });
+    // The server may close while we're still writing; what it sent still counts.
+    socket.on('error', e => { if (e.code !== 'EPIPE' && e.code !== 'ECONNRESET') reject(e); });
+    socket.on('close', () => resolve(got));
+    socket.setTimeout(5_000, () => socket.destroy());
+    socket.write(`${head}\r\n\r\n${body}`);
+  });
+}
+const get = target => rawRequest(`GET ${target} HTTP/1.1\r\nHost: x\r\nConnection: close`);
 
 test('http: every tool is read-only and talks to the outside world', async () => {
   const { tools } = await call('tools/list');
@@ -512,6 +540,145 @@ test('http: the view gets the bridge, the version and no raw coordinates', async
   assert.doesNotMatch(html, /__BRIDGE__|__VERSION__/);
   assert.doesNotMatch(html, /data-lat="\$\{q\.lat\}"/);
   assert.match(html, /renderError/);
+});
+
+test('http: car powers below a real on-board charger or charger are refused; the lowest real one is priced', async () => {
+  for (const args of [{ car_ac_kw: 1e-9 }, { car_dc_kw: 1e-9 }, { car_ac_kw: 0.5 }, { car_dc_kw: 0.5 }]) {
+    const r = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, ...args });
+    assert.equal(r.isError, true, JSON.stringify(args));
+    assert.match(r.content[0].text, /car_(ac|dc)_kw/);
+  }
+  const ok = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, car_ac_kw: 1, car_dc_kw: 1 });
+  assert.equal(ok.isError, undefined);
+});
+
+test('http: a session past the limit is a business error in the user\'s language; other sockets still price', async () => {
+  const slow = { battery_kwh: 250, start_pct: 0, target_pct: 100, car_ac_kw: 1, car_dc_kw: 1 };
+  for (const [lang, text] of [['en', /would take over 72 hours/], ['pt', /demoraria mais de 72 horas/]]) {
+    const r = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...slow, lang });
+    assert.equal(r.isError, true);
+    assert.equal(r.structuredContent.code, 'tooLong');
+    assert.match(r.content[0].text, text);
+  }
+  const ranking = await call('find_cheapest_charging', { place: 'Leiria', ...slow, lang: 'en' });
+  assert.equal(ranking.structuredContent.code, 'tooLong');
+  // No socket could be priced, so raising the time limit wouldn't help.
+  const inTime = await call('find_cheapest_charging', { place: 'Leiria', ...slow, max_minutes: 30, lang: 'en' });
+  assert.equal(inTime.structuredContent.code, 'tooLong');
+  // Only the AC sockets are too slow here: they're left out, and the note says so.
+  const some = (await call('estimate_charging_cost', { site: 'GLP-LRA-00156', battery_kwh: 250, start_pct: 0, target_pct: 100, car_ac_kw: 1, lang: 'en' })).structuredContent;
+  assert.ok(some.results.length > 0 && some.results.every(q => q.dc));
+  assert.ok(some.notes.some(n => /Kinds of socket left out/.test(n)));
+});
+
+test('http: a socket declared at 0 kW is priced and shown as unknown power', async () => {
+  const data = JSON.parse(readFileSync(new URL('fixtures/chargers.json', import.meta.url)));
+  for (const site of data.sites) for (const p of site.points) if (p.connector === 'T2') { p.kw = 0; delete p.osm; }
+  const dir = mkdtempSync(join(tmpdir(), 'ohmigo-'));
+  writeFileSync(join(dir, 'chargers.json'), JSON.stringify(data));
+  const zero = await boot(join(dir, 'chargers.json'));
+  try {
+    const args = { site: 'GLP-LRA-00156', connectors: ['T2'], ...car, lang: 'en' };
+    const r = await call('estimate_charging_cost', args, zero.url);
+    assert.equal(r.isError, undefined);
+    const [q] = r.structuredContent.results;
+    assert.equal(q.kw, null);
+    assert.ok(q.assumptions.some(a => /charger power not published/.test(a)), JSON.stringify(q.assumptions));
+    assert.ok(q.options.every(o => o.kind !== 'direct'), 'no offers for a power band');
+    const looked = await call('lookup_charger', { query: 'GLP-LRA-00156', connectors: ['T2'], lang: 'en' }, zero.url);
+    for (const x of [r, looked]) {
+      assert.doesNotMatch(x.content[0].text, /\b0 kW|null kW/);
+      assert.match(x.content[0].text, /\? kW/);
+    }
+  } finally {
+    zero.proc.kill('SIGKILL');
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('http: a request target that does not parse gets a 400, is logged, and the server keeps answering', async () => {
+  for (const target of ['//', '//:', '/\\', 'http://[']) {
+    assert.match(await get(target), /^HTTP\/1\.1 400 /, target);
+    assert.match(serverLog, /bad request target/, target);
+    assert.equal((await fetch(`${base}/healthz`)).status, 200, target);
+  }
+});
+
+test('http: the path is the path: a target starting with two slashes names no host', async () => {
+  // Parsed against a base URL, these would read as host "evil" and path "/mcp".
+  for (const target of ['//evil/mcp', '/\\evil/mcp', '///evil/mcp', '//evil/healthz']) {
+    assert.match(await get(target), /^HTTP\/1\.1 404 /, target);
+  }
+  // A proxy's absolute form is still a normal request for its path.
+  assert.match(await get('http://example.com/healthz'), /^HTTP\/1\.1 200 /);
+});
+
+test('http: an oversized body gets a 413 and the connection closes without reading the rest', async () => {
+  const size = 256 * 1024 + 1;
+  const declared = `POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: ${size}`;
+  // Declared up front: answered without waiting for the body at all.
+  assert.match(await rawRequest(declared), /^HTTP\/1\.1 413 /);
+  // No declared length: the server stops once the chunks pass the limit.
+  const chunked = 'POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked';
+  const chunk = 'x'.repeat(64 * 1024);
+  const body = `${chunk.length.toString(16)}\r\n${chunk}\r\n`.repeat(5);
+  const r = await rawRequest(chunked, body);
+  assert.match(r, /^HTTP\/1\.1 413 /);
+  assert.match(r, /connection: close/i);
+  assert.match(r, /too large/);
+  assert.equal((await fetch(`${base}/healthz`)).status, 200);
+});
+
+test('http: a body at the limit is still read', async () => {
+  const pad = ' '.repeat(255 * 1024);
+  const r = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'mcp-protocol-version': '2025-06-18' },
+    body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}${pad}`,
+  });
+  assert.equal(r.status, 200);
+});
+
+test('http: a JSON-RPC batch is refused with a JSON-RPC error, on any protocol version', async () => {
+  const one = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
+  for (const body of [[one, { ...one, id: 2 }], [one], []]) {
+    // Without the version header the SDK assumes the oldest protocol, which had batches.
+    for (const version of ['2025-06-18', '2025-03-26', undefined]) {
+      const r = await fetch(`${base}/mcp`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...(version && { 'mcp-protocol-version': version }) },
+        body: JSON.stringify(body),
+      });
+      assert.equal(r.status, 400, version);
+      assert.match(r.headers.get('content-type'), /application\/json/);
+      const d = await r.json();
+      assert.equal(d.jsonrpc, '2.0');
+      assert.equal(d.id, null);
+      assert.equal(d.error.code, -32600);
+      assert.match(d.error.message, /batch/i);
+    }
+  }
+});
+
+test('http: free-text arguments have a length limit', async () => {
+  const at = n => 'a'.repeat(n);
+  const cases = [
+    ['find_chargers', { place: at(201) }, 'place'],
+    ['find_cheapest_charging', { place: at(201), ...car }, 'place'],
+    ['estimate_charging_cost', { point_id: at(201), ...car }, 'point_id'],
+    ['list_ceme_tariffs', { query: at(201) }, 'query'],
+    ['estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, tariff_ids: [at(101)] }, 'tariff_ids'],
+  ];
+  for (const [tool, args, field] of cases) {
+    const r = await call(tool, args);
+    assert.equal(r.isError, true, `${tool} ${field}`);
+    assert.match(r.content[0].text, new RegExp(field), `${tool} ${field}`);
+  }
+  // At the limit they're ordinary arguments, answered as usual.
+  assert.equal((await call('find_chargers', { place: at(200) })).structuredContent.code, 'place');
+  assert.equal((await call('estimate_charging_cost', { point_id: at(200), ...car })).structuredContent.code, 'point');
+  assert.ok((await call('list_ceme_tariffs', { query: at(200) })).structuredContent);
+  assert.equal((await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, tariff_ids: [at(100)] })).isError, undefined);
 });
 
 // Last: it stops the server.
