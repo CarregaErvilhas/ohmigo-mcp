@@ -185,7 +185,7 @@ export function promoTips(quotes, site, { opc, vat, applied = new Map(), shown =
       // goes last, so a tie stays with the promotion already in.
       // An all-in price replaces the rest, so it can win and still cost more
       // than what's in the price: that's no saving either.
-      const dearer = p.target === 'FINAL' && !inTotal(p, q) && alone >= price;
+      const dearer = p.target === 'FINAL' && !customers.includes(p) && alone >= price;
       const beaten = saves && (dearer || !withPromos(customers.includes(p) ? customers : [...customers, p], ctx).applied.includes(p));
       const total = inTotal(p, q) || beaten || spent ? price : alone;
       const saving = beaten ? 0 : r2(plain - alone);
