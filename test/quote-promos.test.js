@@ -36,6 +36,9 @@ const HELD_SIM = {
     quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 0.09),
   ],
 };
+// The tariff the user lacks has a promotion for every customer at Powerdot.
+const TIP_PROMO = { ...MIIO_PROMO, id: 'enable-powerdot-2026' };
+const TIP_PROMO_SIM = { ...SIM, data: [quote('enable-bt-simples', 'Enable Mobility', 'Tarifa Simples', 0.05, { popular: false, promos: [TIP_PROMO] }), quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 0.09)] };
 // Only tariffs dearer than any direct offer: the offers are what's left to win.
 const DEAR_SIM = { ...SIM, data: [quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 5000)] };
 
@@ -213,12 +216,24 @@ describe('with tariff_ids, best is what the user can pay with', () => {
     const novo = await held({ tariffIds: ['luzboa-bt-novo'] });
     assert.equal(novo.best.tariffId, 'luzboa-bt-novo');
     assert.equal(novo.best.total, novo.total.eur);
-    assert.equal(novo.best.newCustomersOnly, undefined);
+    assert.equal(novo.best.newCustomersOnly, true, 'still true, and still shown');
   });
 
   test('ad hoc still beats their tariffs: anyone can use it now', async () => {
     const q = await held({ tariffIds: ['edp-bt-cartoedp'] }, { ...lowFee, opc: { ...lowFee.opc, AD_HOC_PAYMENT: { energy: [0.0001] } } });
     assert.equal(q.best.kind, 'adhoc');
+  });
+
+  describe('a promotion on the tip', () => {
+    before(() => { sim = TIP_PROMO_SIM; });
+    after(() => { sim = HELD_SIM; });
+
+    test('is not claimed as applied: it is in no price the user pays', async () => {
+      const q = await quotePoint({ site: site('HORZ'), point }, car, { at: new Date('2026-11-13T12:00:00Z'), lang: 'en', tariffIds: ['edp-bt-cartoedp'] });
+      assert.deepEqual(q.options.find(o => o.notYours).promos, [TIP_PROMO.id]);
+      assert.ok(!q.assumptions.some(a => a.includes('Enable Mobility at Powerdot')));
+      assert.equal(q.promos.find(p => p.id === TIP_PROMO.id).applied, false);
+    });
   });
 
   describe('direct offers', () => {

@@ -466,6 +466,30 @@
       }
     },
     {
+      "id": "only-held-tariff",
+      "why": "tariff_ids carries only the tariffs the user holds, not every row list_ceme_tariffs returned for their CEME.",
+      "message": "Só tenho o Cartão EDP Charge (Simples). Quanto me custa carregar no posto LRA-00156 com um Nissan Leaf de 40 kWh, de 20% a 80%?",
+      "requires": [
+        {
+          "tariff": "edp",
+          "id": "^edp-bt-cartoedp$"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "list_ceme_tariffs"
+          },
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "tariff_ids": "^\\[\"edp-(bt|mt)-cartoedp\"\\]$"
+            }
+          }
+        ]
+      }
+    },
+    {
       "id": "how-price-built",
       "why": "\"How was the price built\" at a given time: detail plus at.",
       "message": "Porque é que o preço muda com a hora? Explica-me como fica o preço de carregar hoje às 21h no posto LRA-00156, com um Nissan Leaf de 40 kWh, de 20% a 80%.",

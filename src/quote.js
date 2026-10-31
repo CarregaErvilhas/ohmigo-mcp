@@ -208,9 +208,8 @@ function directOptions(direct, session, t, region) {
 }
 
 // A tariff the user put in tariff_ids: they have it (see eligible()), so its
-// conditions don't keep it from `best`. requiresOtherContract stays, it's
-// true; newCustomersOnly goes, it says the price isn't theirs and it is.
-const listed = ({ newCustomersOnly, ...o }) => ({ ...o, listed: true });
+// conditions stay on the option but don't keep it from `best`.
+const listed = o => ({ ...o, listed: true });
 
 // A cheaper CEME tariff than any the user listed in tariff_ids, sometimes
 // another cycle of their own card. It stays visible and says so, but it's not
@@ -389,7 +388,8 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   }
   // Promotions: the ones already in a shown total get an assumption; all of
   // them at this network (new-customer ones included) are listed as tips.
-  const applied = new Set(base.options.flatMap(o => o.promos || []));
+  // A tip's promotion isn't in any price the user pays: its note discloses it.
+  const applied = new Set(base.options.filter(o => !o.notYours).flatMap(o => o.promos || []));
   const shownIds = new Set(base.options.map(o => o.tariffId));
   const tips = promoTips(applicable(quotes, point), site, { opc, vat, applied, shown: shownIds }, t);
   for (const p of tips) if (p.applied) base.assumptions.push(t('assume.promo', { label: p.label, until: p.until }));

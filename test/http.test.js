@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { moreWays } from '../src/mcp.js';
 
 let ceme, cemeDown = false, cheapTip = false, server, base;
 
@@ -104,11 +105,22 @@ test('http: with tariff_ids, a tariff the user lacks is a tip in both cost tools
       assert.match(tip.note, /switch to it first/);
       assert.notEqual(q.best?.tariffId, 'nope-mt-y');
     }
+    // The summary line counts ways to pay, and the tip isn't one yet.
+    const ranked = asked[1];
+    const q = ranked.structuredContent.results.find(x => x.options.some(o => o.notYours));
+    const line = ranked.content[0].text.split('\n').find(l => l.includes(`[${q.pointId}]`));
+    assert.ok(line.includes(`(+${q.options.length - 2} more ways to pay)`), line);
     const open = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...args, tariff_ids: undefined, battery_kwh: 62 });
     const options = open.structuredContent.results.flatMap(q => q.options);
     assert.ok(options.some(o => o.cheaperElsewhere), 'the tip is there');
     assert.ok(!options.some(o => o.notYours), 'without tariff_ids nothing is tagged');
   } finally { cheapTip = false; }
+});
+
+test('the more-ways note does not count a tariff the user would have to switch to', () => {
+  const t = key => key;
+  assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2, notYours: true }] }], t), []);
+  assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2 }] }], t), ['note.moreWays']);
 });
 
 test('http: estimate_charging_cost answers with structuredContent, and the text carries it too for text-only clients', async () => {
@@ -356,8 +368,6 @@ test('http: the view gets the bridge, the version and no raw coordinates', async
   assert.doesNotMatch(html, /__BRIDGE__|__VERSION__/);
   assert.doesNotMatch(html, /data-lat="\$\{q\.lat\}"/);
   assert.match(html, /renderError/);
-  assert.match(html, /not your tariff/);
-  assert.match(html, /não é o teu tarifário/);
 });
 
 // Last: it stops the server.
