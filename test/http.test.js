@@ -530,7 +530,7 @@ test('http: privacy and support, one rendered copy per URL', async () => {
     assert.match(r.headers.get('content-security-policy'), /script-src 'none'/, path);
   }
   // The landing page still runs its own script.
-  assert.match((await fetch(`${base}/`)).headers.get('content-security-policy'), /script-src 'unsafe-inline'/);
+  assert.match((await fetch(`${base}/`)).headers.get('content-security-policy'), /script-src 'sha256-/);
   // A home link from these pages asks for the language it is already in.
   assert.equal((await fetch(`${base}/?lang=pt`, { redirect: 'manual' })).status, 200);
   assert.equal((await fetch(`${base}/en?lang=en`, { redirect: 'manual' })).status, 200);
