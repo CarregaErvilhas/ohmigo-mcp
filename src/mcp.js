@@ -60,7 +60,7 @@ Never ask for a charger id: when the user names a charger (brand or operator + t
 
 Before a cost call: look up the car's specs yourself (usable battery, max AC/DC kW, published DC 10-80% minutes, the DC curve if you find it); don't ask the user for them. Ask only for what you don't know: battery % now, target % (default 80), and whether they're in a hurry (the cheapest is often a slow AC socket: pass max_minutes or dc_only on a trip). If they pay with CEME cards/apps, resolve them with list_ceme_tariffs and pass them all as tariff_ids. ohmigo stores nothing: remember the car, its specs and the user's tariffs yourself, and for monthly free-kWh promotions the kWh they charged per tariff this month (month_kwh).
 
-Presenting: lead with "best" (with tariff_ids, the cheapest way this user can pay; otherwise what anyone can use now): total in €, duration, how to pay, main assumptions. Every charger has more ways to pay in "options": other CEMEs, "adhoc" (no CEME card needed; its label says if by card at the charger or on the phone: always mention it), "direct" (operator apps, subscriptions, roaming apps; a subscription's fee is not in the total) and "opc_direct" (the operator's NAP price outside MOBI.E). Say there are more and offer to list them; point out when a subscription or another CEME is cheaper. MOBI.E and other networks share one ranking: the price decides.
+Presenting: lead with "best", the cheapest option anyone can use now: total in €, duration, how to pay, main assumptions. Every charger has more ways to pay in "options": other CEMEs, "adhoc" (no CEME card needed; its label says if by card at the charger or on the phone: always mention it), "direct" (operator apps, subscriptions, roaming apps; a subscription's fee is not in the total) and "opc_direct" (the operator's NAP price outside MOBI.E). Say there are more and offer to list them; point out when a subscription or another CEME is cheaper. MOBI.E and other networks share one ranking: the price decides.
 Pass on the result's assumptions and notes and each option's note: they flag peak prices (the most it can cost; usually much less off-peak), promotions in or out of the total, stale or island-VAT prices, sources that disagree. Tariffs and promotions for new sign-ups only (newCustomersOnly, newCustomers) are tips for non-clients ("signing up by <until> gets <price>"), never the price. Prices for one group (audience) are only for drivers who said they belong to it: never infer a group, and say whom the price is for.
 Credit your sources: OpenStreetMap for "osm" data; for "direct" prices, the source in the note (for the blog, its author, Alexandre Moleiro).
 
@@ -116,7 +116,7 @@ const Car = {
   dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes: makes the duration far better than the generic curve"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
     .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]"),
-  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only the variants they hold, not every row: each charger uses the cheapest. Omit for the popular ones"),
+  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), all of them: each charger is priced with the cheapest. Omit to show the popular ones"),
   tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs shown per charger'),
   at: z.string().refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
     .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`).optional()
@@ -630,7 +630,7 @@ export function createServer(getDataset, live) {
 
   registerAppTool(server, 'find_cheapest_charging', {
     title: 'Find cheapest charging',
-    description: 'Ranks public EV chargers in Portugal near a place or along a route by the estimated cost of the user\'s charging session (energy + operator fee + taxes; MOBI.E and other networks in one list), for their car and battery levels. Each result has "best", the cheapest way this user (with tariff_ids) or anyone can pay now, and every way to pay in "options".',
+    description: 'Ranks public EV chargers in Portugal near a place or along a route by the estimated cost of the user\'s charging session (energy + operator fee + taxes; MOBI.E and other networks in one list), for their car and battery levels. Each result has "best", the cheapest way to pay anyone can use now, and every way to pay in "options".',
     inputSchema: z.object({
       ...Where, ...Filter, ...Car, ...Audience, ...Detail, ...Lang, max_minutes: maxMinutes,
       available_only: z.boolean().default(true).describe('Skip chargers reported busy, out of order or blocked'),

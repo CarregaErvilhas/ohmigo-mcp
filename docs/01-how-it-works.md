@@ -56,7 +56,8 @@ Follow one `find_cheapest_charging` call through the code:
    Each way to pay becomes one entry in `options` ([02](02-cost-math.md)).
 6. Still in `quote.js`, `rank` drops busy or broken chargers, keeps the
    cheapest plug per site, and sorts sites by `best`: the cheapest option
-   anyone can use or, with `tariff_ids`, this user can pay with.
+   anyone can use, leaving out CEME tariffs the user didn't list in
+   `tariff_ids`.
    If ceme-v2 doesn't answer, plugs on MOBI.E come back without a CEME total
    (`cemeUnavailable`) and the other ways to pay still rank.
 7. `mcp.js` returns the top results as `structuredContent`, and the same

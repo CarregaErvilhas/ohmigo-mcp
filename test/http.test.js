@@ -354,6 +354,8 @@ test('http: the view gets the bridge, the version and no raw coordinates', async
   assert.doesNotMatch(html, /__BRIDGE__|__VERSION__/);
   assert.doesNotMatch(html, /data-lat="\$\{q\.lat\}"/);
   assert.match(html, /renderError/);
+  assert.match(html, /not your card/);
+  assert.match(html, /não é o teu cartão/);
 });
 
 // Last: it stops the server.

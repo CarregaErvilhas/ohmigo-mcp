@@ -441,9 +441,15 @@
     },
     {
       "id": "best-is-what-they-hold",
-      "why": "With tariff_ids, best is what this user can pay with: a cheaper tariff or app they don't have is a tip that says they'd have to sign up.",
-      "memory": "Carro: Fiat 500e de 42 kWh (37 kWh úteis). Paga com o Cartão EDP Charge (Simples), tariff_id edp-bt-cartoedp, e não tem outros cartões nem apps.",
+      "why": "With tariff_ids, a cheaper CEME tariff the user didn't list is a tip that says they'd have to sign up, never the price they lead with.",
+      "memory": "Carro: Fiat 500e de 42 kWh (37 kWh úteis). Paga com o Cartão EDP Charge (Simples), tariff_id edp-bt-cartoedp.",
       "message": "Estou com 20%. Onde me fica mais barato carregar até 80% em Leiria?",
+      "requires": [
+        {
+          "tariff": "edp",
+          "id": "^edp-bt-cartoedp$"
+        }
+      ],
       "expect": {
         "calls": [
           {
@@ -454,8 +460,8 @@
           }
         ],
         "judge": [
-          "Is the price the reply leads with one this user can pay now: their Cartão EDP, a bank card or QR at the charger, or the operator's price without an account, and not a tariff or app marked notYours in the results?",
-          "If the reply mentions a cheaper tariff or app the user doesn't have, does it say they'd have to sign up first? Answer n/a if it mentions none."
+          "Is the price the reply leads with something other than a CEME tariff marked notYours in the results?",
+          "If the reply mentions a cheaper CEME tariff marked notYours, does it say the user would have to sign up first? Answer n/a if it mentions none."
         ]
       }
     },
