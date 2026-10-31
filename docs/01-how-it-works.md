@@ -166,6 +166,15 @@ charger and bills its fee. The owner can be someone else: Lidl's chargers are
 owned by Lidl and operated by Galp, so the NAP says Galp and OSM's brand says
 Lidl. Both are right, and both are searchable.
 
+**Sites the NAP leaves nameless.** Some operators publish part of their sites
+with neither `operator` nor `operatorId` (Continente's `CNT-0001PL0002`). When
+you load a dataset, `lendOperators` (`src/lookup.js`) gives such a site the
+operator of its id prefix, if the named sites with that prefix all have one
+operator, and marks it `operatorInferred`. From there on it's that operator's
+site for search, offers, promotions, labels, `list_operators` and `/dados`;
+the answers say the operator was inferred (`assume.operatorInferred`). A site
+with nobody to lend it a name stays nameless: on `/dados` those share one row.
+
 ## Motorways: which side of the road
 
 A motorway service area usually has a charger site on each side of the road,

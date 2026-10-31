@@ -8,6 +8,7 @@
 // dataset's plans in words (opc.js), direct offers are offers.js's OFFERS.
 
 import { simulate, promos } from './ceme.js';
+import { operatorKey } from './data.js';
 import { NAP_NOTES, OFFERS, SOURCE, isStale, offersAt } from './offers.js';
 import { describePlan } from './opc.js';
 import { translator } from './i18n.js';
@@ -26,14 +27,17 @@ const plan = p => {
 
 // One operator: what its chargers are and what they charge. Fee plans are
 // grouped (most operators publish a handful for thousands of sockets).
+// `key` is what /dados/postos.json takes: sites with no operatorId have one too.
 function operators(ds) {
   const ops = new Map();
   for (const s of ds.sites) {
-    const o = ops.get(s.operatorId) ?? {
-      id: s.operatorId, name: s.operator, website: s.website, sites: 0, points: 0, dc: 0, maxKw: 0,
+    const key = operatorKey(s);
+    const o = ops.get(key) ?? {
+      key, id: s.operatorId, name: s.operator ?? t('operator.unnamed'), website: s.website, sites: 0, inferred: 0, points: 0, dc: 0, maxKw: 0,
       regimes: {}, payment: new Set(), plans: new Map(), adhoc: new Map(), napPrices: [],
     };
     o.sites++;
+    if (s.operatorInferred) o.inferred++;
     for (const m of s.payment || []) o.payment.add(m);
     for (const p of s.points) {
       o.points++;
@@ -45,7 +49,7 @@ function operators(ds) {
       if (ah) o.adhoc.set(ah, (o.adhoc.get(ah) || 0) + 1);
       if (p.napPrice != null) o.napPrices.push(p.napPrice);
     }
-    ops.set(s.operatorId, o);
+    ops.set(key, o);
   }
   const top = m => [...m].sort((a, b) => b[1] - a[1]).map(([desc, n]) => ({ desc, n }));
   return [...ops.values()].map(o => ({
@@ -103,10 +107,10 @@ async function build(ds) {
   };
 }
 
-// Every charger of one operator, socket by socket, with the direct offers
+// Every charger of one operator (its `key`), socket by socket, with the direct offers
 // that apply there (the same offersAt the cost tools use).
-export function chargers(ds, operatorId) {
-  return ds.sites.filter(s => s.operatorId === operatorId).map(s => ({
+export function chargers(ds, key) {
+  return ds.sites.filter(s => operatorKey(s) === key).map(s => ({
     id: s.id, code: s.code, city: s.city, address: s.address, region: s.region, payment: s.payment,
     name: s.osm?.name ?? null,
     points: s.points.map(p => ({

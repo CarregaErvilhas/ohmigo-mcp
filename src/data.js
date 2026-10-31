@@ -8,7 +8,7 @@
 //
 // Shape (one JSON file, ~6 MB):
 //   { schema, generatedAt, sites: [{ id, code, lat, lon, region, city, address,
-//     operator, name?, hours?, locationDescription?, phone?, osm?,
+//     operator, operatorId, name?, hours?, locationDescription?, phone?, osm?,
 //     points: [{ id, kw, v, a, cable, connector, dc, phases, level, regime, opc, osm? }] }] }
 // `v`/`a` are the connector's voltage and max current as the operator
 // declares them on the NAP; `level` is the grid's voltage level (BTN/BTE/MT),
@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
-import { fold, Index } from './lookup.js';
+import { fold, Index, lendOperators } from './lookup.js';
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 // The dataset format this code understands. nap-dashboard bumps SCHEMA in
@@ -46,10 +46,15 @@ const localFile = () => {
   return existsSync(p) ? p : null;
 };
 
+// What tells one operator from another: the NAP's operatorId, or the name for
+// sites without one (all the sites with neither fall under one key).
+export const operatorKey = s => s.operatorId || `name:${s.operator || '?'}`;
+
 export class Dataset {
   constructor(raw) {
     this.generatedAt = raw.generatedAt;
     this.sites = raw.sites;
+    lendOperators(this.sites);
     this.siteById = new Map();
     this.pointById = new Map();
     for (const s of this.sites) {
@@ -252,7 +257,8 @@ export class Dataset {
   // as the NAP publishes it, biggest first. Grouped by operatorId: the name
   // is not a key (Atlante appears with 7 spellings), so each operator gets
   // its most common spelling and the others in `otherNames`. Sites without
-  // an operatorId group by name.
+  // an operatorId group by name. `inferredSites`: how many of its sites the
+  // NAP left nameless and the id prefix attributes to it (lookup.js).
   operators({ region, ...filter } = {}) {
     const ok = this.pointFilter(filter);
     const by = new Map();
@@ -260,12 +266,13 @@ export class Dataset {
       if (region && s.region !== region) continue;
       const points = s.points.filter(p => ok(p, s));
       if (!points.length) continue;
-      const key = s.operatorId || `name:${s.operator ?? '?'}`;
+      const key = operatorKey(s);
       let o = by.get(key);
-      if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {} });
+      if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, inferredSites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {} });
       o.names.set(s.operator ?? '?', (o.names.get(s.operator ?? '?') || 0) + 1);
       if (s.website) o.websites.add(s.website);
       o.sites++;
+      if (s.operatorInferred) o.inferredSites++;
       o.regions[s.region] = (o.regions[s.region] || 0) + 1;
       for (const p of points) {
         o.points++;
@@ -279,7 +286,7 @@ export class Dataset {
       const names = [...o.names].sort((x, y) => y[1] - x[1]).map(([n]) => n);
       return {
         operatorId: o.operatorId, name: names[0], otherNames: names.length > 1 ? names.slice(1) : undefined,
-        website: [...o.websites][0], sites: o.sites, points: o.points, dcPoints: o.dcPoints,
+        website: [...o.websites][0], sites: o.sites, inferredSites: o.inferredSites || undefined, points: o.points, dcPoints: o.dcPoints,
         maxKw: o.maxKw || undefined, maxVoltage: o.maxV || undefined, regions: o.regions, regimes: o.regimes,
       };
     }).sort((x, y) => y.sites - x.sites || x.name.localeCompare(y.name));

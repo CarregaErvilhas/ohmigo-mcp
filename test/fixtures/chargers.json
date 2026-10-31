@@ -343,6 +343,66 @@
      "regime": "mobie"
     }
    ]
+  },
+  {
+   "id": "CNT-0001PL0002",
+   "code": "0001PL0002",
+   "lat": 41.182693,
+   "lon": -8.658268,
+   "region": "CONT",
+   "city": "Matosinhos",
+   "address": "Rua João Mendonça 505",
+   "operator": null,
+   "operatorId": null,
+   "website": null,
+   "payment": [
+    "apps"
+   ],
+   "points": [
+    {
+     "id": "0001PL0002.01",
+     "kw": 22,
+     "connector": "T2",
+     "dc": false,
+     "phases": 3,
+     "cable": false,
+     "v": 230,
+     "a": 32,
+     "level": null,
+     "regime": "sem_ceme",
+     "napPrice": 0.37
+    }
+   ]
+  },
+  {
+   "id": "ZZZ-FAR-00001",
+   "code": "FAR-00001",
+   "lat": 37.0194,
+   "lon": -7.9304,
+   "region": "CONT",
+   "city": "Faro",
+   "address": "Rua de Santo António 1",
+   "operator": null,
+   "operatorId": null,
+   "website": null,
+   "payment": [
+    "apps"
+   ],
+   "points": [
+    {
+     "id": "FAR-00001-01",
+     "kw": 11,
+     "connector": "T2",
+     "dc": false,
+     "phases": 3,
+     "cable": false,
+     "v": 230,
+     "a": 32,
+     "level": null,
+     "regime": "sem_ceme",
+     "napPrice": 0.4
+    }
+   ]
   }
  ]
 }

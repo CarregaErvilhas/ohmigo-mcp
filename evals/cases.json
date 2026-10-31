@@ -506,6 +506,29 @@
       }
     },
     {
+      "id": "operator-inferred",
+      "why": "A site the NAP left nameless is priced as its id prefix's operator: the answer says that operator is inferred, not published.",
+      "message": "Quanto me custa carregar no posto CNT-0001PL0002? Tenho um Renault Zoe ZE50, estou com 30% e quero ir até aos 80%.",
+      "requires": [
+        {
+          "site": "CNT-0001PL0002"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "0001PL0002"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply make clear that the NAP does not name this charger's operator and that the operator was inferred, rather than presenting it as published?"
+        ]
+      }
+    },
+    {
       "id": "nationwide-800v",
       "why": "A property across the whole country: find_chargers with the filter and no place.",
       "message": "O meu carro tem bateria de 800 V. Onde é que há postos de 800 V em Portugal?",

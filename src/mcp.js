@@ -197,9 +197,11 @@ function siteFacts(site, t, at = new Date()) {
   const notes = [];
   if (hours.disagree) notes.push(t('note.hoursDisagree', { site: site.id, nap: hours.nap, osm: hours.osm }));
   if (card.disagree) notes.push(t('note.cardDisagree', { site: site.id, napYes: card.nap }));
+  if (site.operatorInferred) notes.push(t('assume.operatorInferred', { operator: site.operator }));
   const phone = site.phone ?? site.osm?.phone;
   return {
     facts: {
+      operatorInferred: site.operatorInferred,
       name: site.name ?? undefined,
       hours: hours.nap || hours.osm ? { nap: hours.nap ?? undefined, osm: hours.osm ?? undefined } : undefined,
       openNow: hours.open ?? undefined,
@@ -632,7 +634,8 @@ export function createServer(getDataset, live) {
       const direct = [...new Set(OFFERS.filter(x => o.operatorId && x.scope?.operatorIds?.includes(o.operatorId)).map(x => x.label))];
       return { ...o, directOffers: direct.length ? direct : undefined };
     });
-    const notes = [t('note.operators'), ...voltageNotes(ds, a, t)];
+    const notes = [t('note.operators'), ...voltageNotes(ds, a, t),
+      ...shown.filter(o => o.inferredSites).map(o => t('assume.operatorInferred', { operator: o.name }))];
     return ok({ ...meta(ds, live, lang), total: ops.length, notes, operators: shown },
       [...notes, `${ops.length} operators:`, ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${o.sites} sites, ${o.points} sockets (${o.dcPoints} DC), max ${o.maxKw ?? '?'} kW`)].join('\n'));
   });

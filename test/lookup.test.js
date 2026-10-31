@@ -29,6 +29,31 @@ const ds = new Dataset({
 });
 const ids = (q, opts) => ds.lookup(q, opts).results.map(h => h.site.id);
 
+test('a nameless site takes the operator of its id prefix, marked as inferred', () => {
+  const s = ds.siteById.get('CNT-0001PL0002');
+  assert.equal(s.operator, 'Modelo Continente Hipermercados, S.A.');
+  assert.equal(s.operatorId, 'CONT');
+  assert.equal(s.operatorInferred, true);
+  assert.equal(ds.siteById.get('CNT-9648PL0001').operatorInferred, undefined);
+});
+
+test('an id prefix lends only what is safe to lend', () => {
+  const lent = new Dataset({ sites: [
+    site('MIX-1', '1', 'A', '', 'One', 'ONE', 40, -8), site('MIX-2', '2', 'A', '', 'Two', 'TWO', 40, -8),
+    site('MIX-3', '3', 'A', '', null, null, 40, -8),
+    site('ONE-1', '4', 'A', '', 'One', 'ONE', 40, -8),
+    site('ONE-2', '5', 'A', '', null, 'TWO', 40, -8),
+    site('LON-1', '6', 'A', '', null, null, 40, -8),
+  ] }).siteById;
+  // Two operators share the prefix: it says nothing.
+  assert.equal(lent.get('MIX-3').operator, null);
+  // A published id wins over the prefix.
+  assert.equal(lent.get('ONE-2').operator, null);
+  assert.equal(lent.get('ONE-2').operatorId, 'TWO');
+  // Nobody with a name has the prefix.
+  assert.equal(lent.get('LON-1').operatorInferred, undefined);
+});
+
 test('lookup: a MOBI.E code, however it is written', () => {
   for (const q of ['LRA-00156', 'lra 156', 'LRA00156', 'GLP-LRA-00156', 'MOBI-LRA-00156', 'o posto LRA-00156 em Leiria']) {
     assert.deepEqual(ids(q), ['GLP-LRA-00156'], q);
