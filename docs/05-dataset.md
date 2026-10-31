@@ -59,11 +59,16 @@ Monday.
     "city": "Albergaria-a-Velha", "address": "...",
     "operator": "IONITY GmbH", "operatorId": "IONY", "website": "https://ionity.eu",
     "payment": ["apps", "rfid"],
+    "name": "IONITY Albergaria", "hours": "24/7", "phone": "...",
+    "locationDescription": "Parque Exterior",
     "osm": { "name": "IONITY Albergaria", "brand": "IONITY", "operator": "IONITY",
-             "openingHours": "24/7", "access": "yes", "parkingFee": "no" },
+             "openingHours": "24/7", "access": "yes", "parkingFee": "no",
+             "payment": ["app", "membership_card"], "cards": false,
+             "phone": "...", "manufacturer": "Tritium", "capacity": 4 },
     "points": [{
-      "id": "ALB-00019-01", "kw": 350, "v": 920, "a": 500, "connector": "CCS", "dc": true, "phases": null,
-      "level": "MT", "regime": "mobie",
+      "id": "ALB-00019-01", "kw": 350, "v": 920, "a": 500, "cable": true,
+      "connector": "CCS", "dc": true, "phases": null,
+      "level": "MT", "regime": "mobie", "osm": { "v": 1000 },
       "opc": { "REGULAR": { "energy": [0.51], "time": [{ "eur": 0.0813, "from": 60, "to": 560 }] },
                "AD_HOC_PAYMENT": { "energy": [0.51] } }
     }]
@@ -78,6 +83,22 @@ Monday.
   so. Declared, not measured: some DC sockets carry a placeholder (750 or
   600 V), which is why every answer filtered by voltage carries a sentence
   saying so.
+- `cable`: `true` when the cable is fixed to the charger, `false` when it's a
+  socket and the driver brings their own (the NAP's `connectorFormat`).
+- `name`, `hours`, `locationDescription`, `phone` (site): the operator's name
+  for the site ("Auchan Cascais"), its opening hours (nap-dashboard converts
+  the NAP's DATEX II into OpenStreetMap's `opening_hours` syntax, so
+  `src/hours.js` reads both sources the same way), where the charger is in
+  the car park ("Parque Coberto - Piso -1") and the operator's phone. Each is
+  there only when the NAP has it.
+- `osm` (point): the kW/V/A OpenStreetMap has for this socket (the OSM socket
+  of the same plug type at the site with the nearest power), only the fields
+  that differ from the NAP's. The community reads them off the charger's
+  plate, so they are usually more right than the NAP's declaration (DC
+  sockets declaring a 750 V placeholder, powers that V×I can't give).
+  `src/data.js` puts them in `kw`/`v`/`a` when it loads the file and keeps the
+  NAP's in `napKw`/`napV`/`napA`: filters, the session duration and the price
+  band all use OSM's, and every answer that does says so.
 - `level`: the voltage level of the site's grid connection (`BTN`, `BTE`,
   `MT`), which picks the BT or MT version of each CEME tariff. Not the
   socket's voltage (that's `v`).
@@ -90,7 +111,11 @@ Monday.
   its `ref` tag (only when the OSM element is within 1 km of the NAP's
   coordinates). Optional, and so is every field in it: `name`, `brand`,
   `operator`, `openingHours`, `location` (`underground`...), `access`,
-  `parkingFee`, `maxstay`. Its `brand`/`operator` are often the chargers' owner
+  `parkingFee`, `maxstay`, `level` (floor), `covered`, `indoor`, `phone`,
+  `email`, `manufacturer`, `model`, `capacity` (cars at once), `payment` (the
+  `payment:*`/`authentication:*` methods tagged yes) and `cards` (true/false
+  when OSM says whether a bank card works at the charger; `cardPayment` in
+  `src/data.js` combines it with the NAP's `payment`). Its `brand`/`operator` are often the chargers' owner
   or the shop they're at (Lidl owns its chargers, Galp operates them), not
   the OPC that bills the fee (that's the site's `operator`).
   `lookup_charger` searches it and shows it ([01](01-how-it-works.md)).

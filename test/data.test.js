@@ -2,7 +2,7 @@
 // dataset with and without voltages.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Dataset } from '../src/data.js';
+import { cardPayment, Dataset } from '../src/data.js';
 
 const site = (id, points) => ({ id, code: id, lat: 39.7, lon: -8.8, region: 'CONT', city: 'Leiria', operator: 'X', operatorId: 'XX', points });
 
@@ -35,4 +35,18 @@ test('data: operators group by operatorId and keep the most common name', () => 
   assert.deepEqual(o.otherNames, ['Atlante, S.A.']);
   assert.equal(o.sites, 3);
   assert.equal(o.dcPoints, 1);
+});
+
+test('data: OpenStreetMap\'s kW/V/A replace the NAP\'s, which stay in napKw/napV/napA', () => {
+  const ds = new Dataset({ sites: [site('A', [{ id: '1', kw: 187.5, v: 750, a: 250, dc: true, osm: { kw: 150, v: 1000 } }])] });
+  const [p] = ds.sites[0].points;
+  assert.deepEqual([p.kw, p.napKw, p.v, p.napV, p.a, p.napA], [150, 187.5, 1000, 750, 250, undefined]);
+  assert.equal(ds.search({ minVoltage: 900 }).total, 1);
+});
+
+test('data: bank card at the charger, from the NAP and OpenStreetMap', () => {
+  assert.deepEqual(cardPayment({ payment: ['apps', 'creditCard'] }), { value: true, nap: true, osm: null, disagree: false });
+  assert.deepEqual(cardPayment({ payment: ['apps'], osm: { cards: true } }), { value: true, nap: false, osm: true, disagree: true });
+  assert.deepEqual(cardPayment({ payment: ['apps'], osm: { cards: false } }), { value: false, nap: false, osm: false, disagree: false });
+  assert.equal(cardPayment({}).value, null);
 });

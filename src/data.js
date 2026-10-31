@@ -8,10 +8,13 @@
 //
 // Shape (one JSON file, ~6 MB):
 //   { schema, generatedAt, sites: [{ id, code, lat, lon, region, city, address,
-//     operator, osm?, points: [{ id, kw, v, a, connector, dc, phases, level, regime, opc }] }] }
+//     operator, name?, hours?, locationDescription?, phone?, osm?,
+//     points: [{ id, kw, v, a, cable, connector, dc, phases, level, regime, opc, osm? }] }] }
 // `v`/`a` are the connector's voltage and max current as the operator
 // declares them on the NAP; `level` is the grid's voltage level (BTN/BTE/MT),
-// which picks the TAR, not the socket's voltage.
+// which picks the TAR, not the socket's voltage. `cable`: the cable is fixed
+// to the charger (false: bring your own). A point's `osm` holds the kW/V/A
+// OpenStreetMap has for that socket where they differ from the NAP's.
 // `osm` is what OpenStreetMap adds about the site (its name, brand, opening
 // hours...), when the community mapped it with the MOBI.E code.
 //
@@ -23,6 +26,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
+import { siteOpen } from './hours.js';
 import { fold, Index } from './lookup.js';
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
@@ -49,6 +53,14 @@ export class Dataset {
     for (const s of this.sites) {
       this.siteById.set(s.id, s);
       for (const p of s.points) {
+        // OpenStreetMap's kW/V/A are read off the charger's plate by the
+        // community and are usually more right than the NAP's declaration
+        // (DC sockets declaring a 750 V placeholder, powers V×I can't give).
+        // So they replace it everywhere (filters, duration, price band); the
+        // NAP's value stays in napKw/napV/napA for the answers to show.
+        for (const [k, nap] of [['kw', 'napKw'], ['v', 'napV'], ['a', 'napA']]) {
+          if (p.osm?.[k] != null && p[nap] === undefined) { p[nap] = p[k] ?? null; p[k] = p.osm[k]; }
+        }
         // A point id is only unique within its site ("19" exists on several
         // sites), so the key is "SITE/POINT". The bare id also resolves when
         // it happens to be unique.
@@ -160,7 +172,7 @@ export class Dataset {
     const ok = this.pointFilter(filter);
     let out = [];
     for (const h of hits) {
-      const points = h.site.points.filter(ok);
+      const points = h.site.points.filter(p => ok(p, h.site));
       if (!points.length) continue;
       const km = centre ? haversineKm(centre, h.site) : undefined;
       if (near && radiusKm != null && km > radiusKm) continue;
@@ -177,13 +189,26 @@ export class Dataset {
 
   // A socket with no declared voltage fails a voltage filter: unknown is not
   // "above 500 V".
-  pointFilter({ minKw, connectors, dcOnly, minVoltage } = {}) {
+  // Site-level filters ride along, so the function takes the site too:
+  //   cardPayment  only sites where a bank card is known to work at the charger
+  //   cable        true: the cable is fixed to the charger; false: a socket
+  //   openAt       a Date: only sites not known to be closed then (unknown
+  //                hours pass: most sites have them, and a guess would hide
+  //                chargers that are open)
+  pointFilter({ minKw, connectors, dcOnly, minVoltage, cardPayment: card, cable, openAt } = {}) {
     const cs = connectors?.length ? new Set(connectors.map(c => c.toUpperCase())) : null;
     const minV = this.hasVoltage ? minVoltage : null;
-    return p => (minKw == null || (p.kw ?? 0) >= minKw)
+    const siteOk = new Map();
+    const siteFits = s => {
+      if (!siteOk.has(s)) siteOk.set(s, (!card || cardPayment(s).value === true) && (!openAt || siteOpen(s, openAt).open !== false));
+      return siteOk.get(s);
+    };
+    return (p, s) => (minKw == null || (p.kw ?? 0) >= minKw)
       && (!cs || cs.has(p.connector))
       && (!dcOnly || p.dc)
-      && (minV == null || (p.v ?? 0) >= minV);
+      && (minV == null || (p.v ?? 0) >= minV)
+      && (cable == null || p.cable === cable)
+      && (!s || siteFits(s));
   }
 
   // Sites near a point or along a route, nearest first (or in route order),
@@ -206,7 +231,7 @@ export class Dataset {
         if (km > radiusKm) continue;
         dist = { km };
       }
-      const points = s.points.filter(ok);
+      const points = s.points.filter(p => ok(p, s));
       if (points.length) out.push({ site: s, points, ...dist });
     }
     const maxKw = r => Math.max(...r.points.map(p => p.kw ?? 0));
@@ -228,7 +253,7 @@ export class Dataset {
     const by = new Map();
     for (const s of this.sites) {
       if (region && s.region !== region) continue;
-      const points = s.points.filter(ok);
+      const points = s.points.filter(p => ok(p, s));
       if (!points.length) continue;
       const key = s.operatorId || `name:${s.operator ?? '?'}`;
       let o = by.get(key);
@@ -269,4 +294,19 @@ export class Dataset {
     }
     return results.filter(r => !drop.has(r));
   }
+}
+
+// Can you pay with a bank card at the charger itself? Two sources:
+//   the NAP's authentication methods (creditCard, debitCard, pinpad, nfc):
+//     a declared list, so a list without them is a "no";
+//   OpenStreetMap's payment:cards/contactless... (site.osm.cards): yes or no
+//     when the community tagged it, absent otherwise.
+// Yes when either says yes (a terminal one source missed is still there);
+// `disagree` when they contradict, so the answer can say "check on site".
+const NAP_CARD = new Set(['creditCard', 'debitCard', 'pinpad', 'nfc']);
+export function cardPayment(site) {
+  const nap = site.payment?.length ? site.payment.some(m => NAP_CARD.has(m)) : null;
+  const osm = typeof site.osm?.cards === 'boolean' ? site.osm.cards : null;
+  const value = nap === true || osm === true ? true : nap === false || osm === false ? false : null;
+  return { value, nap, osm, disagree: nap !== null && osm !== null && nap !== osm };
 }

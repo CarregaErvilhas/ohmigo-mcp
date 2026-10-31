@@ -128,11 +128,65 @@ test('http: list_operators groups the NAP operators and narrows by filter and na
   assert.deepEqual(all.operators.map(o => [o.operatorId, o.sites]), [['GLPP', 2], ['CONT', 2]]);
   assert.equal(all.operators[1].maxVoltage, 1000);
   assert.ok(all.notes.length >= 1);
-  const dc = (await call('list_operators', { min_voltage: 950 })).structuredContent;
-  assert.deepEqual(dc.operators.map(o => o.operatorId), ['CONT']);
+  // OpenStreetMap's 1000 V replaces the NAP's 920 V on Galp's CCS.
+  assert.deepEqual((await call('list_operators', { min_voltage: 950 })).structuredContent.operators.map(o => o.operatorId), ['GLPP', 'CONT']);
+  const fast = (await call('list_operators', { min_kw: 140 })).structuredContent;
+  assert.deepEqual(fast.operators.map(o => o.operatorId), ['CONT']);
   const galp = (await call('list_operators', { query: 'galp' })).structuredContent;
   assert.deepEqual(galp.operators.map(o => o.operatorId), ['GLPP']);
 });
+
+test('http: lookup_charger finds a site by its NAP name and tells the driver what to know before going', async () => {
+  const d = (await call('lookup_charger', { query: 'Marrazes', lang: 'en' })).structuredContent;
+  const [c] = d.sites;
+  assert.equal(c.siteId, 'GLP-LRA-00156');
+  assert.equal(c.name, 'Galp Marrazes');
+  assert.deepEqual(c.hours, { nap: '24/7', osm: '24/7' });
+  assert.equal(c.openNow, true);
+  assert.equal(c.cardPayment, true);
+  assert.deepEqual(c.support, { phone: '800222222' });
+  assert.equal(c.osm.manufacturer, 'Efacec');
+  // The NAP lists no card, OSM says there's a terminal: the answer says so.
+  assert.ok(d.notes.some(n => /GLP-LRA-00156.*bank card/.test(n)));
+  const ccs = c.sockets.find(g => g.connector === 'CCS');
+  assert.equal(ccs.volts, 1000);
+  assert.equal(ccs.napVolts, 920);
+  assert.equal(ccs.cable, true);
+  assert.equal(c.sockets.find(g => g.connector === 'T2').cable, false);
+  assert.ok(d.notes.some(n => /OpenStreetMap/.test(n)));
+});
+
+test('http: find_chargers filters by bank card, fixed cable and opening hours', async () => {
+  const card = (await call('find_chargers', { place: 'Leiria', card_payment: true })).structuredContent;
+  assert.deepEqual(card.sites.map(s => s.siteId).sort(), ['CNT-9648PR0002', 'GLP-LRA-00156']);
+  const own = (await call('find_chargers', { place: 'Leiria', cable_attached: false })).structuredContent;
+  assert.ok(own.sites.flatMap(s => s.points).every(p => p.cable === false));
+  // Continente's T2 car park closes at 21:00 (Lisbon), so at 23:00 it's out.
+  const night = (await call('find_cheapest_charging', { place: 'Leiria', open_now: true, at: nextLisbon(23), battery_kwh: 58, start_pct: 20 })).structuredContent;
+  assert.ok(!night.results.some(q => q.siteId === 'CNT-9648PL0001'));
+  const noon = (await call('find_cheapest_charging', { place: 'Leiria', open_now: true, at: nextLisbon(12), battery_kwh: 58, start_pct: 20 })).structuredContent;
+  assert.ok(noon.results.some(q => q.siteId === 'CNT-9648PL0001'));
+});
+
+test('http: an estimate on OpenStreetMap power says so', async () => {
+  const r = (await call('estimate_charging_cost', { point_id: 'CNT-9648PR0002/9648PR0002.01', battery_kwh: 58, start_pct: 20, lang: 'en' })).structuredContent;
+  const [q] = r.results;
+  assert.equal(q.kw, 150);
+  assert.equal(q.napKw, 120);
+  assert.ok(q.assumptions.some(x => /OpenStreetMap/.test(x)));
+});
+
+// The next time it's `hour`:00 in Lisbon, as an ISO instant (within the
+// window the cost tools accept).
+function nextLisbon(hour) {
+  const now = new Date();
+  for (let h = 1; h <= 48; h++) {
+    const at = new Date(Math.ceil(now.getTime() / 3_600_000) * 3_600_000 + (h - 1) * 3_600_000);
+    const local = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Lisbon', hour: '2-digit', hourCycle: 'h23' }).format(at);
+    if (Number(local) === hour) return at.toISOString();
+  }
+  throw new Error('no such hour');
+}
 
 test('http: at outside the window is refused', async () => {
   const r = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, at: '1970-01-01T00:00:00Z' });

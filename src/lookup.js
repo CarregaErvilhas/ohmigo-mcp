@@ -12,7 +12,8 @@
 //     Networks outside MOBI.E use other ids (Tesla publishes UUIDs), which
 //     only match whole.
 //   - words: every word of the query has to appear in what we know about the
-//     site: operator, the brand names in offers/networks.json, OpenStreetMap's
+//     site: operator, the brand names in offers/networks.json, the site's
+//     name on the NAP ("Auchan Cascais"), OpenStreetMap's
 //     name/brand/operator (the `osm` block nap-dashboard adds), town and
 //     address. "Continente Leiria" = a site whose words include "continente"
 //     AND "leiria". A word matches the start of a site word ("galp" finds
@@ -105,6 +106,8 @@ export class Index {
       const op = site.operator ? site : prefixOp.get(site.id.split('-')[0]) || {};
       const fields = {
         operator: words([op.operator, op.operatorId, ...(brands.get(op.operatorId) || [])].join(' ')),
+        // The NAP's own name for the site ("Auchan Cascais").
+        name: words(site.name),
         osm: words([site.osm?.name, site.osm?.brand, site.osm?.operator].join(' ')),
         city: words(site.city),
         address: words(site.address),

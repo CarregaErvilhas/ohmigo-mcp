@@ -19,6 +19,8 @@ assistant found out about the car:
 
 1. **Charging curve** (kW at each SoC): we walk it 1 % at a time, capped by
    the charger. This is the best case.
+   The charger's power is OpenStreetMap's where it differs from the NAP's
+   ([05](05-dataset.md)), and the estimate says so in its assumptions.
 2. **10-80 % time**: 70 % of the battery charged in that many minutes gives
    the car's real average speed below 80 %. Above 80 % we assume it drops.
 3. **Nothing**: a share of the peak power below 80 % and a smaller share

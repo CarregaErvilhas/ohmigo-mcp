@@ -37,6 +37,7 @@
 
 import { applicable, simulate } from './ceme.js';
 import { estimateSession } from './charging.js';
+import { siteOpen } from './hours.js';
 import { localOffset, localTime, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
 import { napPlan } from './live.js';
@@ -220,7 +221,8 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     pointId: `${site.id}/${point.id}`, siteId: site.id, code: site.code,
     operator: site.operator, address: site.address, city: site.city,
     lat: site.lat, lon: site.lon, region: site.region,
-    kw: point.kw, connector: point.connector, dc: point.dc, regime: point.regime,
+    kw: point.kw, ...(point.napKw !== undefined && { napKw: point.napKw }), volts: point.v ?? undefined,
+    cable: point.cable ?? undefined, connector: point.connector, dc: point.dc, regime: point.regime,
     status: lp?.status ?? null,
     session: {
       kwhBilled: r2(session.kwh), kwhToBattery: r2(session.batteryKwh),
@@ -231,6 +233,11 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     assumptions: [...session.assumptions],
     options: [],
   };
+  // Power from OpenStreetMap instead of the NAP (data.js): it sets the
+  // duration and the price band, so the estimate says so.
+  if (point.napKw !== undefined) base.assumptions.push(t('assume.osmKw', { kw: point.kw, nap: point.napKw }));
+  const hours = siteOpen(site, start);
+  if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: [hours.nap, hours.osm].filter(Boolean).join(' / ') }));
   const direct = offersAt(site, point, audiences);
 
   if (point.regime === 'sem_ceme') {
