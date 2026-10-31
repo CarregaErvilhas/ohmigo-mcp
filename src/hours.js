@@ -115,7 +115,8 @@ const MINUTE_MS = 60_000;
 const neverCloses = text => text === '24/7' || !parseHours(text);
 export function closesDuring(site, start, end) {
   if (neverCloses(site.hours) && neverCloses(site.osm?.openingHours)) return null;
-  const first = start.getTime(), last = end.getTime() - 1;
+  // The end to the minute, as the sentences show it: 21:00:20 reads 21:00.
+  const first = start.getTime(), last = Math.floor(end.getTime() / MINUTE_MS) * MINUTE_MS - 1;
   if (last < first) return null;
   const closed = t => siteOpen(site, new Date(t)).open === false;
   let open = null; // the last sample seen open

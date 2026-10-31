@@ -367,14 +367,14 @@ async function withLive(live, ctx, t) {
 const MAX_KINDS = 8;
 // JSON with object keys sorted: the dataset lists a socket's plans in no
 // fixed order, and two sockets with the same fees must give the same key.
+const canonical = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x)
+  ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x);
 // Sockets with the same key are one line in an estimate. operatorInferred: a
 // socket on a lent site must not merge into a named sibling's, or its
 // assumption goes with it. Hours likewise: merged across sites with different
 // hours, a closing warning would be lost or invented.
 export const socketKindKey = (site, point) => canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, site.operatorId, !!site.operatorInferred, site.hours ?? null, site.osm?.openingHours ?? null]);
 
-const canonical = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x)
-  ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x);
 function pointsFor(ds, live, a, t) {
   if (a.point_id) {
     const hit = ds.findPoint(a.point_id);

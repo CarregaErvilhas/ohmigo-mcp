@@ -55,6 +55,7 @@ test('hours: closesDuring gives the first closed instant, at the end of the sess
 });
 
 test('hours: a session ending exactly at closing time fits', () => {
+  assert.equal(closesDuring({ region: 'CONT', hours: 'Mo-Su 09:00-21:00' }, at('2026-11-02T20:00:00Z'), at('2026-11-02T21:00:20Z')), null, 'it reads 21:00 too');
   const site = { region: 'CONT', hours: 'Mo-Su 09:00-21:00' };
   assert.equal(closesDuring(site, at('2026-11-02T20:00:00Z'), at('2026-11-02T21:00:00Z')), null);
   assert.deepEqual(closesDuring(site, at('2026-11-02T20:00:00Z'), at('2026-11-02T21:01:00Z')), at('2026-11-02T21:00:00Z'));

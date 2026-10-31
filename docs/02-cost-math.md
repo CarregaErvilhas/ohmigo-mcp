@@ -206,8 +206,10 @@ and that a bank card at the terminal pays the same (`walkUp`), which the
 label then says.
 Some of these chargers also have an `AD_HOC_PAYMENT` price in MOBI.E's file
 (HighGreenPower): it's the same walk-up price, so the label says you pay by
-bank card / QR, and when the NAP price is missing (live feed down) the
-`adhoc` option takes its place.
+bank card / QR, and when there's no NAP price per kWh (the live entry lists
+only time or flat fees, or nothing is known) the `adhoc` option takes its
+place. The dataset's price stands in when the live feed is down or its entry
+has no fees.
 
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the
