@@ -83,6 +83,7 @@ export const MESSAGES = {
     'promo.note.beaten': () => "it doesn't add to the promotion already in this price",
     'promo.note.freeSpent': ({ free }) => `all of this month's ${free} free kWh are used, so none come off this session`,
 
+    'note.liveAge': ({ min }) => `Live data (charger status, NAP prices) published ${min} min ago, so it may have changed: a charger shown free may be taken, one shown busy may be free. Tell the user how old it is.`,
     'note.outside': () => 'Outside MOBI.E: pay the operator directly, no CEME.',
     'note.noUserTariff': () => "None of the user's tariffs apply at this socket.",
     'note.noUserTariff.driver': () => 'None of your tariffs apply at this socket.',
@@ -207,6 +208,7 @@ export const MESSAGES = {
     'promo.note.beaten': () => 'não se soma à promoção que já está neste preço',
     'promo.note.freeSpent': ({ free }) => `os ${free} kWh grátis deste mês já foram todos gastos, por isso nenhum sai deste carregamento`,
 
+    'note.liveAge': ({ min }) => `Dados em tempo real (estado dos postos, preços do PAN) publicados há ${min} min, por isso podem ter mudado: um posto dado como livre pode estar ocupado, e um dado como ocupado pode estar livre. Diz ao utilizador a idade desta informação.`,
     'note.outside': () => 'Fora da MOBI.E: paga-se directamente ao operador, sem CEME.',
     'note.noUserTariff': () => 'Nenhum dos tarifários do utilizador se aplica a esta tomada.',
     'note.noUserTariff.driver': () => 'Nenhum dos teus tarifários se aplica a esta tomada.',

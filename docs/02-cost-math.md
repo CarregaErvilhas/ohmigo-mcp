@@ -259,4 +259,4 @@ Two summary fields:
 | Price outside MOBI.E | an assumption line: the NAP's price taken as the whole €/kWh, plus the region's VAT |
 | Direct offers from a price list | the source and the date it was checked; "may be out of date" after 90 days |
 | A CEME promotion in the price | an assumption naming it and its end date, if it has one |
-| Live status stale | `live.fresh: false`, said in the footer |
+| Live data old | `live.fresh: false` and/or a note with its age, said in the footer |
