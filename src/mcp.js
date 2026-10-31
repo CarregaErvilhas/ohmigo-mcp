@@ -197,9 +197,11 @@ function siteFacts(site, t, at = new Date()) {
   const notes = [];
   if (hours.disagree) notes.push(t('note.hoursDisagree', { site: site.id, nap: hours.nap, osm: hours.osm }));
   if (card.disagree) notes.push(t('note.cardDisagree', { site: site.id, napYes: card.nap }));
+  if (site.operatorInferred) notes.push(t('assume.operatorInferred', { operator: site.operator }));
   const phone = site.phone ?? site.osm?.phone;
   return {
     facts: {
+      operatorInferred: site.operatorInferred,
       name: site.name ?? undefined,
       hours: hours.nap || hours.osm ? { nap: hours.nap ?? undefined, osm: hours.osm ?? undefined } : undefined,
       openNow: hours.open ?? undefined,
@@ -421,7 +423,9 @@ function pointsFor(ds, live, a, t) {
       if (named.length) points = named;
     }
     for (const point of points) {
-      const key = canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, h.site.operatorId]);
+      // operatorInferred: a socket on a lent site must not merge into a named
+      // sibling's, or its assumption goes with it.
+      const key = canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, h.site.operatorId, !!h.site.operatorInferred]);
       const cur = kinds.get(key);
       if (!cur || (!free(cur.site, cur.point) && free(h.site, point))) kinds.set(key, { site: h.site, point });
     }
@@ -564,7 +568,7 @@ export function createServer(getDataset, live) {
       sites: cards,
       // OpenStreetMap's licence (ODbL) asks for this wherever its data shows.
       credit: r.results.some(h => h.site.osm) ? t('credit.osm') : undefined,
-    }, [...notes, ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g)}`).join(', ')}`)].join('\n'));
+    }, [...new Set(notes), ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g)}`).join(', ')}`)].join('\n'));
   });
 
   server.registerTool('find_chargers', {
@@ -632,7 +636,8 @@ export function createServer(getDataset, live) {
       const direct = [...new Set(OFFERS.filter(x => o.operatorId && x.scope?.operatorIds?.includes(o.operatorId)).map(x => x.label))];
       return { ...o, directOffers: direct.length ? direct : undefined };
     });
-    const notes = [t('note.operators'), ...voltageNotes(ds, a, t)];
+    const notes = [t('note.operators'), ...voltageNotes(ds, a, t),
+      ...shown.filter(o => o.inferredSites).map(o => t('note.operatorsInferred', { operator: o.name, n: o.inferredSites }))];
     return ok({ ...meta(ds, live, lang), total: ops.length, notes, operators: shown },
       [...notes, `${ops.length} operators:`, ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${o.sites} sites, ${o.points} sockets (${o.dcPoints} DC), max ${o.maxKw ?? '?'} kW`)].join('\n'));
   });

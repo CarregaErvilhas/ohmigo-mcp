@@ -247,7 +247,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   const lp = live?.get(site.id, point.id) ?? null;
   const base = {
     pointId: `${site.id}/${point.id}`, siteId: site.id, code: site.code,
-    operator: site.operator, address: site.address, city: site.city,
+    operator: site.operator, ...(site.operatorInferred && { operatorInferred: true }), address: site.address, city: site.city,
     lat: site.lat, lon: site.lon, region: site.region,
     kw: point.kw, ...(point.napKw !== undefined && { napKw: point.napKw }), volts: point.v ?? undefined,
     cable: point.cable ?? undefined, connector: point.connector, dc: point.dc, regime: point.regime,
@@ -264,6 +264,7 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
   // Power from OpenStreetMap instead of the NAP (data.js): it sets the
   // duration and the price band, so the estimate says so.
   if (point.napKw !== undefined) base.assumptions.push(t('assume.osmKw', { kw: point.kw, nap: point.napKw }));
+  if (site.operatorInferred) base.assumptions.push(t('assume.operatorInferred', { operator: site.operator }));
   const hours = siteOpen(site, start);
   if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: [hours.nap, hours.osm].filter(Boolean).join(' / ') }));
   const direct = offersAt(site, point, audiences);

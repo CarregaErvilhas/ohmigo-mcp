@@ -85,6 +85,10 @@ Monday.
   saying so.
 - `cable`: `true` when the cable is fixed to the charger, `false` when it's a
   socket and the driver brings their own (the NAP's `connectorFormat`).
+- `operator`, `operatorId`: as the NAP publishes them, which can be neither.
+  `src/lookup.js` then fills them from the site's id prefix when it loads the
+  file and adds `operatorInferred` (see
+  [01](01-how-it-works.md#finding-the-charger-the-user-means)).
 - `name`, `hours`, `locationDescription`, `phone` (site): the operator's name
   for the site ("Auchan Cascais"), its opening hours (nap-dashboard converts
   the NAP's DATEX II into OpenStreetMap's `opening_hours` syntax, so
