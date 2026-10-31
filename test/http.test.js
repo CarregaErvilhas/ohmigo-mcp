@@ -196,7 +196,11 @@ test('http: /healthz, robots.txt, favicon and 404', async () => {
   const robots = await fetch(`${base}/robots.txt`);
   assert.equal(robots.status, 200);
   assert.match(robots.headers.get('content-type'), /text\/plain/);
-  assert.equal((await fetch(`${base}/favicon.ico`)).status, 204);
+  for (const [path, type] of [['/favicon.ico', 'image/x-icon'], ['/icon.svg', 'image/svg+xml'], ['/icon-512.png', 'image/png'], ['/apple-touch-icon.png', 'image/png']]) {
+    const r = await fetch(`${base}${path}`);
+    assert.equal(r.status, 200, path);
+    assert.equal(r.headers.get('content-type'), type);
+  }
   const nf = await fetch(`${base}/nope`);
   assert.equal(nf.status, 404);
   assert.match(nf.headers.get('content-type'), /text\/plain/);
