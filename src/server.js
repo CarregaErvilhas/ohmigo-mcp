@@ -71,8 +71,12 @@ if (!process.env.DATASET_PATH && ds.etag !== undefined) {
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
+    // Stops reading but leaves the socket open: the caller still has to get
+    // the 413 out through it.
+    const tooLarge = () => { req.pause(); reject(Object.assign(new Error('too large'), { status: 413 })); };
+    if (Number(req.headers['content-length']) > MAX_BODY) return tooLarge();
     let size = 0; const chunks = [];
-    req.on('data', c => { size += c.length; if (size > MAX_BODY) { reject(Object.assign(new Error('too large'), { status: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('data', c => { size += c.length; if (size > MAX_BODY) tooLarge(); else chunks.push(c); });
     req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null')); } catch { reject(Object.assign(new Error('bad json'), { status: 400 })); } });
     req.on('error', reject);
   });
@@ -234,7 +238,12 @@ async function handle(req, res) {
   if (req.method !== 'POST') return send(res, 405, { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null });
 
   let body;
-  try { body = await readJson(req); } catch (e) { return send(res, e.status || 400, { error: e.message }); }
+  try { body = await readJson(req); } catch (e) {
+    // The rest of a body that's too large stays unread, so this connection
+    // can't carry another request: Node closes it once the response is out.
+    if (e.status === 413) res.setHeader('connection', 'close');
+    return send(res, e.status || 400, { error: e.message });
+  }
   // QA mode logs every call, so a tester can see what the client actually sent.
   if (QA) console.log('[ohmigo] qa:', body?.method, body?.params?.name ?? '', JSON.stringify(body?.params?.arguments ?? {}));
   const server = createServer(() => ds, live);

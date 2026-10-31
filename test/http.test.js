@@ -393,6 +393,32 @@ test('http: the path is the path: a target starting with two slashes names no ho
   assert.match(await get('http://example.com/healthz'), /^HTTP\/1\.1 200 /);
 });
 
+test('http: an oversized body gets a 413 and the connection closes without reading the rest', async () => {
+  const size = 256 * 1024 + 1;
+  const declared = `POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: ${size}`;
+  // Declared up front: answered without waiting for the body at all.
+  assert.match(await rawRequest(declared), /^HTTP\/1\.1 413 /);
+  // No declared length: the server stops once the chunks pass the limit.
+  const chunked = 'POST /mcp HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked';
+  const chunk = 'x'.repeat(64 * 1024);
+  const body = `${chunk.length.toString(16)}\r\n${chunk}\r\n`.repeat(5);
+  const r = await rawRequest(chunked, body);
+  assert.match(r, /^HTTP\/1\.1 413 /);
+  assert.match(r, /connection: close/i);
+  assert.match(r, /too large/);
+  assert.equal((await fetch(`${base}/healthz`)).status, 200);
+});
+
+test('http: a body at the limit is still read', async () => {
+  const pad = ' '.repeat(255 * 1024);
+  const r = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'mcp-protocol-version': '2025-06-18' },
+    body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}${pad}`,
+  });
+  assert.equal(r.status, 200);
+});
+
 // Last: it stops the server.
 test('http: SIGTERM lets the process exit cleanly', async () => {
   server.kill('SIGTERM');
