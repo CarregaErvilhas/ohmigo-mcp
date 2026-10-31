@@ -54,7 +54,11 @@ function head(lang) {
     `<meta property="og:image" content="${SITE_URL}/og.png">`,
     `<meta property="og:image:width" content="1200">`,
     `<meta property="og:image:height" content="630">`,
+    `<meta property="og:image:alt" content="${attr(text(t['meta.ogalt']))}">`,
     `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:title" content="${attr(text(t['meta.title']))}">`,
+    `<meta name="twitter:description" content="${attr(text(t['meta.desc']))}">`,
+    `<meta name="twitter:image" content="${SITE_URL}/og.png">`,
     // JSON in a script tag: "<" escaped so no string can close it.
     `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>`,
   ].join('\n');
@@ -69,6 +73,8 @@ export function render(lang) {
     .replace(/<!-- seo:[^>]*-->/, head(lang))
     // Every data-i element is empty in the source (test/site.test.js).
     .replace(/(<(\w+)\b[^>]*\bdata-i="([^"]+)"[^>]*>)(<\/\2>)/g, (m, open, tag, key, close) => open + (t[key] ?? '') + close)
+    // Names for screen readers: an attribute, so data-i can't fill them.
+    .replace(/data-aria="([^"]+)"/g, (m, key) => `aria-label="${attr(t[key] ?? '')}"`)
     .replace(/ aria-current="page"/g, '')
     .replace(`data-lang="${lang}"`, `data-lang="${lang}" aria-current="page"`);
 }
