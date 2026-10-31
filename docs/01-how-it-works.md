@@ -91,6 +91,10 @@ The tool list has a budget too (`TOOLS_MAX_CHARS` in `test/http.test.js`).
 When it bites, trim before you raise it, and prefer one more argument on an
 existing tool over a new tool that does almost the same thing.
 
+Whether a model actually follows all this is what `evals/` checks: a model
+plays the assistant against a local server, and its tool calls and replies are
+graded ([evals/README.md](../evals/README.md)).
+
 ## Files
 
 | File | What it does |
