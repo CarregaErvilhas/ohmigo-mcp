@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { bandFor, BLOG_HOST, MAX_EUR_PER_KWH, MAX_LABEL_LENGTH, MIN_EUR_PER_KWH, newestPost, offerProblems, parseTables, toOffers } from '../src/offers-parse.js';
-import { AUDIENCES, gaps, isStale, mergeOffers, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
+import { AUDIENCES, gaps, isStale, mergeOffers, NAP_NOTES, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
 
 const HEAD = `<thead><tr><th rowspan="2">Operador - Plano</th><th rowspan="2">Postos</th><th colspan="2">AC</th><th colspan="6">DC</th></tr>
 <tr><th>&le;7.4</th><th>11..22</th><th>≤50</th><th>100</th><th>120</th><th>150</th><th>180</th><th>&gt;180</th></tr></thead>`;
@@ -43,22 +43,41 @@ test('parser: a price cell that is not a number fails loudly; an empty one is "n
   for (const cell of ['', ' ', '&nbsp;']) assert.equal(parseTables(withCell(cell))[0].rows[1].prices.ac7, null, JSON.stringify(cell));
 });
 
-test('parser: a price outside the bounds fails loudly', () => {
+test('toOffers: a price outside the bounds fails loudly, but only on a row that ships', () => {
+  const ship = html => toOffers(parseTables(html), NETS, { url: POST, checkedAt: '2026-10-14', origin: 'custofinal' });
   const withPrice = price => FIXTURE.replace('<td>0,41</td>', `<td>${String(price).replace('.', ',')}</td>`);
-  for (const price of [MIN_EUR_PER_KWH, MAX_EUR_PER_KWH]) assert.equal(parseTables(withPrice(price))[0].rows[1].prices.ac7, price);
+  for (const price of [MIN_EUR_PER_KWH, MAX_EUR_PER_KWH]) {
+    assert.equal(ship(withPrice(price)).offers.find(o => o.id === 'roamy-rede-mobi-e').prices.ac7, price);
+  }
   // 41 is 0,41 without its comma; 0,004 is a price in the wrong unit.
-  for (const price of [41, 0.004, 0]) assert.throws(() => parseTables(withPrice(price)), /Roamy.*out of bounds/, String(price));
+  for (const price of [41, 0.004, 0]) assert.throws(() => ship(withPrice(price)), /Roamy.*out of bounds/, String(price));
+  // Newco is unmapped and Somewhere is scope "unknown": neither ships, so a
+  // typo in them doesn't hold back the rest of the update.
+  assert.deepEqual(ship(FIXTURE.replace('<td>0,49</td></tr>\n</tbody>', '<td>49</td></tr>\n</tbody>')).unmapped, ['Newco']);
+  assert.deepEqual(ship(FIXTURE.replace('<td>0,5</td>', '<td>50</td>')).skipped, ['Somewhere - App @ Alguns Mobi.E']);
+});
+
+test('parser: a row with more cells than bands fails loudly; a short one is fine', () => {
+  const extra = FIXTURE.replace('<td>0,79</td><td>0,79</td></tr>', '<td>0,79</td><td>0,79</td><td>0,80</td></tr>');
+  assert.throws(() => parseTables(extra), /Roamy.*9 price cells.*8 power bands/);
+  assert.equal(parseTables(FIXTURE)[0].rows[3].prices.ac22, null);
 });
 
 test('parser: a bad label fails loudly, on rows that would be left out too', () => {
   const withName = name => FIXTURE.replace('<td>Roamy</td>', `<td>${name}</td>`);
+  const unsafe = /control or format characters, angle brackets or entities/;
   assert.throws(() => parseTables(withName('R'.repeat(MAX_LABEL_LENGTH + 1))), /too long/);
   assert.equal(parseTables(withName('R'.repeat(MAX_LABEL_LENGTH)))[0].rows[1].name.length, MAX_LABEL_LENGTH);
   // Real tags are stripped; these only appear once the entities are decoded.
-  assert.throws(() => parseTables(withName('&lt;script&gt;x')), /control characters or angle brackets/);
-  assert.throws(() => parseTables(withName('Ro&#27;amy')), /control characters or angle brackets/);
+  assert.throws(() => parseTables(withName('&lt;script&gt;x')), unsafe);
+  assert.throws(() => parseTables(withName('Ro&#27;amy')), unsafe);
+  assert.throws(() => parseTables(withName('Ro&#8238;amy')), unsafe, 'a right-to-left override is invisible');
+  // decode() knows only a few entities; the rest would be shown as typed.
+  assert.throws(() => parseTables(withName('Caf&eacute;')), unsafe);
+  assert.throws(() => parseTables(withName('Caf&#xe9;')), unsafe);
+  assert.equal(parseTables(withName('A &amp; B; C'))[0].rows[1].name, 'A & B; C');
   // "Newco" isn't in NETS, but its label still ends up in the PR.
-  assert.throws(() => parseTables(FIXTURE.replace('<td>Newco</td>', '<td>New&lt;co</td>')), /control characters or angle brackets/);
+  assert.throws(() => parseTables(FIXTURE.replace('<td>Newco</td>', '<td>New&lt;co</td>')), unsafe);
 });
 
 test('toOffers: the source must be https on the blog', () => {
@@ -82,7 +101,7 @@ test('offerProblems: nothing on a good offer, each problem on a bad one', () => 
 });
 
 test('newestPost: by publication date, so editing an old post changes nothing', () => {
-  const post = (id, published, updated, table = true) => ({ id, published: { $t: published }, updated: { $t: updated }, content: { $t: table ? '<table class="evtable">' : '<p>hi</p>' } });
+  const post = (id, published, updated, table = true) => ({ id, published: { $t: published }, updated: { $t: updated }, content: { $t: table ? '<table class="evtable"><th>Operador</th></table>' : '<p>hi</p>' } });
   const old = post('old', '2026-03-01T10:00:00.000-08:00', '2026-10-30T10:00:00.000-07:00');
   const current = post('current', '2026-10-14T14:13:01.133-07:00', '2026-10-14T14:13:01.133-07:00');
   const chat = post('chat', '2026-10-20T10:00:00.000-07:00', '2026-10-20T10:00:00.000-07:00', false);
@@ -93,6 +112,10 @@ test('newestPost: by publication date, so editing an old post changes nothing', 
   const early = post('early', '2026-10-15T00:30:00.000+01:00', '2026-10-15T00:30:00.000+01:00');
   assert.equal(newestPost([early, late]).id, 'late');
   assert.equal(newestPost([chat]), undefined);
+  // The small "price vs fuel" scale table has the same class but isn't a price
+  // table, even if the post says "Operador" somewhere else.
+  const scale = { ...chat, content: { $t: '<p>Operador</p><table class="evtable"><th>Preço kWh</th></table>' } };
+  assert.equal(newestPost([current, scale]).id, 'current');
 });
 
 test('toOffers: scope from networks.json, walk-up, fees, unmapped and unknown labels', () => {
@@ -214,9 +237,9 @@ test('offers/*.json pass the sanity check', () => {
   for (const label of [...unmapped, ...skipped.flatMap(s => s.split(' @ '))]) clean(label, offerProblems({ label }));
   for (const o of manual) clean(`manual ${o.id}`, offerProblems(o, sourceHosts));
   for (const o of OFFERS) clean(`merged ${o.id}`, offerProblems(o, sourceHosts));
-  for (const n of file('nap-notes').notes) clean(n.why, offerProblems({ source: n.source }, sourceHosts));
+  for (const n of NAP_NOTES) clean(n.why, offerProblems({ source: n.source }, sourceHosts));
   for (const network of Object.keys(file('networks').networks)) clean(network, offerProblems({ network }));
-  for (const a of Object.values(file('audiences').audiences)) clean(a.en, [...offerProblems({ label: a.en }), ...offerProblems({ label: a.pt })]);
+  for (const a of Object.values(AUDIENCES)) clean(a.en, [...offerProblems({ label: a.en }), ...offerProblems({ label: a.pt })]);
 });
 
 test('noteFor: a NAP-price note matches by operator or by site', () => {

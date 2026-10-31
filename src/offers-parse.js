@@ -34,12 +34,14 @@ export const MAX_EUR_PER_KWH = 2;
 // paragraph isn't an operator name any more.
 export const MAX_LABEL_LENGTH = 100;
 
-// Control characters, or the brackets of a tag that survived decoding.
-const UNSAFE_TEXT = /[\p{Cc}<>]/u;
+// Control characters, invisible format characters (a right-to-left override
+// makes text read differently from what it says), the brackets of a tag that
+// survived decoding, or an entity decode() doesn't know.
+const UNSAFE_TEXT = /[\p{Cc}\p{Cf}<>]|&[#\w]+;/u;
 
 // Everything wrong with an offer, as sentences (none = sane). Checks only the
-// fields it's given: the parser calls it with a bare row, and a manual.json
-// override lists just what it changes. `hosts`: where its source may be.
+// fields it's given: the parser and toOffers() each pass the part they check,
+// and a manual.json override lists just what it changes. `hosts`: where its source may be.
 export function offerProblems(offer, hosts = [BLOG_HOST]) {
   const problems = [];
   for (const field of ['label', 'provider', 'plan', 'network']) {
@@ -47,7 +49,7 @@ export function offerProblems(offer, hosts = [BLOG_HOST]) {
     if (text == null) continue;
     if (typeof text !== 'string') problems.push(`${field} is not text`);
     else if (text.length > MAX_LABEL_LENGTH) problems.push(`${field} is too long (${text.length}, at most ${MAX_LABEL_LENGTH})`);
-    else if (UNSAFE_TEXT.test(text)) problems.push(`${field} ${JSON.stringify(text)} has control characters or angle brackets`);
+    else if (UNSAFE_TEXT.test(text)) problems.push(`${field} ${JSON.stringify(text)} has control or format characters, angle brackets or entities`);
   }
   for (const [band, price] of Object.entries(offer.prices || {})) {
     if (price === null) continue;
@@ -72,7 +74,7 @@ function assertSane(offer) {
 // would make its old prices look like the latest ones.
 export function newestPost(entries) {
   return entries
-    .filter(e => /class="[^"]*evtable/.test(e.content?.$t || ''))
+    .filter(e => priceTables(e.content?.$t || '').length)
     .sort((a, b) => Date.parse(b.published.$t) - Date.parse(a.published.$t))[0];
 }
 
@@ -99,14 +101,16 @@ const decode = s => s
 
 const cells = rowHtml => [...rowHtml.matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)].map(m => decode(m[1]));
 
+// The bodies of the post's price tables. The blog also has a small "price vs
+// fuel" scale table with the same class; price tables are the ones with an
+// "Operador" column.
+const priceTables = html => [...html.matchAll(/<table\b[^>]*class="[^"]*evtable[^"]*"[^>]*>([\s\S]*?)<\/table>/gi)]
+  .map(m => m[1]).filter(t => /Operador/i.test(t));
+
 // html: the post body. Returns [{ caption, kind, bands: [key...], rows: [{ name, network, prices: { key: number|null } }] }]
 export function parseTables(html) {
-  const tables = [...html.matchAll(/<table\b[^>]*class="[^"]*evtable[^"]*"[^>]*>([\s\S]*?)<\/table>/gi)].map(m => m[1]);
   const out = [];
-  for (const t of tables) {
-    // The blog also has a small "price vs fuel" scale table with the same
-    // class. Price tables are the ones with an "Operador" column.
-    if (!/Operador/i.test(t)) continue;
+  for (const t of priceTables(html)) {
     const caption = decode(t.match(/<caption\b[^>]*>([\s\S]*?)<\/caption>/i)?.[1] || '');
     if (!caption) throw new Error('price table without a caption');
     const kind = /subscri[çc][õo]es pagas/i.test(caption) && !/sem\b/i.test(caption) ? 'subscription' : 'payg';
@@ -126,11 +130,13 @@ export function parseTables(html) {
       caption, kind, bands,
       rows: rows.map(([name, network, ...vals]) => {
         // Some rows stop early (no trailing empty cells): missing = not offered.
-        const prices = Object.fromEntries(bands.map((k, i) => [k, priceOf(vals[i], name)]));
-        // Checked here, not only in toOffers(): rows it leaves out still reach
-        // the pull request through `unmapped` and `skipped`.
-        assertSane({ label: name, network, prices });
-        return { name, network, prices };
+        // Too many cells can't be read: we couldn't tell which one is extra,
+        // so the prices could land in the wrong power bands.
+        if (vals.length > bands.length) throw new Error(`offer ${JSON.stringify(name)}: ${vals.length} price cells for ${bands.length} power bands`);
+        // Labels are checked on every row: the ones toOffers() leaves out still
+        // reach the pull request through `unmapped` and `skipped`.
+        assertSane({ label: name, network });
+        return { name, network, prices: Object.fromEntries(bands.map((k, i) => [k, priceOf(vals[i], name)])) };
       }),
     });
   }
@@ -157,7 +163,11 @@ function feeOf(text) {
 // Turns the parsed tables into offers, using networks.json to say which
 // chargers each "Postos" label means. Labels missing from networks.json are
 // returned in `unmapped` and left out: a human has to say what they mean.
+// Only rows that ship get their prices checked, so a typo in a row left out
+// doesn't hold back the rest of the update.
 export function toOffers(tables, networks, source) {
+  const [badSource] = offerProblems({ source: source.url });
+  if (badSource) throw new Error(badSource);
   const net = new Map(Object.entries(networks).map(([k, v]) => [fold(k), v]));
   const offers = [], unmapped = new Set(), skipped = [];
   for (const t of tables) {
@@ -167,7 +177,8 @@ export function toOffers(tables, networks, source) {
       if (where.scope === 'unknown') { skipped.push(`${r.name} @ ${r.network}`); continue; }
       const { provider, plan } = splitName(r.name);
       const fee = t.kind === 'subscription' ? feeOf(r.name) : null;
-      const offer = {
+      assertSane({ label: r.name, prices: r.prices });
+      offers.push({
         id: slug(`${r.name} ${r.network}`),
         label: r.name, provider, plan, network: r.network,
         scope: where.scope === 'mobie' ? { mobie: true } : { operatorIds: where.operatorIds },
@@ -177,9 +188,7 @@ export function toOffers(tables, networks, source) {
         fee,
         prices: r.prices,
         source: source.url, checkedAt: source.checkedAt, origin: source.origin,
-      };
-      assertSane(offer);
-      offers.push(offer);
+      });
     }
   }
   return { offers, unmapped: [...unmapped], skipped };
