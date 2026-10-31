@@ -165,13 +165,74 @@ user's IP from `X-Forwarded-For`, that IP isn't Cloudflare's, and every
 request gets 403. Direct requests to the origin must answer 403; through
 Cloudflare, 200.
 
-## Rate limiting
+## Rate limiting and load
 
-Not built in. Calls from ChatGPT and Claude come from their servers, not from
-the user's device, so a per-IP limit would throttle all of a platform's users
-as one. The expensive part is the ceme-v2 call, and it's cached (same kWh to
-0.1 and same quarter-hour = same answer, for 5 minutes); after a few failures in
-a row the client stops calling for a while (`BREAKER_*` in `src/ceme.js`)
-and the tools answer without CEME prices. A ranking quotes a capped number
-of plugs, nearest first (`MAX_RANKED_POINTS` in `src/mcp.js`). Put Cloudflare in
-front for DDoS protection; add per-client limits only if abuse shows up.
+There's no per-client limit, on purpose. Calls from ChatGPT and Claude come from
+their servers, not from the user's device, so a per-IP limit would throttle all
+of a platform's users as one. What the server protects instead is the ceme-v2
+key everyone shares, and its own process.
+
+**The key.** The expensive part is the ceme-v2 call, so `src/ceme.js` keeps it
+from running away:
+
+- *Cache.* Replies are kept for `TTL_MS`, capped by entries and by total bytes
+  (`MAX_CACHE_*`); `detail` replies past `MAX_DETAIL_CACHE_BYTES` aren't kept.
+  What counts as the same answer depends on the call. Without a slice profile
+  (only `/dados` and empty sessions): the same kWh to 0.1 and the same
+  quarter-hour. With one, which is every tool: exactly the same slices. So sockets
+  of one charging speed share a call inside a ranking, but a session starting a
+  minute later shares nothing with the last one. The cache mostly saves repeats
+  and the work inside a ranking, not calls between different users.
+- *Quota.* A 429 isn't an outage: it stays out of the breaker. No call goes out
+  until `Retry-After` has passed (bounded, `RETRY_AFTER_*`). Meanwhile a call
+  whose exact key was answered within `STALE_MS` gets that last good answer, and
+  so does one the line refuses: a
+  quote built on it says how old it is, and `/dados` is marked `partial` with
+  `staleSince`. Any other call fails as unavailable, and the tools say this server
+  held the call back, not that the pricing service didn't answer. Since a session
+  starts at the current minute, a repeat of a "now" question has a new key after a
+  minute, so the last good answer mostly helps questions with a fixed `at`,
+  `/dados` and the tariff list.
+- *Outages.* After a few 5xx or timeouts in a row the client stops calling for a
+  while (`BREAKER_*`) and the tools answer without CEME prices.
+- *Concurrency.* Every call goes through one line per process: `MAX_CONCURRENT`
+  at once, `MAX_QUEUED` waiting, first come first served, for at most
+  `MAX_WAIT_MS` (`src/limit.js`), so a slow but living ceme-v2 gets a quick honest
+  answer. The line fits every call the running rankings can make, plus room for
+  estimates. Past that a call fails as unavailable, which doesn't touch the
+  breaker, with the same wording as above. With `month_kwh`, a tariff list that
+  can't be had leaves the free kWh out of the total, and the result says so.
+- *One ranking's share.* `max_minutes` and `available_only` apply first, since
+  duration and status are known before any call. Then a ranking makes one call
+  per distinct charging speed, nearest first, up to `MAX_SIMS_PER_CALL` calls that
+  really go out; what the cache covers is free. Past the cap only the sockets
+  needing a new call are left out: sites outside MOBI.E and speeds already
+  fetched stay. `note.truncated` says how many were left out, and so does
+  `socketsLeftOut` in the result. The first calls always go out, so the cap can't
+  empty a ranking. While the breaker is open or the quota spent the cap is off:
+  those calls are refused here and cost nothing, so the sockets stay listed on
+  their other prices. The speeds past it aren't priced from the nearest one: that
+  reply is for other kWh, so it would need math that belongs to ceme-v2.
+
+**The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets
+(`src/mcp.js`) on the event loop. The tool takes a place before it searches:
+`MAX_RANKINGS` run at once and `MAX_RANKINGS_QUEUED` wait, and past that it says
+to try again in a few seconds. `rank()` in `src/quote.js` first works out the
+sessions, then fires the calls together and waits for them, then prices in chunks
+of `RANK_CHUNK` with a turn for the event loop between them, so `/healthz` keeps
+answering. A request that's abandoned, in either tool, leaves the line and stops
+at the next chunk; its calls still waiting are dropped unless another request
+is waiting on the same one. All of these limits are per process and
+shared by everyone: a burst from one client still slows the others, and can get
+them refused.
+
+**What this doesn't do.** None of it stops anyone from sending requests, or
+keeps one client from spending the shared quota. For that you need a limit at the
+edge: a Cloudflare rate limiting rule on `POST /mcp`, set high enough to pass a
+whole platform's traffic. That rule isn't in this repo and isn't set up by a
+deploy; it's the maintainer's to add in the Cloudflare dashboard. Cloudflare's
+DDoS protection is in front either way.
+
+While the quota is spent, `/healthz` is `degraded` with `ceme-v2: rate limited`
+in `problems`. With the token, `ceme` shows `rateLimitedUntil` and the size of the
+cache.

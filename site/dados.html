@@ -66,6 +66,7 @@ const eur = (v, d = 4) => v == null ? '' : Number(v).toLocaleString('pt-PT', { m
 const tag = (txt, cls = '') => `<span class="tag ${cls}">${esc(txt)}</span>`;
 const fold = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const CEME_DOWN = 'ceme-v2 indisponível de momento.';
+const cemeStale = () => (D.staleSince ? `<p class="err">Dados do ceme-v2 de ${esc(D.staleSince)}: o serviço está a limitar pedidos, por isso podem estar desatualizados.</p>` : '');
 const PERIODS = ['VAZIO', 'FORA_VAZIO', 'CHEIAS', 'PONTA', 'SIMPLES'];
 const REGIME = { mobie: 'MOBI.E', mobie_sem_tarifa: 'MOBI.E sem tarifa OPC', sem_ceme: 'fora MOBI.E' };
 let D, tab = location.hash.slice(1) || 'resumo', q = '';
@@ -89,7 +90,7 @@ function nav() {
 function draw() {
   nav();
   const search = tab === 'resumo' ? '' : `<div class="bar"><input type="search" id="q" placeholder="Filtrar…" value="${esc(q)}"><label id="shown"></label></div>`;
-  $('#app').innerHTML = search + TABS[tab].render(fold(q));
+  $('#app').innerHTML = cemeStale() + search + TABS[tab].render(fold(q));
   const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(q.length, q.length); }
 }
 const match = (f, ...xs) => !f || xs.some(x => fold(x).includes(f));

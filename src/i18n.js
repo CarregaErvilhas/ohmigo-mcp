@@ -89,9 +89,17 @@ export const MESSAGES = {
     'note.userTariffDirect': ({ label }) => `The user's CEME tariff doesn't apply at this socket, but the same app has its own price here: ${label}. That is the total.`,
     'note.userTariffDirect.driver': ({ label }) => `Your CEME tariff doesn't apply at this socket, but the same app has its own price here: ${label}. That is the total.`,
     'note.noTariff': () => 'No CEME tariff applies to this socket.',
+    'assume.monthKwhLost': () => "The kWh already charged this month couldn't be counted (the tariff list isn't available right now), so free kWh promotions aren't in this total.",
+    'assume.cemeStale': ({ minutes }) => `CEME prices are from ${minutes} min ago: the pricing service is limiting requests right now, so they may be slightly out of date.`,
+    'note.cemeBusy': () => "CEME energy prices aren't available right now: this server has reached its limit of requests to the pricing service, which isn't down. So this socket has no CEME total; the other ways to pay are listed. Say so, and suggest trying again in a minute for the CEME price.",
+    'note.cemeBusy.driver': () => "CEME energy prices aren't available right now: this server has reached its limit of requests to the pricing service, which isn't down. So this socket has no CEME total; the other ways to pay are listed. Try again in a minute for the CEME price.",
     'note.noCeme': () => "CEME energy prices are unavailable right now (the pricing service didn't answer), so this socket has no CEME total; the other ways to pay are listed. Say so, and suggest trying again in a few minutes for the CEME price.",
     'note.noCeme.driver': () => "CEME energy prices are unavailable right now (the pricing service didn't answer), so this socket has no CEME total; the other ways to pay are listed. Try again in a few minutes for the CEME price.",
-    'note.truncated': ({ n, total }) => `Only the ${n} nearest of the ${total} sites found were priced, to keep the answer fast; narrow the search (radius_km, corridor_km, filters) to see the rest.`,
+    'note.truncated': ({ n, total, sockets }) => [
+      ...(n < total ? [`Only the ${n} nearest of the ${total} sites found were priced, to keep the answer fast.`] : []),
+      ...(sockets ? [`${sockets} kind${sockets === 1 ? '' : 's'} of socket left out, the furthest charging speeds, to limit calls to the pricing service: a cheaper one may be among them.`] : []),
+      'Narrow the search (radius_km, corridor_km, filters) to see the rest.',
+    ].join(' '),
     'note.tariffsCut': ({ n, total, narrowed }) => narrowed
       ? `Only the first ${n} of the ${total} matching tariffs are listed.`
       : `Only the first ${n} of the ${total} tariffs are listed; if the user's isn't here, call again with query (the CEME or tariff name) instead of saying it doesn't exist.`,
@@ -101,6 +109,10 @@ export const MESSAGES = {
     'err.tariffs': () => "The CEME tariff list can't be fetched right now (the pricing service didn't answer). Try again in a few minutes.",
     'err.placeWhich': ({ place, towns }) => `"${place}" fits several towns: ${towns}. Ask the user which one (or pass lat/lon) and call again with its full name.`,
     'assume.sites': ({ n }) => `prices from ${n} NAP sites at the same spot, priced together; check the address of the socket you pick`,
+    'err.busy': () => 'Too many price rankings are running right now. Try again in a few seconds.',
+    'err.cancelled': () => 'The request was cancelled.',
+    'err.pricingBusy': () => "Energy prices can't be fetched right now: this server has reached its limit of requests to the CEME pricing service, which isn't down. Nothing else is known to price here. Try again in a minute.",
+    'err.tariffsBusy': () => "The CEME tariff list can't be fetched right now: this server has reached its limit of requests to the pricing service, which isn't down. Try again in a minute.",
     'err.pricing': () => "Energy prices can't be fetched right now (the CEME pricing service didn't answer), and nothing else is known to price here. Try again in a few minutes.",
 
     'plan.charge': () => '€/charge',
@@ -216,9 +228,17 @@ export const MESSAGES = {
     'note.userTariffDirect': ({ label }) => `O tarifário CEME do utilizador não se aplica a esta tomada, mas a mesma app tem um preço próprio aqui: ${label}. É esse o total.`,
     'note.userTariffDirect.driver': ({ label }) => `O teu tarifário CEME não se aplica a esta tomada, mas a mesma app tem um preço próprio aqui: ${label}. É esse o total.`,
     'note.noTariff': () => 'Nenhum tarifário CEME se aplica a esta tomada.',
+    'assume.monthKwhLost': () => 'Não foi possível contar os kWh já carregados este mês (a lista de tarifários não está disponível neste momento), por isso as promoções de kWh grátis não entram neste total.',
+    'assume.cemeStale': ({ minutes }) => `Os preços CEME são de há ${minutes} min: o serviço de preços está a limitar pedidos neste momento, por isso podem estar ligeiramente desactualizados.`,
+    'note.cemeBusy': () => 'Os preços de energia dos CEME não estão disponíveis neste momento: este servidor atingiu o limite de pedidos ao serviço de preços, que não está em baixo. Por isso esta tomada não tem total CEME; estão as outras formas de pagar. Diz isso ao utilizador e sugere tentar daqui a um minuto para o preço CEME.',
+    'note.cemeBusy.driver': () => 'Os preços de energia dos CEME não estão disponíveis neste momento: este servidor atingiu o limite de pedidos ao serviço de preços, que não está em baixo. Por isso esta tomada não tem total CEME; estão as outras formas de pagar. Tenta daqui a um minuto para o preço CEME.',
     'note.noCeme': () => 'Os preços de energia dos CEME não estão disponíveis neste momento (o serviço de preços não respondeu), por isso esta tomada não tem total CEME; estão as outras formas de pagar. Diz isso ao utilizador e sugere tentar daqui a uns minutos para o preço CEME.',
     'note.noCeme.driver': () => 'Os preços de energia dos CEME não estão disponíveis neste momento (o serviço de preços não respondeu), por isso esta tomada não tem total CEME; estão as outras formas de pagar. Tenta daqui a uns minutos para o preço CEME.',
-    'note.truncated': ({ n, total }) => `Só foram cotados os ${n} locais mais próximos dos ${total} encontrados, para a resposta ser rápida; restringe a pesquisa (radius_km, corridor_km, filtros) para ver os restantes.`,
+    'note.truncated': ({ n, total, sockets }) => [
+      ...(n < total ? [`Só foram cotados os ${n} locais mais próximos dos ${total} encontrados, para a resposta ser rápida.`] : []),
+      ...(sockets ? [`${sockets} ${sockets === 1 ? 'tipo' : 'tipos'} de tomada de fora, as velocidades de carga mais distantes, para limitar os pedidos ao serviço de preços: pode haver uma mais barata entre elas.`] : []),
+      'Restringe a pesquisa (radius_km, corridor_km, filtros) para ver os restantes.',
+    ].join(' '),
     'note.tariffsCut': ({ n, total, narrowed }) => narrowed
       ? `Só estão listados os primeiros ${n} dos ${total} tarifários que correspondem.`
       : `Só estão listados os primeiros ${n} dos ${total} tarifários; se o do utilizador não estiver aqui, volta a chamar com query (o nome do CEME ou do tarifário) em vez de dizer que não existe.`,
@@ -228,6 +248,10 @@ export const MESSAGES = {
     'err.tariffs': () => 'Não é possível obter a lista de tarifários CEME neste momento (o serviço de preços não respondeu). Tenta daqui a alguns minutos.',
     'err.placeWhich': ({ place, towns }) => `"${place}" serve a várias localidades: ${towns}. Pergunta ao utilizador qual é (ou usa lat/lon) e volta a chamar com o nome completo.`,
     'assume.sites': ({ n }) => `preços de ${n} locais do PAN no mesmo sítio, cotados juntos; confirma a morada da tomada que escolheres`,
+    'err.busy': () => 'Há demasiadas comparações de preços a correr neste momento. Tenta daqui a alguns segundos.',
+    'err.cancelled': () => 'O pedido foi cancelado.',
+    'err.pricingBusy': () => 'Não é possível obter os preços de energia neste momento: este servidor atingiu o limite de pedidos ao serviço de preços CEME, que não está em baixo. Não há outro preço conhecido aqui. Tenta daqui a um minuto.',
+    'err.tariffsBusy': () => 'Não é possível obter a lista de tarifários CEME neste momento: este servidor atingiu o limite de pedidos ao serviço de preços, que não está em baixo. Tenta daqui a um minuto.',
     'err.pricing': () => 'Não é possível obter os preços de energia neste momento (o serviço de preços CEME não respondeu), e não há outro preço conhecido aqui. Tenta daqui a alguns minutos.',
 
     'plan.charge': () => '€/carregamento',
