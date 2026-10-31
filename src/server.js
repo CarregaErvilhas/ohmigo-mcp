@@ -71,8 +71,12 @@ if (!process.env.DATASET_PATH && ds.etag !== undefined) {
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
+    // Stops reading but leaves the socket open: the caller still has to get
+    // the 413 out through it.
+    const tooLarge = () => { req.pause(); reject(Object.assign(new Error('too large'), { status: 413 })); };
+    if (Number(req.headers['content-length']) > MAX_BODY) return tooLarge();
     let size = 0; const chunks = [];
-    req.on('data', c => { size += c.length; if (size > MAX_BODY) { reject(Object.assign(new Error('too large'), { status: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('data', c => { size += c.length; if (size > MAX_BODY) tooLarge(); else chunks.push(c); });
     req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null')); } catch { reject(Object.assign(new Error('bad json'), { status: 400 })); } });
     req.on('error', reject);
   });
@@ -164,9 +168,24 @@ function health() {
   };
 }
 
-const httpServer = createHttp(async (req, res) => {
+// The request target as a URL, or null when it doesn't parse. A target is a
+// path ("/mcp?x=1"), but a URL parser reads a leading "//" (or "/\\": in http
+// URLs a backslash counts as a slash) as "a host comes next". So those are
+// parsed again glued to the base, which leaves the whole thing as the path.
+function parseTarget(target) {
+  try {
+    const url = new URL(target, 'http://x');
+    return /^\/[/\\]/.test(target) ? new URL(`http://x${target}`) : url;
+  } catch { return null; }
+}
+
+async function handle(req, res) {
   for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
-  const url = new URL(req.url, 'http://x');
+  const url = parseTarget(req.url);
+  if (!url) {
+    console.warn('[ohmigo] bad request target:', JSON.stringify(req.url.slice(0, 200)));
+    return send(res, 400, 'bad request\n', 'text/plain; charset=utf-8');
+  }
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   // Health check for the hosting platform (and for you: it shows how fresh
   // the data is).
@@ -231,21 +250,48 @@ const httpServer = createHttp(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null });
 
   let body;
-  try { body = await readJson(req); } catch (e) { return send(res, e.status || 400, { error: e.message }); }
+  try { body = await readJson(req); } catch (e) {
+    // The rest of a body that's too large stays unread, so this connection
+    // can't carry another request: Node closes it once the response is out.
+    if (e.status === 413) res.setHeader('connection', 'close');
+    return send(res, e.status || 400, { error: e.message });
+  }
+  // A JSON array is a JSON-RPC batch: many tool calls in one request. The
+  // 2025-06-18 protocol removed them and no client of ours sends one, but the
+  // SDK still takes them from clients on older versions. Without this, one
+  // POST could ask for many answers, past what the body limit and the cost of
+  // a tool call assume.
+  if (Array.isArray(body)) return send(res, 400, { jsonrpc: '2.0', error: { code: -32600, message: 'Invalid Request: JSON-RPC batches are not supported' }, id: null });
   // QA mode logs every call, so a tester can see what the client actually sent.
   if (QA) console.log('[ohmigo] qa:', body?.method, body?.params?.name ?? '', JSON.stringify(body?.params?.arguments ?? {}));
   const server = createServer(() => ds, live);
   // Responses go out as a stream (SSE), not one JSON blob, so a progress
   // message can reach the user while a tool waits for the live feed.
   const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  res.on('close', () => { transport.close(); server.close(); });
+  res.on('close', () => { closing(() => transport.close()); closing(() => server.close()); });
   try {
     await server.connect(transport);
     await transport.handleRequest(req, res, body);
   } catch (e) {
     console.error('[ohmigo]', e);
-    if (!res.headersSent) send(res, 500, { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null });
+    // With the headers out, a status can't be sent any more: closing is how
+    // the client learns this response won't finish.
+    if (res.headersSent) res.destroy();
+    else send(res, 500, { jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null });
   }
+}
+
+// Node ends the process on a promise rejection nobody handles, so the two
+// things that run outside handle()'s own promise chain catch their own: the
+// handler as a whole, and the cleanup after the response has closed.
+const closing = close => Promise.resolve().then(close).catch(e => console.error('[ohmigo] close:', e));
+
+const httpServer = createHttp((req, res) => {
+  handle(req, res).catch(e => {
+    console.error('[ohmigo] request:', e);
+    if (res.headersSent) res.destroy();
+    else send(res, 500, 'internal error\n', 'text/plain; charset=utf-8');
+  });
 }).listen(PORT, HOST, () => console.log(`[ohmigo] ${VERSION} http://${HOST}:${httpServer.address().port}/mcp`));
 
 // A deploy sends SIGTERM to the old process: stop taking connections, let

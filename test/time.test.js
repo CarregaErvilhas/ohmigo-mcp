@@ -4,9 +4,9 @@
 // The pricing of each slice is ceme-v2's job and is tested there.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sessionProfile, localTime, localOffset } from '../src/profile.js';
+import { MAX_SESSION_HOURS, sessionProfile, localTime, localOffset } from '../src/profile.js';
 import { estimateSession } from '../src/charging.js';
-import { quotePoint } from '../src/quote.js';
+import { quotePoint, rank } from '../src/quote.js';
 
 const sum = (xs, k) => xs.reduce((a, x) => a + x[k], 0);
 const near = (a, b, eps = 1e-3) => Math.abs(a - b) < eps;
@@ -113,6 +113,63 @@ test('quote: sends the session as quarter-hour slices from the start', async () 
   assert.equal(q.debug, undefined);
 });
 
+// 60 % of 60 kWh on 11 kW AC takes just under 4 h.
+const closing = { ...site, hours: 'Mo-Su 09:00-21:00' };
+const closes = q => q.assumptions.filter(a => /, before the session ends|, antes de o carregamento acabar/.test(a));
+const closedAtStart = q => q.assumptions.filter(a => /closed when the session starts|fechado à hora de início/.test(a));
+
+test('quote: a site that closes before the session ends says so', async () => {
+  fakeCeme();
+  const q = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'en' });
+  assert.equal(q.session.startLocal, '20:00');
+  assert.deepEqual(closedAtStart(q), [], 'open when it starts');
+  assert.match(closes(q)[0], /Mo-Su 09:00-21:00.*closes at 21:00, before the session ends \(expected at 23:\d\d/);
+  const pt = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'pt' });
+  assert.match(closes(pt)[0], /Mo-Su 09:00-21:00.*fecha às 21:00, antes de o carregamento acabar \(previsto para as 23:\d\d/);
+});
+
+test('quote: a closure on a later day says which day', async () => {
+  fakeCeme();
+  const late = { ...site, hours: 'Mo-Su 22:00-02:00' };
+  const slow = { ...car, batteryKwh: 80 }; // about 5 h on 11 kW, from 23:00
+  const en = await quotePoint({ site: late, point }, slow, { at: new Date('2026-11-10T23:00:00Z'), lang: 'en' });
+  assert.match(closes(en)[0], /closes at 02:00 the next day, before/);
+  const pt = await quotePoint({ site: late, point }, slow, { at: new Date('2026-11-10T23:00:00Z'), lang: 'pt' });
+  assert.match(closes(pt)[0], /fecha às 02:00 do dia seguinte, antes/);
+  const today = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'en' });
+  assert.doesNotMatch(closes(today)[0], /next day/);
+});
+
+test('quote: a session ending exactly at closing time adds nothing', async () => {
+  fakeCeme();
+  const s = estimateSession(point, car);
+  const q = await quotePoint({ site: closing, point }, car, { at: new Date(Date.parse('2026-11-10T21:00:00Z') - Math.ceil(s.minutes) * 60_000), lang: 'en' });
+  assert.deepEqual(closes(q), []);
+});
+
+test('quote: a slow session open at both ends still crosses the closed night', async () => {
+  fakeCeme();
+  const slow = { ...car, batteryKwh: 80, acKw: 3.7 }; // about 15.5 h, ending mid-morning
+  const q = await quotePoint({ site: closing, point }, slow, { at: new Date('2026-11-10T20:00:00Z'), lang: 'en' });
+  assert.ok(q.session.endLocal >= '09:00' && q.session.endLocal < '21:00', q.session.endLocal);
+  assert.equal(closes(q).length, 1);
+});
+
+test('quote: a session inside the opening hours, or hours we cannot read, adds nothing', async () => {
+  fakeCeme();
+  const inside = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T12:00:00Z'), lang: 'en' });
+  assert.deepEqual(closes(inside), []);
+  const unknown = await quotePoint({ site: { ...site, hours: 'Apr-Sep 08:30-20:00' }, point }, car, { at: new Date('2026-11-10T20:00:00Z'), lang: 'en' });
+  assert.deepEqual([...closes(unknown), ...closedAtStart(unknown)], []);
+});
+
+test('quote: closed when it starts is the only warning, not two', async () => {
+  fakeCeme();
+  const q = await quotePoint({ site: closing, point }, car, { at: new Date('2026-11-10T22:00:00Z'), lang: 'en' });
+  assert.equal(closedAtStart(q).length, 1);
+  assert.deepEqual(closes(q), []);
+});
+
 test('quote: detail adds the timeline, qa the debug block', async () => {
   fakeCeme();
   const q = await quotePoint({ site, point }, car, { at: new Date('2026-11-10T21:30:00Z'), lang: 'pt', detail: true });
@@ -138,4 +195,50 @@ test('quote: an older ceme-v2 that ignores the profile is flagged, not trusted',
   const q = await quotePoint({ site, point }, car, { at: new Date('2026-11-10T21:30:00Z'), lang: 'en' });
   assert.match(q.assumptions.join(' | '), /as if the whole session happened at 21:30/);
   assert.equal(q.options[0].kwhByPeriod, undefined);
+});
+
+test('sessionProfile: a session past the limit, or with no end, is refused before any slice is made', () => {
+  const start = new Date('2026-11-10T21:30:00Z');
+  const limit = MAX_SESSION_HOURS * 60;
+  assert.ok(sessionProfile([{ minutes: limit, kwh: 10 }], start).length <= limit / 15 + 1);
+  for (const minutes of [limit + 1, Infinity, NaN]) {
+    assert.throws(() => sessionProfile([{ minutes, kwh: 10 }], start), RangeError, String(minutes));
+  }
+  assert.throws(() => sessionProfile([{ minutes: limit, kwh: 5 }, { minutes: limit, kwh: 5 }], start), RangeError);
+});
+
+test('quote: a session past the limit gets no quote and costs no ceme-v2 call, on every path', async () => {
+  const sent = fakeCeme();
+  const big = { batteryKwh: 250, startPct: 0, targetPct: 100 };
+  const slow = [
+    [point, { ...big, acKw: 1 }],
+    [{ ...point, kw: 50, dc: true }, { ...big, dcKw: 1 }],
+    [{ ...point, kw: 50, dc: true }, { ...big, dc10to80Minutes: 300 * 20, dcKw: 1 }],
+    [{ ...point, kw: 50, dc: true }, { ...big, curve: [{ soc: 0, kw: 0.001 }, { soc: 100, kw: 0.001 }] }],
+  ];
+  for (const [p, c] of slow) assert.equal(await quotePoint({ site, point: p }, c, { lang: 'en' }), null, JSON.stringify(c));
+  assert.equal(sent.length, 0);
+});
+
+test('rank: leaves out what would take too long, counts it, and still ranks the rest', async () => {
+  fakeCeme();
+  const slowAc = { ...point, id: 'P2', kw: 3.7 };
+  const fast = { ...point, id: 'P3', kw: 50, dc: true };
+  const r = await rank([{ site, points: [slowAc, fast] }], { batteryKwh: 250, startPct: 0, targetPct: 100 }, { lang: 'en' });
+  assert.deepEqual(r.map(q => q.pointId), ['S1/P3']);
+  assert.equal(r.tooLong, 1);
+});
+
+test('rank: what the driver\'s own filters drop does not count as too long', async () => {
+  fakeCeme();
+  const slowAc = { ...point, id: 'P2', kw: 3.7 };
+  const fast = { ...point, id: 'P3', kw: 50, dc: true };
+  const big = { batteryKwh: 250, startPct: 0, targetPct: 100 };
+  const inTime = await rank([{ site, points: [slowAc, fast] }], big, { lang: 'en', maxMinutes: 10 });
+  assert.deepEqual([inTime.length, inTime.tooLong], [0, 0]);
+  const busy = { get: () => ({ status: 'charging', fees: [] }) };
+  const free = await rank([{ site, points: [slowAc] }], big, { lang: 'en', live: busy, availableOnly: true });
+  assert.deepEqual([free.length, free.tooLong], [0, 0]);
+  const longer = await rank([{ site, points: [slowAc, fast] }], big, { lang: 'en', maxMinutes: 100_000 });
+  assert.deepEqual([longer.length, longer.tooLong], [1, 1]);
 });

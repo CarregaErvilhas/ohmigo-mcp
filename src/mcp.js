@@ -21,13 +21,14 @@ import { z } from 'zod';
 import { expandMonthKwh, promos, tariffs } from './ceme.js';
 import { clusterPlaces, directionLabel, sameStation, serviceAreas, sideFor } from './direction.js';
 import { pickLang, translator } from './i18n.js';
-import { napPlan } from './live.js';
+import { napEurPerKwh, napPlan } from './live.js';
 import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt } from './offers.js';
 import { cardPayment } from './data.js';
 import { siteOpen } from './hours.js';
 import { describePlan } from './opc.js';
 import { byBest, quotePoint, rank, tariffKey } from './quote.js';
 import { fold } from './lookup.js';
+import { MAX_SESSION_HOURS } from './profile.js';
 import { logged } from './stats.js';
 import { SITE_URL } from './site.js';
 import { VERSION } from './version.js';
@@ -107,18 +108,24 @@ const inWindow = s => {
   return ms >= -AT_PAST_DAYS * 86_400_000 && ms <= AT_AHEAD_DAYS * 86_400_000;
 };
 
+// The least a car takes, kW. AC charging can't go below 6 A on one phase
+// (1.4 kW under IEC 61851) and DC chargers start well above that, so this
+// only turns away figures that aren't a car's. charging.js floors a curve at
+// the same 1 kW.
+const MIN_CAR_KW = 1;
+
 const Car = {
   battery_kwh: z.number().positive().max(250).describe('Usable battery capacity, kWh (look it up from the car model)'),
   start_pct: z.number().min(0).max(100).describe('Battery now, %'),
   target_pct: z.number().min(1).max(100).default(80).describe('Target battery, % (default 80; DC slows down above it)'),
-  car_ac_kw: z.number().positive().max(43).optional().describe("Car's max AC power, kW (on-board charger)"),
-  car_dc_kw: z.number().positive().max(500).optional().describe("Car's max DC power, kW"),
+  car_ac_kw: z.number().min(MIN_CAR_KW).max(43).optional().describe("Car's max AC power, kW (on-board charger)"),
+  car_dc_kw: z.number().min(MIN_CAR_KW).max(500).optional().describe("Car's max DC power, kW"),
   dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes: makes the duration far better than the generic curve"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
     .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]"),
-  tariff_ids: z.array(z.string()).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only those they hold: each charger uses the cheapest. Omit to show the popular ones"),
-  tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs shown per charger'),
-  at: z.string().refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
+  tariff_ids: z.array(z.string().max(100)).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only those they hold: each charger uses the cheapest. Omit for the popular ones"),
+  tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs per charger'),
+  at: z.string().max(40).refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
     .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`).optional()
     .describe(`When the charge starts, ISO 8601 with offset (default now; ${AT_PAST_DAYS} days back to ${AT_AHEAD_DAYS} ahead). Energy prices change between peak and off-peak (vazio) hours`),
   month_kwh: z.record(z.string().max(64), z.number().min(0).max(100000)).optional()
@@ -128,7 +135,7 @@ const Car = {
 const Where = {
   lat: z.number().min(30).max(43).optional().describe('Latitude of the user or search centre'),
   lon: z.number().min(-32).max(-6).optional().describe('Longitude of the user or search centre'),
-  place: z.string().optional().describe('Town or municipality, when lat/lon are unknown (e.g. "Leiria"). Only towns and NAP addresses: for a shopping centre, street or service area, pass its lat/lon'),
+  place: z.string().max(200).optional().describe('Town or municipality, when lat/lon are unknown (e.g. "Leiria"). Only towns and NAP addresses: for a shopping centre, street or service area, pass lat/lon'),
   radius_km: z.number().positive().max(50).default(5).describe('Search radius, km'),
   route: z.array(z.object({ lat: z.number(), lon: z.number() })).min(2).max(200).optional()
     .describe('Waypoints from origin to destination, to search along the route instead'),
@@ -296,7 +303,7 @@ function siteCard(h, live, t, audiences = [], notes = []) {
     const lp = live.get(site.id, p.id);
     const fee = p.opc?.REGULAR ?? (lp && napPlan(lp.fees));
     const fromNap = !p.opc?.REGULAR;
-    const napPrice = p.regime === 'sem_ceme' ? (lp?.fees.find(f => f.policy === 'pricePerDeliveryUnit')?.eur ?? p.napPrice) : undefined;
+    const napPrice = p.regime === 'sem_ceme' ? napEurPerKwh(lp, p.napPrice) : undefined;
     const card = {
       ...socketFields(p), connector: p.connector, dc: p.dc, level: p.level ?? undefined, regime: p.regime,
       operatorFee: fee ? describePlan(fee, t, { vatIncluded: fromNap && vatIn }) : undefined,
@@ -369,6 +376,12 @@ const MAX_KINDS = 8;
 // fixed order, and two sockets with the same fees must give the same key.
 const canonical = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x)
   ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b))) : x);
+// Sockets with the same key are one line in an estimate. operatorInferred: a
+// socket on a lent site must not merge into a named sibling's, or its
+// assumption goes with it. Hours likewise: merged across sites with different
+// hours, a closing warning would be lost or invented.
+export const socketKindKey = (site, point) => canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, site.operatorId, !!site.operatorInferred, site.hours ?? null, site.osm?.openingHours ?? null]);
+
 function pointsFor(ds, live, a, t) {
   if (a.point_id) {
     const hit = ds.findPoint(a.point_id);
@@ -425,9 +438,7 @@ function pointsFor(ds, live, a, t) {
       if (named.length) points = named;
     }
     for (const point of points) {
-      // operatorInferred: a socket on a lent site must not merge into a named
-      // sibling's, or its assumption goes with it.
-      const key = canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, h.site.operatorId, !!h.site.operatorInferred]);
+      const key = socketKindKey(h.site, point);
       const cur = kinds.get(key);
       if (!cur || (!free(cur.site, cur.point) && free(h.site, point))) kinds.set(key, { site: h.site, point });
     }
@@ -484,7 +495,7 @@ export function createServer(getDataset, live) {
   server.registerTool('list_ceme_tariffs', {
     title: 'List CEME tariffs',
     description: 'Lists the CEME tariffs (the EV charging cards/apps of the electricity retailers on MOBI.E, Portugal), to turn what the user pays with ("EDP", "Via Verde") into tariff_ids for the cost tools. Also lists the CEMEs\' current promotions at specific charging networks.',
-    inputSchema: z.object({ query: z.string().optional().describe('Text in the CEME or tariff name, e.g. "edp", "via verde"'), ...Audience, ...Lang }),
+    inputSchema: z.object({ query: z.string().max(200).optional().describe('CEME or tariff name, e.g. "edp", "via verde"'), ...Audience, ...Lang }),
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, async ({ query, audiences, lang: l }, ctx) => {
     const t = translator(langOf({ lang: l }, ctx));
@@ -669,7 +680,10 @@ export function createServer(getDataset, live) {
       monthKwh: await monthKwh(a),
       maxMinutes: a.max_minutes, availableOnly: a.available_only, detail: !!a.detail, qa: QA,
     });
-    if (!ranked.length) return err(t('err.noneLeft'), 'noneLeft');
+    const tooLong = { hours: MAX_SESSION_HOURS, n: ranked.tooLong };
+    // err.tooLong only when no socket could be priced at all: with any priced
+    // socket dropped by a filter, raising the filter is the advice.
+    if (!ranked.length) return ranked.nonePriced ? err(t('err.tooLong', tooLong), 'tooLong') : err(t('err.noneLeft'), 'noneLeft');
     const top = ranked.slice(0, a.limit);
     // Any MOBI.E socket without its CEME price was ranked on its other
     // prices only (or last): say so even when the top rows are all outside
@@ -689,6 +703,7 @@ export function createServer(getDataset, live) {
       ...(cemeDown ? [t('note.noCeme')] : []),
       ...voltageNotes(ds, a, t),
       ...(truncated ? [t('note.truncated', { n: candidates.length, total })] : []),
+      ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
       ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
       ...moreWays(top, t),
     ];
@@ -704,7 +719,7 @@ export function createServer(getDataset, live) {
     description: 'Estimated cost and duration of a charging session at one public EV charger in Portugal (site) or one socket (point_id), with the full breakdown and every way to pay. Each kind of socket at the site is priced, cheapest first.',
     inputSchema: z.object({
       site: z.string().max(200).optional().describe('The charger: siteId from lookup_charger or the other tools (e.g. "GLP-LRA-00156"), its sticker code ("LRA-00156"), or the user\'s words for one site'),
-      point_id: z.string().optional().describe('One socket, "SITE/POINT" from the other tools; only when the user picked one'),
+      point_id: z.string().max(200).optional().describe('One socket, "SITE/POINT"; only when the user picked one'),
       ...Towards, ...Filter, ...Car, ...Audience, ...Detail, ...Lang,
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -721,12 +736,16 @@ export function createServer(getDataset, live) {
       monthKwh: await monthKwh(a) };
     // Quoting is cheap once the first one has called ceme-v2 (simCache), so
     // every kind is priced and the cheapest are kept.
-    const results = (await Promise.all(targets.map(hit => quotePoint(hit, car(a), opts)))).sort(byBest).slice(0, MAX_KINDS);
+    const quoted = await Promise.all(targets.map(hit => quotePoint(hit, car(a), opts)));
+    const priced = quoted.filter(Boolean);
+    const tooLong = { hours: MAX_SESSION_HOURS, n: quoted.length - priced.length };
+    if (!priced.length) return err(t('err.tooLong', tooLong), 'tooLong');
+    const results = priced.sort(byBest).slice(0, MAX_KINDS);
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
-    const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...moreWays(results, t)];
+    const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));
   });

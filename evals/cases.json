@@ -124,6 +124,38 @@
       }
     },
     {
+      "id": "session-too-long",
+      "why": "Past the session limit there is no estimate: say so and suggest a faster charger or checking the figures, never invent a price or a duration.",
+      "message": "Tenho uma carrinha elétrica com 240 kWh de bateria útil, a 0%. Quero carregá-la até 100% no posto LRA-90003 da EDP em Leiria. Quanto custa?",
+      "requires": [
+        {
+          "site": "EDP-LRA-90003"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "battery_kwh": [
+                240,
+                240
+              ]
+            }
+          }
+        ],
+        "answer": {
+          "noMatch": [
+            "\\d\\s*€"
+          ]
+        },
+        "judge": [
+          "Does the reply say there is no estimate because the session would take too long at this charger (over 72 hours), without giving a price?",
+          "Does the reply suggest a faster charger or checking the battery and power figures?"
+        ]
+      }
+    },
+    {
       "id": "tariff-list-cut",
       "why": "list_ceme_tariffs cuts a long list and says so in its notes: the assistant doesn't present the rows as every tariff there is.",
       "message": "Quantos tarifários CEME há ao todo? Lista-mos todos.",
@@ -670,6 +702,30 @@
         ],
         "judge": [
           "Does the reply warn that the charger may be closed at 23:00 because of the car park's opening hours, or tell the user to check the hours before going?"
+        ]
+      }
+    },
+    {
+      "id": "closes-mid-session",
+      "why": "Open when the session starts, closed before it ends (the site says Mo-Su 09:00-21:00, a slow AC session from 20:00 runs for hours): pass on the warning, with the closing time.",
+      "message": "Posso carregar amanhã às 20h no posto da Powerdot na Avenida da Estação, em Viana do Castelo? Quanto me custa? Peugeot e-208 de 50 kWh, AC até 7,4 kW, de 20% a 80%.",
+      "requires": [
+        {
+          "site": "HRZ-VCT-00062"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "at": "T(19|20):"
+            },
+            "ok": true
+          }
+        ],
+        "judge": [
+          "Does the reply warn that the charger closes at about 21:00, before the session would end, so the car can't finish charging there or the user should check the hours?"
         ]
       }
     },
