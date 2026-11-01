@@ -52,6 +52,7 @@ import { napEurPerKwh, napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
 import { forAudiences, isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, unpricedHere, withPromos } from './promos.js';
+import { gridOf, plugLabel } from './socket.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 const r4 = x => Math.round(x * 10_000) / 10_000;
@@ -296,6 +297,9 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     lat: site.lat, lon: site.lon, region: site.region,
     kw: point.kw, ...(point.napKw !== undefined && { napKw: point.napKw }), volts: point.v ?? undefined,
     cable: point.cable ?? undefined, connector: point.connector, dc: point.dc, regime: point.regime,
+    // Which plug to use, and on MOBI.E the grid (BT/MT) and its TAR: the
+    // driver has to know both (socket.js).
+    plug: plugLabel(point, t), ...gridOf(point, t),
     status: lp?.status ?? null,
     session: {
       kwhBilled: r2(session.kwh), kwhToBattery: r2(session.batteryKwh),

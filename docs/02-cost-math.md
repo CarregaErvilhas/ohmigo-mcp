@@ -18,7 +18,9 @@ at the slower of car and charger. How we estimate it depends on what the
 assistant found out about the car:
 
 1. **Charging curve** (kW at each SoC): we walk it 1 % at a time, capped by
-   the charger. This is the best case.
+   the charger. This is the best case. Without it, a DC estimate carries a
+   note pointing the assistant to ev-database.org and evkx.net, where the
+   curves are published.
    The charger's power is OpenStreetMap's where it differs from the NAP's
    ([05](05-dataset.md)), and the estimate says so in its assumptions.
 2. **10-80 % time**: 70 % of the battery charged in that many minutes gives
@@ -143,7 +145,7 @@ Each plug gets `options`, one entry per way to pay:
 **`ceme`** — total = ceme-v2's total for that tariff (energy + TAR + IEC +
 EGME + VAT) + OPC fee × VAT. ceme-v2 quotes every tariff in one call, and we
 keep the ones that fit this plug:
-- the right voltage version (BT or MT, from the socket's voltage level);
+- the right voltage version (BT or MT, from the charger's grid voltage level; every answer shows it in `tar`);
 - no AC-only tariffs on DC chargers (Atlante's "(AC)" tariffs);
 - if the user gave their `tariff_ids`, only those; otherwise the top 3 (or
   `tariffs_shown`) of ceme-v2's "popular" list.

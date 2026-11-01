@@ -872,6 +872,104 @@
           "Does the reply explain that without a CEME card the user can pay ad hoc on their phone (QR code or website), without claiming that a bank card works at a terminal on that charger?"
         ]
       }
+    },
+    {
+      "id": "no-chademo-ccs-car",
+      "why": "CHAdeMO sockets only for a car with that port or when the user asks: a CCS car never hears about CHAdeMO.",
+      "message": "Quanto me custa carregar no posto LRA-00156? Tenho um Hyundai Kona Electric de 64 kWh, estou com 20% e quero ir até aos 80%.",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "noCalls": [
+          {
+            "args": {
+              "connectors": "CHADEMO"
+            }
+          }
+        ],
+        "answer": {
+          "noMatch": [
+            "chademo"
+          ]
+        }
+      }
+    },
+    {
+      "id": "leaf-chademo",
+      "why": "A car with a CHAdeMO port (Nissan Leaf): pass CHADEMO in connectors, so its DC sockets show.",
+      "message": "Tenho um Nissan Leaf de 40 kWh e estou com 15%. Quanto custa carregar rápido no posto LRA-00156 até aos 80%?",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger|find_cheapest_charging",
+            "args": {
+              "connectors": "CHADEMO"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "say-the-plug",
+      "why": "Always say which plug the driver must use (plug).",
+      "message": "Vou carregar no posto LRA-00156 com o meu Peugeot e-208 de 50 kWh, de 30% a 80%. Quanto custa?",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply say which plug or socket type the driver should use (for example CCS or Type 2) for the price it gives?"
+        ]
+      }
+    },
+    {
+      "id": "say-bt-mt",
+      "why": "Say whether a MOBI.E charger is on a low (BT) or medium voltage (MT) grid connection (tar), without calling it the socket's voltage.",
+      "message": "Quanto custa carregar no posto LRA-00156? Tesla Model Y Long Range, de 25% a 80%.",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply say whether the charger is connected at low voltage (BT) or medium voltage (MT), without presenting that as the socket's voltage in volts?"
+        ]
+      }
     }
   ]
 }

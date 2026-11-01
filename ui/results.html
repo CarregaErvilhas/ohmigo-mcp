@@ -121,10 +121,11 @@
   const optEur = o => (o.peakPrice ? '≤ ' : '') + eur(o.total);
   // Sockets with no published power or plug: kw is null, connector the text
   // "nan". Reads like socketLine in mcp.js. With no plug known, dc says nothing
-  // either, so neither AC nor DC is claimed.
+  // either, so neither AC nor DC is claimed. On MOBI.E, the grid the charger
+  // hangs from (BT or MT), as the text summary writes it.
   const socket = q => {
     const plug = q.connector === 'nan' ? null : q.connector;
-    return `${esc(q.kw ?? '?')} kW ${esc(plug ?? '?')}${plug == null ? '' : q.dc ? ' DC' : ' AC'}`;
+    return `${esc(q.kw ?? '?')} kW ${esc(plug ?? '?')}${plug == null ? '' : q.dc ? ' DC' : ' AC'}${q.tar ? ` · ${esc(q.tar)}` : ''}`;
   };
 
   function render(data) {

@@ -129,14 +129,22 @@ especially above 80 %.
 
 **Charging curve** — the power a car accepts at each SoC; every model has its
 own. **10-80 % time** — how long a car takes on a fast enough DC charger to go
-from 10 to 80 %. Most spec sites publish it.
+from 10 to 80 %. Most spec sites publish it. ohmigo points the assistant to
+[ev-database.org](https://ev-database.org/) and [evkx.net](https://evkx.net/)
+for both.
+
+**Plug types** — `T2` (Type 2, AC; the socket may have a cable attached or not,
+then you bring yours), `CCS` (Combo 2, DC, most cars), `CHADEMO` (DC, only a few
+cars: Nissan Leaf, e-NV200...), `SCHUKO` (household socket). Every answer says
+which one to use (`plug`).
 
 **Charging losses** — energy that turns into heat between the charger's meter
 and the battery. You pay for it anyway.
 
 **Voltage level (BT / MT)** — chargers connect to the grid at low (BT, BTN,
 BTE) or medium (MT) voltage. The TAR differs, so each CEME tariff exists in a
-BT and an MT version.
+BT and an MT version. Every MOBI.E socket in an answer says which (`tar`,
+`gridLabel`); it's not the socket's volts.
 
 ## The AI side
 

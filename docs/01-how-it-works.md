@@ -116,6 +116,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/direction.js` | Motorway service areas: which side the driver can reach, from where they're heading |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |
 | `src/quote.js` | Prices one plug for every way to pay; ranks plugs |
+| `src/socket.js` | What the driver must know about a socket: which plug to use (`plug`) and, on MOBI.E, the grid it's on (`tar`: BT or MT) |
 | `src/charging.js` | Session energy and duration, as constant-power segments |
 | `src/profile.js` | Lays the session on the clock: kWh per quarter-hour, local times |
 | `src/opc.js` | Operator fee math (flat, per kWh, per-minute tiers) |
@@ -225,6 +226,19 @@ poller would download 38 MB every few minutes for nobody ([03](03-live-status.md
 **Why one JSON file for the dataset, not a database?** ~9k sites fit in
 memory in a few MB, and a search is a few milliseconds of looping. A database
 would be one more service to run, for no gain.
+
+**Why are CHAdeMO sockets hidden by default?** Only a few cars have that port
+(Nissan Leaf, e-NV200, some older Mitsubishi plug-in hybrids). Send any other
+driver to a CHAdeMO socket and they can't charge. So the driver tools leave
+CHAdeMO out unless the assistant lists `CHADEMO` in `connectors` (`filterOf` in
+`mcp.js`): the car has the port, or the user asked. If the words name a charger
+that only has CHAdeMO, the answer says that instead of "no such charger".
+`list_operators` counts every socket: it describes the network, not one car.
+
+**Why does every socket carry `plug` and `tar`?** The driver has to know which
+plug to grab (and whether to bring a cable), and at a MOBI.E charger whether it
+hangs from low (BT) or medium voltage (MT), which picks the TAR inside the CEME
+price. Both come from `src/socket.js`, in the user's language.
 
 **Why does the assistant send `lang`?** Some of our text reaches the user
 almost word for word (assumptions, payment labels, the progress message, the
