@@ -1003,7 +1003,7 @@
     },
     {
       "id": "dc-power-400v-car",
-      "why": "A DC charger's kW is for its top voltage: a 400 V car gets amps × 400 V. The assistant passes car_voltage and tells the driver the power they'll really get.",
+      "why": "A DC charger's kW is for its top voltage: a 400 V car gets amps × 400 V. The answer tells the driver the power they'll really get (kwAt400V, or kwForCar with car_voltage).",
       "message": "Vou parar no IONITY de Abrantes com o meu Tesla Model 3 Long Range de 2022. A que potência vou carregar lá?",
       "requires": [
         {
@@ -1013,13 +1013,7 @@
       "expect": {
         "calls": [
           {
-            "tool": "lookup_charger|estimate_charging_cost",
-            "args": {
-              "car_voltage": [
-                300,
-                450
-              ]
-            }
+            "tool": "lookup_charger|estimate_charging_cost|find_chargers"
           }
         ],
         "judge": [
@@ -1065,6 +1059,32 @@
         ],
         "judge": [
           "Does the reply say that a car with a 400 V battery (most cars) gets less there than the 400 kW nameplate, about 240 kW?"
+        ]
+      }
+    },
+    {
+      "id": "dc-power-800v-car",
+      "why": "kwAt400V is for 400 V cars: for an 800 V car the assistant passes car_voltage and doesn't cap it at the 400 V figure.",
+      "message": "Vou parar no IONITY de Abrantes com o meu Porsche Taycan de 2025. A que potência vou carregar lá?",
+      "requires": [
+        {
+          "site": "IOY-ABT-00039"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|estimate_charging_cost|find_chargers",
+            "args": {
+              "car_voltage": [
+                700,
+                950
+              ]
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply avoid saying this car is limited to about 240 kW there (that figure is for 400 V cars; an 800 V Taycan can take far more of the charger's 400 kW)?"
         ]
       }
     }
