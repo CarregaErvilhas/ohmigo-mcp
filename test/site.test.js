@@ -3,6 +3,7 @@
 // markup uses has a string.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
@@ -10,6 +11,46 @@ const S = JSON.parse(html.match(/<script type="application\/json" id="strings">(
 
 test('site: en and pt have the same keys', () => {
   assert.deepEqual(Object.keys(S.pt).sort(), Object.keys(S.en).sort());
+});
+
+test('site: every screen reader label has a string in both languages', () => {
+  const used = [...html.matchAll(/data-aria="([^"]+)"/g)].map(m => m[1]);
+  assert.ok(used.length >= 1);
+  for (const k of used) for (const l of ['pt', 'en']) assert.ok(S[l][k], `missing ${l} ${k}`);
+});
+
+test('site: the skip link comes first and lands on the <h1>', () => {
+  assert.match(html, /<body>\s*<a class="skip" href="#conteudo" data-i="a11y\.skip"><\/a>/);
+  assert.match(html, /<h1 id="conteudo" tabindex="-1"/);
+});
+
+test('site: the top links are a named <nav>', () => {
+  assert.match(html.match(/<header>[\s\S]*<\/header>/)[0], /<nav [^>]*data-aria="a11y\.nav">[\s\S]*data-lang="en"[\s\S]*<\/nav>/);
+});
+
+test('site: every inline SVG is hidden from screen readers or has a name', () => {
+  for (const [tag] of html.matchAll(/<svg\b[^>]*>/g)) assert.match(tag, /aria-hidden="true"|aria-label=|data-aria=/, tag);
+});
+
+test('site: focus is visible', () => {
+  assert.match(html, /:focus-visible \{ outline: 3px solid/);
+  assert.doesNotMatch(html, /outline: (none|0)/);
+});
+
+test('site: the link preview image stays small and keeps the size the head declares', () => {
+  const png = readFileSync(new URL('../site/og.png', import.meta.url));
+  assert.ok(png.length < 100 * 1024, `${png.length} bytes`);
+  // Width and height sit at fixed offsets in a PNG (its IHDR chunk).
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1200, 630]);
+});
+
+test('site: llms.txt follows SITE_URL, as the sitemap does', () => {
+  const code = "const { LLMS_TXT } = await import('./src/site.js'); process.stdout.write(LLMS_TXT);";
+  const txt = execFileSync(process.execPath, ['--input-type=module', '-e', code], {
+    cwd: new URL('..', import.meta.url), env: { ...process.env, SITE_URL: 'https://staging.example/' }, encoding: 'utf8',
+  });
+  assert.match(txt, /https:\/\/staging\.example\/mcp\n/);
+  assert.doesNotMatch(txt, /ohmigo\.ocarroeletrico\.com/);
 });
 
 test('site: every data-i key has a string', () => {

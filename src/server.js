@@ -23,7 +23,7 @@ import { Dataset } from './data.js';
 import { LiveStatus } from './live.js';
 import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
-import { PAGES, SITEMAP, SITE_URL } from './site.js';
+import { LLMS_TXT, PAGES, SITEMAP, SITE_URL } from './site.js';
 import { statsSummary } from './stats.js';
 import { VERSION } from './version.js';
 
@@ -135,11 +135,14 @@ const send = (res, status, body, type = 'application/json') => {
   res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' });
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 };
+// robots.txt, sitemap.xml and llms.txt only change with a deploy.
+const PUBLIC_TEXT_CACHE = 'public, max-age=3600';
+const sendPublic = (res, body, type) => { res.writeHead(200, { 'content-type': type, 'cache-control': PUBLIC_TEXT_CACHE, 'x-content-type-options': 'nosniff' }); res.end(body); };
 
 // Browser-based clients (MCP Inspector, claude.ai's connector check) send
 // CORS preflights. The server holds no user data and needs no cookies, so
 // any origin may call it, on the paths a client has a reason to read: /mcp,
-// the public JSON and images, and /.well-known, where MCP clients look for
+// the public JSON, llms.txt and images, and /.well-known, where MCP clients look for
 // OAuth metadata before connecting (at the root or under /mcp) and need to be
 // able to read the 404.
 const CORS = {
@@ -148,7 +151,7 @@ const CORS = {
   'access-control-allow-headers': 'content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id, authorization',
   'access-control-expose-headers': 'mcp-session-id, mcp-protocol-version',
 };
-const corsOpen = path => path === '/mcp' || path.startsWith('/mcp/') || path === '/og.png' || path === '/dados.json' || path === '/dados/postos.json'
+const corsOpen = path => path === '/mcp' || path.startsWith('/mcp/') || path === '/og.png' || path === '/llms.txt' || path === '/dados.json' || path === '/dados/postos.json'
   || !!ICONS[path] || path.startsWith('/.well-known/');
 // Images go inside assistants' apps, some of which only load what says it may
 // be embedded elsewhere.
@@ -252,7 +255,7 @@ async function handle(req, res) {
     res.writeHead(200, { ...IMAGE_HEADERS, 'content-type': ICONS[url.pathname].type });
     return res.end(req.method === 'HEAD' ? undefined : ICONS[url.pathname].body);
   }
-  if (url.pathname === '/sitemap.xml') return send(res, 200, SITEMAP, 'application/xml; charset=utf-8');
+  if (url.pathname === '/sitemap.xml' && get) return sendPublic(res, SITEMAP, 'application/xml; charset=utf-8');
   if (LEGAL_PATHS.has(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, SITE_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : LEGAL);
@@ -272,7 +275,8 @@ async function handle(req, res) {
       return send(res, 500, { error: 'dados unavailable' });
     }
   }
-  if (url.pathname === '/robots.txt') return send(res, 200, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
+  if (url.pathname === '/robots.txt' && get) return sendPublic(res, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
+  if (url.pathname === '/llms.txt' && get) return sendPublic(res, LLMS_TXT, 'text/plain; charset=utf-8');
   if (url.pathname === '/.well-known/security.txt' && get) return send(res, 200, securityTxt(), 'text/plain; charset=utf-8');
   if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
   // Someone pasted the MCP address into a browser. MCP clients never ask for

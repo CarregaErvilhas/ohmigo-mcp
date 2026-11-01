@@ -130,7 +130,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/version.js` | The version, read from `package.json` |
 | `ui/results.html` | The inline results page |
 | `site/index.html` | The landing page: what ohmigo is and how to install it, every sentence in both languages |
-| `src/site.js` | Renders the landing page on the server, Portuguese at `/` and English at `/en`, with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD) and `/sitemap.xml` |
+| `src/site.js` | Renders the landing page on the server, Portuguese at `/` and English at `/en`, with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD) , `/sitemap.xml` and `/llms.txt` |
 | `site/og.png` | The image link previews show (WhatsApp, Facebook, X) |
 | `site/dados.html` | `/dados`: browse what `src/dump.js` returns. Public, `noindex`, cached by Cloudflare (Cache Rule on the zone, TTLs from the headers in `src/server.js`); Portuguese only |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
