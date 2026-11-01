@@ -130,7 +130,8 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/version.js` | The version, read from `package.json` |
 | `ui/results.html` | The inline results page |
 | `site/index.html` | The landing page: what ohmigo is and how to install it, every sentence in both languages |
-| `src/site.js` | Renders the landing page on the server, Portuguese at `/` and English at `/en`, with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD) and `/sitemap.xml` |
+| `site/legal.html` | The privacy and support pages, every sentence in both languages |
+| `src/site.js` | Renders those pages on the server (landing at `/` and `/en`, privacy at `/privacidade` and `/privacy`, support at `/suporte` and `/support`), with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD on the landing page) and `/sitemap.xml` |
 | `site/og.png` | The image link previews show (WhatsApp, Facebook, X) |
 | `site/dados.html` | `/dados`: browse what `src/dump.js` returns. Public, `noindex`, cached by Cloudflare (Cache Rule on the zone, TTLs from the headers in `src/server.js`); Portuguese only |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
@@ -216,7 +217,7 @@ labels agree or they're a few dozen metres apart (`samePlace`).
 indexed tariffs, time zones, daylight saving and island VAT. Doing it twice
 means two places to fix every bug, so ohmigo calls its API.
 
-**Why no auth?** The data is public and nothing is stored. A login would only
+**Why no auth?** The data is public and nothing linked to a user is kept. A login would only
 add friction for people trying it in a chat app. If ohmigo ever stores
 something per user, that changes.
 
