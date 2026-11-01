@@ -223,6 +223,29 @@
       }
     },
     {
+      "id": "motorway-side-in-search",
+      "why": "A search near a town returns a motorway service area with a charger on each side: say which direction each side serves (or that there is one on each side); never present one side as if it were the whole stop.",
+      "message": "Tenho um Tesla Model 3, onde posso carregar com a maior potência em Tavira?",
+      "requires": [
+        {
+          "site": "CPS-OLH-00047"
+        },
+        {
+          "site": "CPS-OLH-00048"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_chargers|find_cheapest_charging"
+          }
+        ],
+        "judge": [
+          "If the reply mentions the Moeve/Cepsa chargers on the A22 at Olhão, does it say there is one on each side of the motorway, or which direction (sentido) the one it recommends serves? Answer n/a if it doesn't mention them."
+        ]
+      }
+    },
+    {
       "id": "employee-which-company",
       "why": "\"Sou colaborador\" alone doesn't say which group: ask which company, never pick one.",
       "message": "Sou colaborador e acho que tenho um preço especial. Quanto me custa carregar no posto LRA-00156? Nissan Leaf de 40 kWh, de 20% a 80%.",

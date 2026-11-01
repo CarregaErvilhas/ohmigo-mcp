@@ -112,3 +112,61 @@ test('sameStation: the same operator down the road at another address is another
   assert.equal(sameStation(a, { id: 'G-4', operatorId: 'GLPP', lat: 39.7472, lon: -8.8157, address: 'Rua X' }), true, '33 m');
   assert.equal(sameStation(a, { id: 'E-1', operatorId: 'EDPC', lat: 39.7470, lon: -8.8157, address: 'Avenida 25 de Abril' }), false);
 });
+
+test('direction: compass words after "sentido" are compass points, not a town', () => {
+  // "SENTIDO NORTE-SUL" used to be looked up as a town called "NORTE-SUL",
+  // which an address word could place anywhere (and pick the wrong side).
+  const [ns, sn] = PAIRS[0];
+  const places = [[{ site: mk(ns, 'A1 SENTIDO NORTE-SUL') }], [{ site: mk(sn, 'A1 Sentido Sul - Norte 2') }]];
+  const anywhere = () => ({ lat: 41, lon: -8 });
+  assert.deepEqual(ids(sideFor(places, south(places[0][0].site), anywhere, { geometry: false })), [ns[0]]);
+  assert.deepEqual(ids(sideFor(places, north(places[0][0].site), anywhere, { geometry: false })), [sn[0]]);
+  assert.equal(directionLabel(places[0][0].site), 'NORTE-SUL');
+  assert.equal(directionLabel(mk(sn, 'SENTIDO N/S')), 'N/S');
+});
+
+test('direction: two towns in brackets, in the NAP name, are from and to', () => {
+  // Cepsa at Condeixa on the IC2: "(LIS/POR)" serves Lisboa -> Porto. The
+  // label is in the NAP name; the address is the same on both sides.
+  const site = (id, lat, name) => ({ id, lat, lon: -8.5, address: 'IC2 KM 175.5, TRAVAZ', name: `CONDEIXA-A-NOVA (${name})` });
+  const places = [[{ site: site('CDN-15', 40.100, 'LIS/POR') }], [{ site: site('CDN-16', 40.101, 'POR/LIS') }]];
+  assert.equal(directionLabel(places[0][0].site), 'LIS-POR');
+  const both = name => ({ LIS: { lat: 38.72, lon: -9.14 }, POR: { lat: 41.15, lon: -8.61 } })[name];
+  const north = { from: places[0][0].site, to: { lat: 41, lon: -8.5 } };
+  assert.deepEqual(ids(sideFor(places, north, both, { geometry: false })), ['CDN-15']);
+  // Porto can't be placed (POR fits several towns): Lisboa alone is far
+  // enough to tell the way, and the side that says it goes there isn't ours.
+  const onlyLis = name => name === 'LIS' ? { lat: 38.72, lon: -9.14 } : null;
+  const pick = sideFor(places, north, onlyLis, { geometry: false });
+  assert.deepEqual(ids(pick), ['CDN-15']);
+  assert.equal(pick.label, 'LIS-POR');
+  // The town the area is named after says nothing on its own: "(OLH-VRA)"
+  // at Olhão with VRA unknown stays undecided.
+  const olh = [[{ site: { id: 'OLH-47', lat: 37.1246, lon: -7.7705, address: 'A22', name: 'A22 OLHÃO (OLH-VRA)' } }],
+    [{ site: { id: 'OLH-48', lat: 37.1261, lon: -7.7711, address: 'A22', name: 'A22 OLHÃO (VRA-OLH)' } }]];
+  const near = name => name === 'OLH' ? { lat: 37.04, lon: -7.83 } : null;
+  assert.equal(sideFor(olh, { from: olh[0][0].site, to: { lat: 37.19, lon: -7.42 } }, near, { geometry: false }), null);
+  // The road in brackets is no direction.
+  assert.equal(directionLabel({ address: '(A1) KM 166,7 - LISBOA/PORTO' }), null);
+});
+
+test('direction: a label without its own side picks the side across from it', () => {
+  const [ns, sn] = PAIRS[0];
+  const places = [[{ site: mk(ns) }], [{ site: mk(sn, 'A1 S/N') }]];
+  const pick = sideFor(places, south(places[0][0].site), () => null, { geometry: false });
+  assert.deepEqual(ids(pick), [ns[0]]);
+  assert.equal(pick.label, null);
+  assert.equal(pick.oppositeOf, 'S/N');
+});
+
+test('direction: a three-letter label town is first the municipality of the MOBI.E codes', () => {
+  const pt = (id, code, city, lat, lon) => ({ id, code, city, lat, lon, region: 'CONT', points: [{ id: '1', kw: 22, connector: 'T2' }] });
+  const ds = new Dataset({ schema: 1, generatedAt: 'x', sites: [
+    pt('A-1', 'OLH-00001', 'Olhão', 37.03, -7.84), pt('A-2', 'OLH-00002', 'Olhão', 37.05, -7.82),
+    pt('B-1', 'LSB-00001', 'Lisboa', 38.72, -9.14),
+  ] });
+  assert.deepEqual([ds.resolveSignTown('OLH').lat, ds.resolveSignTown('OLH').lon].map(x => +x.toFixed(2)), [37.04, -7.83]);
+  // Not a code here: read as a place name ("LIS" starts Lisboa).
+  assert.equal(ds.resolveSignTown('LIS').lat, 38.72);
+  assert.equal(ds.resolveSignTown('VRA'), null);
+});

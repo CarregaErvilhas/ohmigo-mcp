@@ -194,9 +194,20 @@ is heading (`src/direction.js`):
   with the sides and tells the assistant to ask the user which way they're
   going, then call again with `towards` (a town or lat/lon).
   `lookup_charger` flags the pair (`directionNeeded`, `otherSide`).
+- **In a search near a place** (`find_chargers`, `find_cheapest_charging`),
+  each side carries the direction it says it serves (`direction`, as
+  published) and the side across the road (`otherSide`), and the other side
+  comes along even when the limit cut it. When the search centre is a few km
+  away, a note names the side a driver coming from there reaches (`markSides`
+  in `src/mcp.js`).
 - **With a direction**, the side is the one whose published direction
-  agrees ("N/S", "S-N", "sentido Lisboa", in the NAP address or the OSM
-  name). Without one, the **right-hand rule**: Portugal drives on the right,
+  agrees, in the OSM name, the NAP name or the NAP address: compass points
+  ("N/S", "sentido Norte-Sul"), "sentido" and a town or two ("sentido
+  Lisboa", "sentido Marateca - Caia"), or two towns in brackets ("(LIS/POR)",
+  "(OLH-VRA)"). The towns are often road-sign abbreviations: a three-letter
+  one is first read as the municipality of the MOBI.E codes, then as a place
+  name (`resolveSignTown` in `src/data.js`), and a label that can't be placed
+  still reaches the driver as written. Without one, the **right-hand rule**: Portugal drives on the right,
   so the service area to the right of the travel direction. That's a guess
   from coordinates, so it only decides when one side is clearly to the right,
   and the result carries an assumption telling the user to check the signs.

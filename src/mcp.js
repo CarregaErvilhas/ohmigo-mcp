@@ -19,7 +19,8 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { expandMonthKwh, promos, tariffs } from './ceme.js';
-import { clusterPlaces, directionLabel, sameStation, serviceAreas, sideFor } from './direction.js';
+import { clusterPlaces, directionLabel, onMotorway, PAIR_KM, sameStation, serviceAreas, sideFor } from './direction.js';
+import { haversineKm } from './geo.js';
 import { pickLang, translator } from './i18n.js';
 import { napEurPerKwh, napPlan } from './live.js';
 import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt } from './offers.js';
@@ -159,6 +160,46 @@ function resolveTowards(ds, towards, t) {
 
 // A service area's sides, one line each, for the question to the user.
 const sidesList = area => area.map(pl => `${placeLine(pl)} · ${directionLabel(pl[0].site) ?? '?'}`).join('\n');
+
+// The assumption that says which side of a service area was picked, and why.
+const sideAssumption = (pick, to, t) => pick.by === 'geometry' ? t('assume.side', { to })
+  : pick.label ? t('assume.sideLabel', { label: pick.label, to }) : t('assume.sideOpposite', { other: pick.oppositeOf, to });
+
+// A search near a place lists both sides of a motorway service area as two
+// chargers a few metres apart, and the driver can only use the one on their
+// side of the road. So each side gets the direction it says it serves
+// (`direction`, as published: "N/S", "OLH-VRA") and the ids of the side
+// across the road (`otherSide`), looked up among all sites: the other side
+// may be cut by the limit or a filter, and it is still there. `from` (the
+// search centre, a few km away): the side a driver coming from there reaches
+// is named in a note. Returns { notes, twins }: the ids of the other sides
+// that weren't among the hits.
+const APPROACH_KM = 3;
+export function markSides(ds, hits, t, from) {
+  const mine = new Set(hits.map(h => h.site));
+  const onRoad = hits.filter(h => onMotorway(h.site));
+  if (!onRoad.length) return { notes: [], twins: new Set() };
+  const extra = ds.sites.filter(s => !mine.has(s) && onMotorway(s) && onRoad.some(h => haversineKm(h.site, s) <= PAIR_KM))
+    .map(site => ({ site, extra: true }));
+  const notes = [], twins = new Set();
+  for (const area of serviceAreas(clusterPlaces([...onRoad, ...extra]))) {
+    if (area.length < 2 || area.every(pl => pl.every(h => h.extra))) continue;
+    const sides = area.map(pl => pl[0].site.id);
+    for (const pl of area) for (const h of pl) {
+      if (h.extra) { twins.add(h.site.id); continue; }
+      h.direction = directionLabel(h.site) ?? undefined;
+      h.otherSide = sides.filter(id => id !== pl[0].site.id);
+    }
+    if (!from || haversineKm(from.point, area[0][0].site) < APPROACH_KM) continue;
+    const pick = sideFor(area, { from: from.point, to: area[0][0].site }, name => ds.resolveSignTown(name));
+    if (!pick) continue;
+    const side = pl => `${pl[0].site.id}${directionLabel(pl[0].site) ? ` (${directionLabel(pl[0].site)})` : ''}`;
+    notes.push(t('note.sideFrom', { from: from.name, side: pick.places.map(side).join(', '),
+      other: area.filter(pl => !pick.places.includes(pl)).map(side).join(', '), guess: pick.by === 'geometry' }));
+  }
+  if (hits.some(h => h.otherSide)) notes.unshift(t('note.sides'));
+  return { notes, twins };
+}
 
 // One place (sites at the same spot), one line: every operator there, so the
 // assistant never has to guess who runs a site it wasn't shown.
@@ -449,13 +490,13 @@ function pointsFor(ds, live, a, t) {
     const towards = resolveTowards(ds, a.towards, t);
     if (towards?.error) return towards;
     if (!towards) return { error: `${t('err.direction', { query: a.site })}\n${sidesList(places)}`, code: 'direction' };
-    const pick = sideFor(places, { from: places[0][0].site, to: towards.point }, name => ds.resolvePlace(name));
+    const pick = sideFor(places, { from: places[0][0].site, to: towards.point }, name => ds.resolveSignTown(name));
     // When the direction doesn't settle it, both sides are priced: the driver
     // will see on the signs which one they're at.
     if (!pick) assumptions.push(t('assume.bothSides', { to: towards.name }));
     else {
       places = pick.places;
-      assumptions.push(pick.by === 'label' ? t('assume.sideLabel', { label: pick.label, to: towards.name }) : t('assume.side', { to: towards.name }));
+      assumptions.push(sideAssumption(pick, towards.name, t));
     }
   }
   const sites = places.flat();
@@ -604,12 +645,12 @@ export function createServer(getDataset, live) {
       const sides = area.map(pl => pl[0].site.id);
       for (const pl of area) for (const h of pl) { h.direction = directionLabel(h.site); h.otherSide = sides.filter(id => id !== pl[0].site.id); }
       if (!towards) { directionNeeded = true; continue; }
-      const pick = sideFor(area, { from: area[0][0].site, to: towards.point }, name => ds.resolvePlace(name));
+      const pick = sideFor(area, { from: area[0][0].site, to: towards.point }, name => ds.resolveSignTown(name));
       if (!pick) { notes.push(t('assume.bothSides', { to: towards.name })); continue; }
       const far = new Set(area.filter(pl => !pick.places.includes(pl)).flat());
       results = results.filter(h => !far.has(h));
       for (const h of pick.places.flat()) delete h.otherSide;
-      notes.push(pick.by === 'label' ? t('assume.sideLabel', { label: pick.label, to: towards.name }) : t('assume.side', { to: towards.name }));
+      notes.push(sideAssumption(pick, towards.name, t));
     }
     if (directionNeeded) notes.push(t('note.direction'));
     notes.push(...voltageNotes(ds, a, t));
@@ -642,12 +683,20 @@ export function createServer(getDataset, live) {
     const w = resolveWhere(ds, a, t, { everywhere: true });
     if (w.error) return err(w.error, w.code);
     const { everywhere, ...where } = w;
-    const { total, results } = ds.search({ ...where, ...filterOf(a), region: a.region, limit: a.limit });
-    if (!results.length) return err(t('err.noMatch'), 'noMatch');
+    const { total, results: all } = ds.search({ ...where, ...filterOf(a), region: a.region, limit: Infinity });
+    if (!all.length) return err(t('err.noMatch'), 'noMatch');
     await withLive(live, ctx, t);
+    // The other side of a motorway service area comes with the side shown,
+    // even past the limit: they are the same stop, one per direction.
+    const from = where.near && !where.route ? { point: where.near, name: w.resolvedPlace?.name ?? t('searchPoint') } : null;
+    let results = all.slice(0, a.limit);
+    const { twins } = markSides(ds, results, t, null);
+    if (twins.size) results = all.filter(r => results.includes(r) || twins.has(r.site.id));
+    const sides = markSides(ds, results, t, from);
     const notes = [
       ...(everywhere ? [t('note.nationwide', { shown: results.length, total, forCar: a.car_voltage })] : []),
       ...voltageNotes(ds, a, t),
+      ...sides.notes,
     ];
     const facts = results.map(r => siteFacts(r.site, t));
     notes.push(...facts.flatMap(f => f.notes));
@@ -656,7 +705,7 @@ export function createServer(getDataset, live) {
     const maxOf = (r, k) => Math.max(...r.points.map(p => p[k] ?? 0)) || '?';
     const forCar = r => Math.max(...r.points.map(p => kwForCar(p, a.car_voltage ?? COMMON_CAR_VOLTS)?.kw ?? p.kw ?? 0));
     const forCarLabel = a.car_voltage ? 'for this car' : 'at 400 V';
-    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${r.points.length} sockets, max ${maxOf(r, 'kw')} kW${forCar(r) < maxOf(r, 'kw') ? ` (${forCar(r)} kW ${forCarLabel})` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
+    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.direction ? ` [${r.direction}]` : ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${r.points.length} sockets, max ${maxOf(r, 'kw')} kW${forCar(r) < maxOf(r, 'kw') ? ` (${forCar(r)} kW ${forCarLabel})` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
     return ok({
       ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, wholeCountry: everywhere || undefined, total,
       ...(notes.length && { notes: [...new Set(notes)] }),
@@ -665,6 +714,7 @@ export function createServer(getDataset, live) {
         siteId: r.site.id, code: r.site.code, operator: r.site.operator, address: r.site.address, city: r.site.city, region: r.site.region,
         place: r.site.osm?.name ?? r.site.osm?.brand,
         lat: r.site.lat, lon: r.site.lon, km: rnd(r.km), offRouteKm: rnd(r.offRouteKm), alongKm: rnd(r.alongKm),
+        direction: r.direction, otherSide: r.otherSide,
         ...facts[i].facts,
         access: r.site.osm?.access, parkingFee: r.site.osm?.parkingFee,
         points: r.points.map(p => ({
@@ -749,9 +799,14 @@ export function createServer(getDataset, live) {
         for (const o of q.options) delete o.components;
       }
     }
+    // Motorway service areas: which direction each side serves (markSides).
+    const sideHits = top.map(q => ({ site: ds.siteById.get(q.siteId), q })).filter(h => h.site);
+    const sides = markSides(ds, sideHits, t, w.near && !w.route ? { point: w.near, name: w.resolvedPlace?.name ?? t('searchPoint') } : null);
+    for (const h of sideHits) if (h.otherSide) { h.q.direction = h.direction; h.q.otherSide = h.otherSide; }
     const notes = [
       ...(cemeDown ? [t('note.noCeme')] : []),
       ...voltageNotes(ds, a, t),
+      ...sides.notes,
       ...(truncated ? [t('note.truncated', { n: candidates.length, total })] : []),
       ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
       ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
