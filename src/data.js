@@ -28,6 +28,7 @@ import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
 import { fold, Index, lendOperators, operatorKey } from './lookup.js';
+import { usableKw } from './socket.js';
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 // The dataset format this code understands. nap-dashboard bumps SCHEMA in
@@ -207,7 +208,10 @@ export class Dataset {
   //                chargers that are open)
   // `hide`: plugs left out when `connectors` isn't given (the tools hide
   // CHAdeMO from drivers who didn't say their car has that port).
-  pointFilter({ minKw, connectors, hide, dcOnly, minVoltage, cardPayment: card, cable, openAt } = {}) {
+  // `carVolts`: the car's battery voltage. minKw then reads the power a DC
+  // socket can give that car (amps × volts, socket.js), not its nameplate:
+  // "150 kW for my 400 V car" must not keep a 200 A socket (80 kW).
+  pointFilter({ minKw, connectors, hide, dcOnly, minVoltage, cardPayment: card, cable, openAt, carVolts } = {}) {
     const cs = connectors?.length ? new Set(connectors.map(c => c.toUpperCase())) : null;
     const hidden = !cs && hide?.length ? new Set(hide) : null;
     const minV = this.hasVoltage ? minVoltage : null;
@@ -216,7 +220,7 @@ export class Dataset {
       if (!siteOk.has(s)) siteOk.set(s, (!card || cardPayment(s).value === true) && (!openAt || siteOpen(s, openAt).open !== false));
       return siteOk.get(s);
     };
-    return (p, s) => (minKw == null || (p.kw ?? 0) >= minKw)
+    return (p, s) => (minKw == null || (usableKw(p, carVolts) ?? 0) >= minKw)
       && (!cs || cs.has(p.connector))
       && (!hidden || !hidden.has(p.connector))
       && (!dcOnly || p.dc)
@@ -227,7 +231,9 @@ export class Dataset {
 
   // Sites near a point or along a route, nearest first (or in route order),
   // each with only the points that pass the filter. With neither, the whole
-  // country ("every charger above 500 V"), most powerful first.
+  // country ("every charger above 500 V"), most powerful first: for the car,
+  // when filter.carVolts is given ("the most powerful chargers for a 400 V
+  // car" are not the ones with the biggest nameplate).
   // `only`: a Set of site ids to keep (a text filter, from lookup()).
   search({ near, radiusKm = 5, route, corridorKm = 2, limit = 20, only, region, ...filter }) {
     const ok = this.pointFilter(filter);
@@ -248,7 +254,7 @@ export class Dataset {
       const points = s.points.filter(p => ok(p, s));
       if (points.length) out.push({ site: s, points, ...dist });
     }
-    const maxKw = r => Math.max(...r.points.map(p => p.kw ?? 0));
+    const maxKw = r => Math.max(...r.points.map(p => usableKw(p, filter.carVolts) ?? 0));
     out.sort(route ? (a, b) => a.alongKm - b.alongKm
       : near ? (a, b) => a.km - b.km
       : (a, b) => maxKw(b) - maxKw(a) || a.site.id.localeCompare(b.site.id));

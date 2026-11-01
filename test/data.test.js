@@ -69,3 +69,32 @@ test('data: a socket with 0 kW or less is unknown power, and OpenStreetMap only 
   assert.ok(Number.isFinite(s.minutes) && s.minutes > 0);
   assert.deepEqual(s.assumptions, estimateSession({ kw: null, dc: true }, { batteryKwh: 60, startPct: 20, targetPct: 80 }).assumptions);
 });
+
+test('data: with the car\'s voltage, min_kw and the whole-country order use the power a DC socket gives that car', () => {
+  // A: 400 kW, 600 A (240 kW at 400 V). B: 300 kW, 1000 A... at 400 V, 300 kW.
+  const ds = new Dataset({ sites: [
+    site('A', [{ id: '1', kw: 400, v: 1000, a: 600, dc: true }]),
+    site('B', [{ id: '1', kw: 300, v: 920, a: 1000, dc: true }]),
+    site('C', [{ id: '1', kw: 120, v: 1000, a: 200, dc: true }]),
+  ] });
+  assert.deepEqual(ds.search({}).results.map(r => r.site.id), ['A', 'B', 'C']);
+  assert.deepEqual(ds.search({ carVolts: 400 }).results.map(r => r.site.id), ['B', 'A', 'C']);
+  assert.deepEqual(ds.search({ carVolts: 800 }).results.map(r => r.site.id), ['A', 'B', 'C']);
+  assert.deepEqual(ds.search({ minKw: 100 }).results.map(r => r.site.id), ['A', 'B', 'C']);
+  assert.deepEqual(ds.search({ minKw: 100, carVolts: 400 }).results.map(r => r.site.id), ['B', 'A']);
+});
+
+test('data: the duration uses what the socket gives the car at its voltage, and says so', () => {
+  const p = { kw: 400, v: 1000, a: 600, dc: true };
+  const car = { batteryKwh: 77, startPct: 10, targetPct: 80, dcKw: 400 };
+  const v800 = estimateSession(p, { ...car, volts: 800 }), v400 = estimateSession(p, { ...car, volts: 400 });
+  assert.equal(v800.peakKw, 400);
+  assert.equal(v400.peakKw, 240);
+  assert.ok(v400.minutes > v800.minutes);
+  assert.ok(v400.assumptions.some(x => /at most 240 kW, not its 400 kW nameplate: 600 A × 400 V/.test(x)), v400.assumptions.join('\n'));
+  assert.ok(!v800.assumptions.some(x => /nameplate/.test(x)));
+  // A car that takes less than the socket gives it: the car is the limit, not said.
+  assert.ok(!estimateSession(p, { ...car, dcKw: 175, volts: 400 }).assumptions.some(x => /nameplate/.test(x)));
+  const boosted = estimateSession({ kw: 50, v: 500, a: 125, dc: true }, { ...car, volts: 800 });
+  assert.ok(boosted.assumptions.some(x => /steps the voltage up/.test(x)));
+});

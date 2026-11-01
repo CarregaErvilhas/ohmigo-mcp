@@ -116,7 +116,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/direction.js` | Motorway service areas: which side the driver can reach, from where they're heading |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |
 | `src/quote.js` | Prices one plug for every way to pay; ranks plugs |
-| `src/socket.js` | What the driver must know about a socket: which plug to use (`plug`) and, on MOBI.E, the grid it's on (`tar`: BT or MT) |
+| `src/socket.js` | What the driver must know about a socket: which plug to use (`plug`), on MOBI.E the grid it's on (`tar`: BT or MT), and on DC the power it gives the car at its battery voltage (`kwForCar`) |
 | `src/charging.js` | Session energy and duration, as constant-power segments |
 | `src/profile.js` | Lays the session on the clock: kWh per quarter-hour, local times |
 | `src/opc.js` | Operator fee math (flat, per kWh, per-minute tiers) |
@@ -240,6 +240,15 @@ that only has CHAdeMO, the answer says that instead of "no such charger".
 plug to grab (and whether to bring a cable), and at a MOBI.E charger whether it
 hangs from low (BT) or medium voltage (MT), which picks the TAR inside the CEME
 price. Both come from `src/socket.js`, in the user's language.
+
+**Why does a DC socket sometimes carry `kwForCar`?** Its `kw` is what it gives
+at the top of its voltage range, and most cars have a 400 V battery: what they
+get is the socket's amps × their volts, often far less (a 400 kW, 600 A socket
+gives a 400 V car 240 kW). When the assistant passes `car_voltage`, each DC
+socket whose amps cap it below `kw` says so in `kwForCar`, `min_kw` and the
+whole-country order of `find_chargers` use that figure ("the most powerful
+chargers for my 400 V car"), and so does the session's duration. Without
+`car_voltage` nothing changes: we don't guess the car.
 
 **Why does the assistant send `lang`?** Some of our text reaches the user
 almost word for word (assumptions, payment labels, the progress message, the

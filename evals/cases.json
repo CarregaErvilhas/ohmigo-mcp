@@ -1000,6 +1000,53 @@
           "Does the reply send the user to a CCS (CCS2) socket for fast charging, without telling them to use a CHAdeMO plug?"
         ]
       }
+    },
+    {
+      "id": "dc-power-400v-car",
+      "why": "A DC charger's kW is for its top voltage: a 400 V car gets amps × 400 V. The assistant passes car_voltage and tells the driver the power they'll really get.",
+      "message": "Vou parar no IONITY de Abrantes com o meu Tesla Model 3 Long Range de 2022. A que potência vou carregar lá?",
+      "requires": [
+        {
+          "site": "IOY-ABT-00039"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|estimate_charging_cost",
+            "args": {
+              "car_voltage": [
+                300,
+                450
+              ]
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply say the car gets less than the charger's 400 kW there, because of its 400 V battery and the charger's current limit (about 240 kW)?"
+        ]
+      }
+    },
+    {
+      "id": "most-powerful-400v",
+      "why": "\"Most powerful for my 400 V car\" is ordered by amps × 400 V, not by the nameplate: find_chargers with car_voltage and no place.",
+      "message": "O meu carro tem bateria de 400 V. Quais são os postos em Portugal que me dão mais potência a mim?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_chargers",
+            "args": {
+              "car_voltage": [
+                350,
+                450
+              ],
+              "place": false,
+              "lat": false,
+              "route": false
+            }
+          }
+        ]
+      }
     }
   ]
 }
