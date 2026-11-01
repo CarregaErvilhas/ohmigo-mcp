@@ -135,7 +135,8 @@ for both.
 
 **Plug types** — `T2` (Type 2, AC; the socket may have a cable attached or not,
 then you bring yours), `CCS` (Combo 2, DC, most cars), `CHADEMO` (DC, only a few
-cars: Nissan Leaf, e-NV200...), `SCHUKO` (household socket). Every answer says
+cars, and it depends on the version: the Nissan Leaf had it until the 2026
+one, which has CCS2), `SCHUKO` (household socket). Every answer says
 which one to use (`plug`).
 
 **Charging losses** — energy that turns into heat between the charger's meter

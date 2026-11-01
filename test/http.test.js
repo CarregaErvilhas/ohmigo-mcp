@@ -702,7 +702,7 @@ test('http: CHAdeMO sockets only show when the car has the port (connectors list
   const sockets = async args => (await call('lookup_charger', { query: 'GLP-LRA-00156', lang: 'en', ...args })).structuredContent.sites[0].sockets;
   assert.ok(!(await sockets({})).some(g => g.connector === 'CHADEMO'));
   const hidden = (await call('lookup_charger', { query: 'GLP-LRA-00156', lang: 'en' })).structuredContent;
-  assert.ok(hidden.notes.some(x => /CHAdeMO sockets, left out/.test(x)), 'the assistant hears they exist, to ask again for a Leaf');
+  assert.ok(hidden.notes.some(x => /CHAdeMO sockets, left out/.test(x)), 'the assistant hears they exist, to ask again for a CHAdeMO car');
   const shown = (await call('lookup_charger', { query: 'GLP-LRA-00156', connectors: ['CHADEMO', 'T2'], lang: 'en' })).structuredContent;
   assert.ok(!shown.notes?.some(x => /left out/.test(x)));
   assert.ok((await sockets({ connectors: ['CHADEMO', 'T2'] })).some(g => g.connector === 'CHADEMO'));

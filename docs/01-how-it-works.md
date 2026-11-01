@@ -227,8 +227,9 @@ poller would download 38 MB every few minutes for nobody ([03](03-live-status.md
 memory in a few MB, and a search is a few milliseconds of looping. A database
 would be one more service to run, for no gain.
 
-**Why are CHAdeMO sockets hidden by default?** Only a few cars have that port
-(Nissan Leaf, e-NV200, some older Mitsubishi plug-in hybrids). Send any other
+**Why are CHAdeMO sockets hidden by default?** Only some cars have that port,
+and which port a car has depends on its exact version, not just the model
+(the Nissan Leaf had CHAdeMO until the 2026 one, which has CCS2). Send any other
 driver to a CHAdeMO socket and they can't charge. So the driver tools leave
 CHAdeMO out unless the assistant lists `CHADEMO` in `connectors` (`filterOf` in
 `mcp.js`): the car has the port, or the user asked. If the words name a charger

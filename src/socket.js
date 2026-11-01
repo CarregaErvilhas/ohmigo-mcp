@@ -4,8 +4,9 @@
 // The plug: the dataset says "CCS", "T2", "CHADEMO"... (nap-dashboard maps
 // the NAP's DATEX II names to these). A driver needs more than the code: a
 // Type 2 socket with no cable means bringing their own cable, and a CHAdeMO
-// plug only fits the few cars that have that port (Nissan Leaf, e-NV200, some
-// older Mitsubishi plug-in hybrids). So every answer carries `plug`, one
+// plug only fits cars that have that port, and which port a car has depends
+// on its exact version (the Nissan Leaf had CHAdeMO until the 2026 one, which
+// has CCS2). So every answer carries `plug`, one
 // sentence that says what to plug in.
 //
 // The grid: MOBI.E publishes each socket's voltage level, BTN/BTE (low

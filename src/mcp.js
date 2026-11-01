@@ -58,15 +58,15 @@ Who's who on MOBI.E (don't mix them up): the CEME sells the energy (the user's c
 
 Never ask for a charger id: when the user names a charger (brand or operator + town, a shop, an address, the code on its sticker), call lookup_charger with their words, then pass its siteId as site to estimate_charging_cost. At a motorway service area, when a result asks for the direction, ask where the user is heading.
 
-Always say which plug to use ("plug") and, on MOBI.E, whether the charger is BT or MT ("tar"; "level" BTN/BTE/MT is the grid connection, never the socket's volts). Before the user goes, mention: "openNow" false or "hours": a car park that closes is unusable then; "cardPayment", "locationDescription" (where in the car park), "support" (who to call if it won't start).
+Always say which plug to use ("plug") and, on MOBI.E, if the charger is BT or MT ("tar"; "level" BTN/BTE/MT is the grid connection, never the socket's volts). Before the user goes, mention: "openNow" false or "hours": a car park that closes is unusable then; "cardPayment", "locationDescription" (where in the car park), "support" (who to call if it won't start).
 
-Before a cost call: look up the car's specs yourself (usable battery, max AC/DC kW, plugs, published DC 10-80% minutes, the DC curve from ev-database.org or evkx.net); don't ask the user for them. Ask only for what you don't know: battery % now, target % (default 80), and whether they're in a hurry (the cheapest is often a slow AC socket: pass max_minutes or dc_only on a trip). If they pay with CEME cards/apps, resolve them with list_ceme_tariffs and pass all the ones they hold as tariff_ids. ohmigo stores nothing: remember the car, its specs and the user's tariffs yourself, and for monthly free-kWh promotions the kWh they charged per tariff this month (month_kwh).
+Before a cost call: look up the car's specs yourself (usable battery, max AC/DC kW, plugs (of its exact version/year), published DC 10-80% minutes, the DC curve from ev-database.org or evkx.net); don't ask the user for them. Ask only for what you don't know: battery % now, target % (default 80), and whether they're in a hurry (the cheapest is often a slow AC socket: pass max_minutes or dc_only on a trip). If they pay with CEME cards/apps, resolve them with list_ceme_tariffs and pass all the ones they hold as tariff_ids. ohmigo stores nothing: remember the car, its specs and the user's tariffs yourself, and for monthly free-kWh promotions the kWh they charged per tariff this month (month_kwh).
 
 Presenting: lead with "best", the cheapest option the user can use now: total in €, duration, how to pay, main assumptions. Every charger has more ways to pay in "options": other CEMEs, "adhoc" (no CEME card needed; its label says if by card at the charger or on the phone: always mention it), "direct" (operator apps, subscriptions, roaming apps; a subscription's fee is not in the total) and "opc_direct" (the operator's NAP price outside MOBI.E). Say there are more and offer to list them; point out when a subscription or another CEME is cheaper. MOBI.E and other networks share one ranking: the price decides.
 Pass on the result's assumptions and notes and each option's note: they flag peak prices (the most it can cost; usually much less off-peak), promotions in or out of the total, stale or island-VAT prices, sources that disagree. Tariffs and promotions for new sign-ups only (newCustomersOnly, newCustomers) are tips for non-clients ("signing up by <until> gets <price>"), never the price. Prices for one group (audience) are only for drivers who said they belong to it, now or before (your memory counts): never infer a group, and say whom the price is for.
 Credit your sources: OpenStreetMap for "osm" data; for "direct" prices, the source in the note (for the blog, its author, Alexandre Moleiro).
 
-Live status comes from the NAP; if live.fresh is false, say it may be stale. Costs are estimates; the operator's and CEME's prices on the day prevail.`;
+Live status is the NAP's; if live.fresh is false, say it may be stale. Costs are estimates; the prices on the day prevail.`;
 
 // Argument schemas, shared by the tools. zod turns them into the JSON Schema
 // the assistant sees, and validates what it sends back.
@@ -171,16 +171,17 @@ function placeLine(pl) {
 
 const Filter = {
   min_kw: z.number().positive().optional().describe('Minimum charger power, kW'),
-  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'SCHUKO'])).optional().describe("The car's plugs; CHAdeMO only if listed (car has that port, or the user asks)"),
+  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'SCHUKO'])).optional().describe("The car's plugs (exact version/year); CHAdeMO only if listed (that car has the port, or the user asks)"),
   dc_only: z.boolean().optional().describe('Only DC (fast) chargers'),
-  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum socket voltage, V (e.g. 800 for an 800 V car)'),
+  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum socket voltage, V (800 V car: 800)'),
   card_payment: z.boolean().optional().describe('Only chargers with a bank card terminal or contactless reader'),
   cable_attached: z.boolean().optional().describe('true: only sockets with a fixed cable; false: only without'),
   open_now: z.boolean().optional().describe('Leave out chargers closed now (or at `at`)'),
 };
 
 // The Filter arguments, as Dataset.pointFilter takes them. A CHAdeMO plug
-// only fits a few cars (Nissan Leaf, e-NV200...), and a driver sent to one
+// only fits cars with that port (which changes between versions of a model:
+// the 2026 Nissan Leaf has CCS2, older ones CHAdeMO), and a driver sent to one
 // with any other car can't charge: so CHAdeMO sockets stay out unless the
 // assistant lists CHADEMO in connectors (the car has the port, or the user
 // asked). `allPlugs`: counts about the network, not a driver (list_operators).
@@ -398,7 +399,7 @@ const canonical = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' &&
 export const socketKindKey = (site, point) => canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, site.operatorId, !!site.operatorInferred, site.hours ?? null, site.osm?.openingHours ?? null]);
 
 // Nothing found because CHAdeMO was hidden (filterOf), while the words do
-// name a charger: it only has CHAdeMO. Said so, or a Leaf driver whose
+// name a charger: it only has CHAdeMO. Said so, or a CHAdeMO driver whose
 // assistant forgot connectors would hear "no such charger".
 function chademoOnly(ds, a, t) {
   if (a.connectors?.length) return null;
@@ -601,7 +602,7 @@ export function createServer(getDataset, live) {
     await withLive(live, ctx, t);
     const cards = results.slice(0, a.limit).map(h => siteCard(h, live, t, a.audiences, notes));
     // CHAdeMO left out (filterOf) at a site shown: a note for the assistant
-    // only, so a Leaf driver's assistant knows to ask again with CHADEMO.
+    // only, so a CHAdeMO driver's assistant knows to ask again with CHADEMO.
     if (!a.connectors?.length && results.slice(0, a.limit).some(h => h.site.points.some(p => p.connector === 'CHADEMO'))) notes.push(t('note.chademoHidden'));
     if (results.slice(0, a.limit).some(h => napNote(h.site)?.timeOfUse)) notes.push(t('assume.napTimeOfUse'));
     return ok({

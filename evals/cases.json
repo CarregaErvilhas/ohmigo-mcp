@@ -907,8 +907,8 @@
     },
     {
       "id": "leaf-chademo",
-      "why": "A car with a CHAdeMO port (Nissan Leaf): pass CHADEMO in connectors, so its DC sockets show.",
-      "message": "Tenho um Nissan Leaf de 40 kWh e estou com 15%. Quanto custa carregar rápido no posto LRA-00156 até aos 80%?",
+      "why": "A car version with a CHAdeMO port (a 2020 Nissan Leaf): pass CHADEMO in connectors, so its DC sockets show.",
+      "message": "Tenho um Nissan Leaf de 2020, de 40 kWh, e estou com 15%. Quanto custa carregar rápido no posto LRA-00156 até aos 80%?",
       "requires": [
         {
           "site": "GLP-LRA-00156"
@@ -968,6 +968,36 @@
         ],
         "judge": [
           "Does the reply say whether the charger is connected at low voltage (BT) or medium voltage (MT), without presenting that as the socket's voltage in volts?"
+        ]
+      }
+    },
+    {
+      "id": "leaf-2026-ccs",
+      "why": "Ports depend on the exact version, not the model: the 2026 Nissan Leaf has CCS2, so no CHAdeMO.",
+      "message": "Tenho o Nissan Leaf novo, de 2026, com bateria de 75 kWh. Estou com 20%. Quanto custa carregar rápido no posto LRA-00156 até aos 80%?",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "noCalls": [
+          {
+            "args": {
+              "connectors": "CHADEMO"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply send the user to a CCS (CCS2) socket for fast charging, without telling them to use a CHAdeMO plug?"
         ]
       }
     }
