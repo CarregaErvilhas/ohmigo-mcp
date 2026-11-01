@@ -141,6 +141,28 @@ export class Dataset {
     return { lat, lon, matchedSites: hits.length };
   }
 
+  // A town as a service area's direction label writes it ("Lisboa", "LIS",
+  // "OLH"; direction.js): a three-letter abbreviation is first read as the
+  // municipality of the MOBI.E codes ("OLH-00047" is in Olhão), then like
+  // any place name. null when it can't be placed (VRA, POR: several towns).
+  resolveSignTown(name) {
+    const code = String(name).trim().toUpperCase();
+    if (/^[A-Z]{3}$/.test(code)) {
+      if (!this.codeCities) {
+        this.codeCities = new Map();
+        for (const s of this.sites) {
+          const c = s.code?.match(/^([A-Z]{3})-\d/)?.[1];
+          if (!c || !s.city) continue;
+          if (!this.codeCities.has(c)) this.codeCities.set(c, new Set());
+          this.codeCities.get(c).add(s.city);
+        }
+      }
+      const cities = this.codeCities.get(code);
+      if (cities?.size === 1) return this.resolvePlace([...cities][0]);
+    }
+    return this.resolvePlace(name);
+  }
+
   // The towns a name could be, when resolvePlace can't pick one (up to 8).
   placeCandidates(name) {
     const hits = this.placeHits(name) ?? [];
@@ -320,7 +342,7 @@ export class Dataset {
     const drop = new Set();
     for (const area of serviceAreas(clusterPlaces(results))) {
       if (area.length < 2) continue;
-      const pick = sideFor(area, area[0][0].seg, name => this.resolvePlace(name), { geometry: false });
+      const pick = sideFor(area, area[0][0].seg, name => this.resolveSignTown(name), { geometry: false });
       if (pick) for (const pl of area) if (!pick.places.includes(pl)) pl.forEach(h => drop.add(h));
     }
     return results.filter(r => !drop.has(r));
