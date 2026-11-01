@@ -110,8 +110,9 @@ test('http: every tool is read-only and talks to the outside world', async () =>
 // The tool list is in the assistant's context in every conversation, used or
 // not. Raising this is a decision, not a fix: first trim descriptions or merge
 // tools (src/mcp.js says where guidance belongs). Six tools; list_operators
-// and the socket filters (voltage, card, cable, hours) took it from 18 000.
-const TOOLS_MAX_CHARS = 20_500;
+// and the socket filters (voltage, card, cable, hours) took it from 18 000;
+// car_voltage (a DC socket's real power for the car) from 20 500.
+const TOOLS_MAX_CHARS = 21_300;
 
 test('http: the tool list stays small, and every tool says what it is for so tool search finds it', async () => {
   const { tools } = await call('tools/list');
@@ -204,6 +205,25 @@ test('http: find_chargers filters by declared voltage and says the values are de
   assert.ok(points.length > 0);
   assert.ok(points.every(p => p.volts >= 800 && p.dc), JSON.stringify(points));
   assert.ok(d.notes.some(n => /declares/.test(n)));
+});
+
+test('http: with car_voltage, DC sockets say what they give that car, and the cost tools use it', async () => {
+  // CNT-9648PR0002: 150 kW (OSM) and 120 kW at 200 A, 80 kW for a 400 V car.
+  const found = (await call('find_chargers', { car_voltage: 400, dc_only: true, lang: 'en' })).structuredContent;
+  assert.match(found.notes.join('\n'), /most powerful first for a 400 V car/);
+  assert.match(found.notes.join('\n'), /kwForCar is the most a DC socket can give/);
+  const cnt = found.sites.find(s => s.siteId === 'CNT-9648PR0002').points;
+  assert.deepEqual(cnt.map(p => [p.kw, p.kwForCar]).sort(), [[120, 80], [150, 80]]);
+  // 800 V: 200 A × 800 V = 160 kW covers both; nothing to say.
+  const at800 = (await call('lookup_charger', { query: 'CNT-9648PR0002', car_voltage: 800, lang: 'en' })).structuredContent;
+  assert.ok(at800.sites[0].sockets.every(g => g.kwForCar === undefined));
+  // Without car_voltage, what a usual 400 V car gets, and whose amps they are.
+  const plain = (await call('lookup_charger', { query: 'CNT-9648PR0002', lang: 'en' })).structuredContent;
+  assert.deepEqual(plain.sites[0].sockets.filter(g => g.dc).map(g => [g.kw, g.kwAt400V, g.ampsSource, g.kwForCar]).sort(), [[120, 80, 'nap', undefined], [150, 80, 'nap', undefined]]);
+  assert.match(plain.notes.join('\n'), /kwAt400V is the most a DC socket gives a car with a 400 V battery/);
+  const cost = (await call('estimate_charging_cost', { site: 'CNT-9648PR0002', point_id: 'CNT-9648PR0002/9648PR0002.01', battery_kwh: 77, start_pct: 10, car_dc_kw: 200, car_voltage: 400, lang: 'en' })).structuredContent;
+  assert.equal(cost.results[0].kwForCar, 80);
+  assert.ok(cost.results[0].assumptions.some(x => /at most 80 kW, not its 150 kW nameplate/.test(x)));
 });
 
 test('http: find_chargers searches the whole country only when a filter keeps the list meaningful', async () => {

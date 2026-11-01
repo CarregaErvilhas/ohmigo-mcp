@@ -52,7 +52,7 @@ import { napEurPerKwh, napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
 import { forAudiences, isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, unpricedHere, withPromos } from './promos.js';
-import { gridOf, plugLabel } from './socket.js';
+import { forCarFields, gridOf, plugLabel } from './socket.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 const r4 = x => Math.round(x * 10_000) / 10_000;
@@ -295,7 +295,11 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     pointId: `${site.id}/${point.id}`, siteId: site.id, code: site.code,
     operator: site.operator, ...(site.operatorInferred && { operatorInferred: true }), address: site.address, city: site.city,
     lat: site.lat, lon: site.lon, region: site.region,
-    kw: point.kw, ...(point.napKw !== undefined && { napKw: point.napKw }), volts: point.v ?? undefined,
+    kw: point.kw, ...(point.napKw !== undefined && { napKw: point.napKw }),
+    // What this DC socket can give the car at its battery voltage (or a
+    // 400 V car's, without it), when it's less than kw (socket.js); with the
+    // car's voltage the duration already uses it.
+    ...forCarFields(point, car.volts), volts: point.v ?? undefined,
     cable: point.cable ?? undefined, connector: point.connector, dc: point.dc, regime: point.regime,
     // Which plug to use, and on MOBI.E the grid (BT/MT) and its TAR: the
     // driver has to know both (socket.js).
