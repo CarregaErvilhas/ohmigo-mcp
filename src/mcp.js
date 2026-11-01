@@ -600,6 +600,9 @@ export function createServer(getDataset, live) {
     if (results[0].missing?.length) notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
     await withLive(live, ctx, t);
     const cards = results.slice(0, a.limit).map(h => siteCard(h, live, t, a.audiences, notes));
+    // CHAdeMO left out (filterOf) at a site shown: a note for the assistant
+    // only, so a Leaf driver's assistant knows to ask again with CHADEMO.
+    if (!a.connectors?.length && results.slice(0, a.limit).some(h => h.site.points.some(p => p.connector === 'CHADEMO'))) notes.push(t('note.chademoHidden'));
     if (results.slice(0, a.limit).some(h => napNote(h.site)?.timeOfUse)) notes.push(t('assume.napTimeOfUse'));
     return ok({
       ...meta(ds, live, lang), query: a.query, total: results.length,

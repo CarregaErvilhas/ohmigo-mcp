@@ -701,6 +701,10 @@ test('http: free-text arguments have a length limit', async () => {
 test('http: CHAdeMO sockets only show when the car has the port (connectors lists CHADEMO)', async () => {
   const sockets = async args => (await call('lookup_charger', { query: 'GLP-LRA-00156', lang: 'en', ...args })).structuredContent.sites[0].sockets;
   assert.ok(!(await sockets({})).some(g => g.connector === 'CHADEMO'));
+  const hidden = (await call('lookup_charger', { query: 'GLP-LRA-00156', lang: 'en' })).structuredContent;
+  assert.ok(hidden.notes.some(x => /CHAdeMO sockets, left out/.test(x)), 'the assistant hears they exist, to ask again for a Leaf');
+  const shown = (await call('lookup_charger', { query: 'GLP-LRA-00156', connectors: ['CHADEMO', 'T2'], lang: 'en' })).structuredContent;
+  assert.ok(!shown.notes?.some(x => /left out/.test(x)));
   assert.ok((await sockets({ connectors: ['CHADEMO', 'T2'] })).some(g => g.connector === 'CHADEMO'));
   const near = (await call('find_chargers', { place: 'Leiria', radius_km: 20 })).structuredContent;
   assert.ok(near.sites.every(s => s.points.every(p => p.connector !== 'CHADEMO')));
