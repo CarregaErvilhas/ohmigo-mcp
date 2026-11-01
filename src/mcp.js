@@ -25,7 +25,7 @@ import { napEurPerKwh, napPlan } from './live.js';
 import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt } from './offers.js';
 import { cardPayment } from './data.js';
 import { siteOpen } from './hours.js';
-import { gridOf, kwForCar, plugLabel } from './socket.js';
+import { COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
 import { describePlan } from './opc.js';
 import { byBest, quotePoint, rank, tariffKey } from './quote.js';
 import { fold } from './lookup.js';
@@ -200,7 +200,8 @@ const filterOf = (a, { allPlugs = false } = {}) => ({
 // OpenStreetMap's where it differs from the NAP (see data.js); napKw/
 // napVolts/napAmps then say what the NAP declares. kwForCar: with the car's
 // battery voltage, the power a DC socket can give it when that's below kw
-// (socket.js).
+// (socket.js); without it, kwAt400V, the same for the usual 400 V car.
+// ampsSource says whether the amps behind it were seen on OpenStreetMap.
 const socketFields = (p, carVolts) => ({
   kw: p.kw, ...(p.napKw !== undefined && { napKw: p.napKw }),
   ...forCarFields(p, carVolts),
@@ -208,12 +209,11 @@ const socketFields = (p, carVolts) => ({
   amps: p.a ?? undefined, ...(p.napA !== undefined && { napAmps: p.napA }),
   cable: p.cable ?? undefined,
 });
-const forCarFields = (p, carVolts) => {
-  const c = kwForCar(p, carVolts);
-  return c?.limited ? { kwForCar: c.kw } : {};
-};
-// Said once per answer when a socket shown has kwForCar.
-const kwForCarNote = (points, a, t) => a.car_voltage && points.some(p => kwForCar(p, a.car_voltage)?.limited) ? [t('note.kwForCar', { volts: a.car_voltage })] : [];
+// Said once per answer when a socket shown has kwForCar or kwAt400V.
+const kwForCarNote = (points, a, t) => points.some(p => kwForCar(p, a.car_voltage ?? COMMON_CAR_VOLTS)?.limited)
+  ? [t(a.car_voltage ? 'note.kwForCar' : 'note.kwAt400V', { volts: a.car_voltage })] : [];
+const kwForCarQuoteNote = (quotes, a, t) => quotes.some(q => q.kwForCar != null || q.kwAt400V != null)
+  ? [t(a.car_voltage ? 'note.kwForCar' : 'note.kwAt400V', { volts: a.car_voltage })] : [];
 const fromOsm = p => p.napKw !== undefined || p.napV !== undefined || p.napA !== undefined;
 // Which plug to use and, on MOBI.E, the grid (BT/MT) and the TAR it picks.
 // See socket.js.
@@ -362,7 +362,7 @@ function siteCard(h, live, t, audiences = [], notes = [], carVolts) {
 // A socket in a summary line, with the TAR (BT/MT) on MOBI.E. The NAP leaves
 // power and plug blank on some sockets: kw arrives as null and connector as
 // the text "nan".
-const socketLine = q => `${q.kw ?? '?'} kW${q.kwForCar != null ? ` (${q.kwForCar} kW for this car)` : ''} ${q.connector === 'nan' ? '?' : q.connector ?? '?'}${q.tar ? `, ${q.tar}` : ''}`;
+const socketLine = q => `${q.kw ?? '?'} kW${q.kwForCar != null ? ` (${q.kwForCar} kW for this car)` : q.kwAt400V != null ? ` (${q.kwAt400V} kW at 400 V)` : ''} ${q.connector === 'nan' ? '?' : q.connector ?? '?'}${q.tar ? `, ${q.tar}` : ''}`;
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
@@ -654,8 +654,9 @@ export function createServer(getDataset, live) {
     if (results.some(r => r.points.some(fromOsm))) notes.push(t('note.osmSockets'));
     notes.push(...kwForCarNote(results.flatMap(r => r.points), a, t));
     const maxOf = (r, k) => Math.max(...r.points.map(p => p[k] ?? 0)) || '?';
-    const forCar = r => a.car_voltage ? Math.max(...r.points.map(p => kwForCar(p, a.car_voltage)?.kw ?? p.kw ?? 0)) : null;
-    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${r.points.length} sockets, max ${maxOf(r, 'kw')} kW${forCar(r) != null && forCar(r) < maxOf(r, 'kw') ? ` (${forCar(r)} kW for this car)` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
+    const forCar = r => Math.max(...r.points.map(p => kwForCar(p, a.car_voltage ?? COMMON_CAR_VOLTS)?.kw ?? p.kw ?? 0));
+    const forCarLabel = a.car_voltage ? 'for this car' : 'at 400 V';
+    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${r.points.length} sockets, max ${maxOf(r, 'kw')} kW${forCar(r) < maxOf(r, 'kw') ? ` (${forCar(r)} kW ${forCarLabel})` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
     return ok({
       ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, wholeCountry: everywhere || undefined, total,
       ...(notes.length && { notes: [...new Set(notes)] }),
@@ -754,7 +755,7 @@ export function createServer(getDataset, live) {
       ...(truncated ? [t('note.truncated', { n: candidates.length, total })] : []),
       ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
       ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
-      ...(top.some(q => q.kwForCar != null) ? [t('note.kwForCar', { volts: a.car_voltage })] : []),
+      ...kwForCarQuoteNote(top, a, t),
       ...moreWays(top, t),
       ...unlistedNote(top, t),
       ...curveNote(top, a, t),
@@ -798,7 +799,7 @@ export function createServer(getDataset, live) {
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
     const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []),
-      ...(results.some(q => q.kwForCar != null) ? [t('note.kwForCar', { volts: a.car_voltage })] : []), ...moreWays(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
+      ...kwForCarQuoteNote(results, a, t), ...moreWays(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));
   });

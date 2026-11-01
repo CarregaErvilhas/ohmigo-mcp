@@ -217,6 +217,10 @@ test('http: with car_voltage, DC sockets say what they give that car, and the co
   // 800 V: 200 A × 800 V = 160 kW covers both; nothing to say.
   const at800 = (await call('lookup_charger', { query: 'CNT-9648PR0002', car_voltage: 800, lang: 'en' })).structuredContent;
   assert.ok(at800.sites[0].sockets.every(g => g.kwForCar === undefined));
+  // Without car_voltage, what a usual 400 V car gets, and whose amps they are.
+  const plain = (await call('lookup_charger', { query: 'CNT-9648PR0002', lang: 'en' })).structuredContent;
+  assert.deepEqual(plain.sites[0].sockets.filter(g => g.dc).map(g => [g.kw, g.kwAt400V, g.ampsSource, g.kwForCar]).sort(), [[120, 80, 'nap', undefined], [150, 80, 'nap', undefined]]);
+  assert.match(plain.notes.join('\n'), /kwAt400V is the most a DC socket gives a car with a 400 V battery/);
   const cost = (await call('estimate_charging_cost', { site: 'CNT-9648PR0002', point_id: 'CNT-9648PR0002/9648PR0002.01', battery_kwh: 77, start_pct: 10, car_dc_kw: 200, car_voltage: 400, lang: 'en' })).structuredContent;
   assert.equal(cost.results[0].kwForCar, 80);
   assert.ok(cost.results[0].assumptions.some(x => /at most 80 kW, not its 150 kW nameplate/.test(x)));

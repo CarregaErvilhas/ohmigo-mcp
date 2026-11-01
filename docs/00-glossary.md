@@ -144,8 +144,9 @@ most cars, about 800 V for some (Porsche Taycan, Hyundai Ioniq 5, Kia EV6...).
 On DC the charger delivers volts × amps, and the volts are the battery's,
 while the amps are capped by the charger and its cable. A DC charger's kW is
 what it gives at the top of its voltage range, so a 400 V car often gets much
-less: 600 A × 400 V = 240 kW at a "400 kW" charger. With the car's voltage
-(`car_voltage`), each DC socket says what it gives that car (`kwForCar`).
+less: 600 A × 400 V = 240 kW at a "400 kW" charger. Every DC socket says what
+it gives a 400 V car (`kwAt400V`) and, with the car's voltage
+(`car_voltage`), what it gives that car (`kwForCar`).
 
 **Charging losses** — energy that turns into heat between the charger's meter
 and the battery. You pay for it anyway.

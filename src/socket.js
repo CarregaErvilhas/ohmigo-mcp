@@ -67,5 +67,19 @@ export function kwForCar(point, carVolts) {
   return { kw: limited ? byAmps : point.kw, limited, volts, boosted: point.v > 0 && point.v < carVolts };
 }
 
+// Most cars have a ~400 V battery: without the car's voltage, a DC socket
+// still says what it gives one of them.
+export const COMMON_CAR_VOLTS = 400;
+
 // The kW a filter or an ordering should use: the car's, when it applies.
 export const usableKw = (point, carVolts) => kwForCar(point, carVolts)?.kw ?? point.kw;
+
+// What an answer says about one socket and the car: kwForCar with the car's
+// voltage, kwAt400V without it, only where the amps cap the socket below its
+// kW; ampsSource: 'osm' (seen on the charger by the community) or 'nap' (only
+// the operator's declaration, set in data.js).
+export function forCarFields(point, carVolts) {
+  const c = kwForCar(point, carVolts ?? COMMON_CAR_VOLTS);
+  if (!c?.limited) return {};
+  return { [carVolts ? 'kwForCar' : 'kwAt400V']: c.kw, ...(point.ampsSource && { ampsSource: point.ampsSource }) };
+}

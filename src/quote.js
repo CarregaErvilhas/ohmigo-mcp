@@ -52,7 +52,7 @@ import { napEurPerKwh, napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
 import { forAudiences, isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, unpricedHere, withPromos } from './promos.js';
-import { gridOf, kwForCar, plugLabel } from './socket.js';
+import { forCarFields, gridOf, plugLabel } from './socket.js';
 
 const r2 = x => Math.round(x * 100) / 100;
 const r4 = x => Math.round(x * 10_000) / 10_000;
@@ -284,7 +284,6 @@ export const directOptionsForTest = (direct, session, lang, region) => directOpt
 export async function quotePoint({ site, point }, car, { at, tariffIds, shown, live, lang, detail = false, qa = false, monthKwh = null, audiences = [], simCache = new Map() } = {}) {
   const t = translator(lang);
   const session = estimateSession(point, car, t);
-  const forCar = kwForCar(point, car.volts);
   if (!(session.minutes <= MAX_SESSION_HOURS * 60)) return null;
   // The session starts at `at` (or now), to the minute so points share the
   // ceme-v2 call, and runs for `minutes`.
@@ -297,9 +296,10 @@ export async function quotePoint({ site, point }, car, { at, tariffIds, shown, l
     operator: site.operator, ...(site.operatorInferred && { operatorInferred: true }), address: site.address, city: site.city,
     lat: site.lat, lon: site.lon, region: site.region,
     kw: point.kw, ...(point.napKw !== undefined && { napKw: point.napKw }),
-    // What this DC socket can give the car at its battery voltage, when it's
-    // less than kw (socket.js); the duration already uses it.
-    ...(forCar?.limited && { kwForCar: forCar.kw }), volts: point.v ?? undefined,
+    // What this DC socket can give the car at its battery voltage (or a
+    // 400 V car's, without it), when it's less than kw (socket.js); with the
+    // car's voltage the duration already uses it.
+    ...forCarFields(point, car.volts), volts: point.v ?? undefined,
     cable: point.cable ?? undefined, connector: point.connector, dc: point.dc, regime: point.regime,
     // Which plug to use, and on MOBI.E the grid (BT/MT) and its TAR: the
     // driver has to know both (socket.js).

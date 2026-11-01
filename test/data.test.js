@@ -98,3 +98,13 @@ test('data: the duration uses what the socket gives the car at its voltage, and 
   const boosted = estimateSession({ kw: 50, v: 500, a: 125, dc: true }, { ...car, volts: 800 });
   assert.ok(boosted.assumptions.some(x => /steps the voltage up/.test(x)));
 });
+
+test('data: ampsSource says whether a socket\'s current was seen on OpenStreetMap or only declared', () => {
+  const ds = new Dataset({ sites: [site('A', [
+    { id: '1', kw: 400, v: 920, a: 500, dc: true, osm: { v: 1000, a: 600 } },
+    { id: '2', kw: 400, v: 1000, a: 600, dc: true, osmSame: ['kw', 'a'] },
+    { id: '3', kw: 400, v: 1000, a: 600, dc: true },
+    { id: '4', kw: 22, dc: false },
+  ])] });
+  assert.deepEqual(ds.sites[0].points.map(p => p.ampsSource), ['osm', 'osm', 'nap', undefined]);
+});

@@ -69,6 +69,11 @@ export class Dataset {
         for (const [k, nap] of [['kw', 'napKw'], ['v', 'napV'], ['a', 'napA']]) {
           if (p.osm?.[k] > 0 && p[nap] === undefined) { p[nap] = p[k] ?? null; p[k] = p.osm[k]; }
         }
+        // Where the max current comes from: OpenStreetMap (it corrected the
+        // NAP, or confirmed it: osmSame) or only the operator's declaration.
+        // A DC socket's amps decide what a 400 V car gets (socket.js), so the
+        // answers say which.
+        if (p.a > 0) p.ampsSource = p.napA !== undefined || p.osmSame?.includes('a') ? 'osm' : 'nap';
         // A point id is only unique within its site ("19" exists on several
         // sites), so the key is "SITE/POINT". The bare id also resolves when
         // it happens to be unique.

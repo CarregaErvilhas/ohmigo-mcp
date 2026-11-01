@@ -95,7 +95,7 @@ export function estimateSession(point, car, t = translator('en')) {
   const chargerKw = socketKw ?? (Number.isFinite(carKw) ? carKw : DEFAULTS.carDcKw);
   if (socketKw == null) assumptions.push(t('assume.chargerKwUnknown'));
   // Said only when it's what slows the session, not the car.
-  else if (forCar?.limited && forCar.kw < carKw) assumptions.push(t('assume.kwForCar', { kw: forCar.kw, nameplate: point.kw, amps: point.a, volts: forCar.volts, carVolts: car.volts }));
+  else if (forCar?.limited && forCar.kw < carKw) assumptions.push(t('assume.kwForCar', { kw: forCar.kw, nameplate: point.kw, amps: point.a, volts: forCar.volts, carVolts: car.volts, declared: point.ampsSource === 'nap' }));
   if (forCar?.boosted) assumptions.push(t('assume.boosted', { volts: point.v, carVolts: car.volts }));
   const peak = Math.min(chargerKw, carKw);
 

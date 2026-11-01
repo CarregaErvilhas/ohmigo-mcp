@@ -1047,6 +1047,26 @@
           }
         ]
       }
+    },
+    {
+      "id": "dc-power-400v-no-car",
+      "why": "Without a car, a DC socket's nameplate is still not what most cars get: the answer passes on kwAt400V (amps × 400 V).",
+      "message": "Qual é a potência dos carregadores do IONITY de Abrantes?",
+      "requires": [
+        {
+          "site": "IOY-ABT-00039"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|find_chargers"
+          }
+        ],
+        "judge": [
+          "Does the reply say that a car with a 400 V battery (most cars) gets less there than the 400 kW nameplate, about 240 kW?"
+        ]
+      }
     }
   ]
 }
