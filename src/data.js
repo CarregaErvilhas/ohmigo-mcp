@@ -205,8 +205,11 @@ export class Dataset {
   //   openAt       a Date: only sites not known to be closed then (unknown
   //                hours pass: most sites have them, and a guess would hide
   //                chargers that are open)
-  pointFilter({ minKw, connectors, dcOnly, minVoltage, cardPayment: card, cable, openAt } = {}) {
+  // `hide`: plugs left out when `connectors` isn't given (the tools hide
+  // CHAdeMO from drivers who didn't say their car has that port).
+  pointFilter({ minKw, connectors, hide, dcOnly, minVoltage, cardPayment: card, cable, openAt } = {}) {
     const cs = connectors?.length ? new Set(connectors.map(c => c.toUpperCase())) : null;
+    const hidden = !cs && hide?.length ? new Set(hide) : null;
     const minV = this.hasVoltage ? minVoltage : null;
     const siteOk = new Map();
     const siteFits = s => {
@@ -215,6 +218,7 @@ export class Dataset {
     };
     return (p, s) => (minKw == null || (p.kw ?? 0) >= minKw)
       && (!cs || cs.has(p.connector))
+      && (!hidden || !hidden.has(p.connector))
       && (!dcOnly || p.dc)
       && (minV == null || (p.v ?? 0) >= minV)
       && (cable == null || p.cable === cable)

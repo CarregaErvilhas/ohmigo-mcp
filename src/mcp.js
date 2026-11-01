@@ -25,6 +25,7 @@ import { napEurPerKwh, napPlan } from './live.js';
 import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt } from './offers.js';
 import { cardPayment } from './data.js';
 import { siteOpen } from './hours.js';
+import { gridOf, plugLabel } from './socket.js';
 import { describePlan } from './opc.js';
 import { byBest, quotePoint, rank, tariffKey } from './quote.js';
 import { fold } from './lookup.js';
@@ -57,15 +58,15 @@ Who's who on MOBI.E (don't mix them up): the CEME sells the energy (the user's c
 
 Never ask for a charger id: when the user names a charger (brand or operator + town, a shop, an address, the code on its sticker), call lookup_charger with their words, then pass its siteId as site to estimate_charging_cost. At a motorway service area, when a result asks for the direction, ask where the user is heading.
 
-"level" (BTN, BTE, MT) is the grid connection, never the socket's voltage (that's volts). Before the user goes, mention what applies: "cable" false = they bring their own cable (say it whenever you suggest an AC socket); "openNow" false or "hours": a car park that closes is unusable then; "cardPayment", "locationDescription" (where in the car park), "support" (who to call if it won't start).
+Always say which plug to use ("plug") and, on MOBI.E, if the charger is BT or MT ("tar"; "level" BTN/BTE/MT is the grid connection, never the socket's volts). Before the user goes, mention: "openNow" false or "hours": a car park that closes is unusable then; "cardPayment", "locationDescription" (where in the car park), "support" (who to call if it won't start).
 
-Before a cost call: look up the car's specs yourself (usable battery, max AC/DC kW, published DC 10-80% minutes, the DC curve if you find it); don't ask the user for them. Ask only for what you don't know: battery % now, target % (default 80), and whether they're in a hurry (the cheapest is often a slow AC socket: pass max_minutes or dc_only on a trip). If they pay with CEME cards/apps, resolve them with list_ceme_tariffs and pass all the ones they hold as tariff_ids. ohmigo stores nothing: remember the car, its specs and the user's tariffs yourself, and for monthly free-kWh promotions the kWh they charged per tariff this month (month_kwh).
+Before a cost call: look up the car's specs yourself (usable battery, max AC/DC kW, plugs (of its exact version/year), published DC 10-80% minutes, the DC curve from ev-database.org or evkx.net); don't ask the user for them. Ask only for what you don't know: battery % now, target % (default 80), and whether they're in a hurry (the cheapest is often a slow AC socket: pass max_minutes or dc_only on a trip). If they pay with CEME cards/apps, resolve them with list_ceme_tariffs and pass all the ones they hold as tariff_ids. ohmigo stores nothing: remember the car, its specs and the user's tariffs yourself, and for monthly free-kWh promotions the kWh they charged per tariff this month (month_kwh).
 
 Presenting: lead with "best", the cheapest option the user can use now: total in €, duration, how to pay, main assumptions. Every charger has more ways to pay in "options": other CEMEs, "adhoc" (no CEME card needed; its label says if by card at the charger or on the phone: always mention it), "direct" (operator apps, subscriptions, roaming apps; a subscription's fee is not in the total) and "opc_direct" (the operator's NAP price outside MOBI.E). Say there are more and offer to list them; point out when a subscription or another CEME is cheaper. MOBI.E and other networks share one ranking: the price decides.
 Pass on the result's assumptions and notes and each option's note: they flag peak prices (the most it can cost; usually much less off-peak), promotions in or out of the total, stale or island-VAT prices, sources that disagree. Tariffs and promotions for new sign-ups only (newCustomersOnly, newCustomers) are tips for non-clients ("signing up by <until> gets <price>"), never the price. Prices for one group (audience) are only for drivers who said they belong to it, now or before (your memory counts): never infer a group, and say whom the price is for.
 Credit your sources: OpenStreetMap for "osm" data; for "direct" prices, the source in the note (for the blog, its author, Alexandre Moleiro).
 
-Live status comes from the NAP; if live.fresh is false, say it may be stale. Costs are estimates; the operator's and CEME's prices on the day prevail.`;
+Live status is the NAP's; if live.fresh is false, say it may be stale. Costs are estimates; the prices on the day prevail.`;
 
 // Argument schemas, shared by the tools. zod turns them into the JSON Schema
 // the assistant sees, and validates what it sends back.
@@ -120,9 +121,9 @@ const Car = {
   target_pct: z.number().min(1).max(100).default(80).describe('Target battery, % (default 80; DC slows down above it)'),
   car_ac_kw: z.number().min(MIN_CAR_KW).max(43).optional().describe("Car's max AC power, kW (on-board charger)"),
   car_dc_kw: z.number().min(MIN_CAR_KW).max(500).optional().describe("Car's max DC power, kW"),
-  dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes: makes the duration far better than the generic curve"),
+  dc_10_80_minutes: z.number().positive().max(300).optional().describe("Car's published DC 10-80% time, minutes : makes the duration far better than the generic curve"),
   charge_curve: z.array(z.object({ soc: z.number().min(0).max(100), kw: z.number().positive().max(500) })).min(2).max(101).optional()
-    .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]"),
+    .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]. On ev-database.org or evkx.net"),
   tariff_ids: z.array(z.string().max(100)).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only those they hold: each charger uses the cheapest. Omit for the popular ones"),
   tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs per charger'),
   at: z.string().max(40).refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
@@ -170,17 +171,22 @@ function placeLine(pl) {
 
 const Filter = {
   min_kw: z.number().positive().optional().describe('Minimum charger power, kW'),
-  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'SCHUKO'])).optional().describe('Acceptable plug types'),
+  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'SCHUKO'])).optional().describe("The car's plugs (exact version/year); CHAdeMO only if listed (that car has the port, or the user asks)"),
   dc_only: z.boolean().optional().describe('Only DC (fast) chargers'),
-  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum socket voltage, V (e.g. 800 for an 800 V car)'),
-  card_payment: z.boolean().optional().describe('Only chargers where a bank card works at the charger itself (terminal or contactless)'),
-  cable_attached: z.boolean().optional().describe('true: only sockets with a fixed cable; false: only those where the user brings one'),
-  open_now: z.boolean().optional().describe('Leave out chargers closed now (or at `at`) by their opening hours'),
+  min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum socket voltage, V (800 V car: 800)'),
+  card_payment: z.boolean().optional().describe('Only chargers with a bank card terminal or contactless reader'),
+  cable_attached: z.boolean().optional().describe('true: only sockets with a fixed cable; false: only without'),
+  open_now: z.boolean().optional().describe('Leave out chargers closed now (or at `at`)'),
 };
 
-// The Filter arguments, as Dataset.pointFilter takes them.
-const filterOf = a => ({
-  minKw: a.min_kw, connectors: a.connectors, dcOnly: a.dc_only, minVoltage: a.min_voltage,
+// The Filter arguments, as Dataset.pointFilter takes them. A CHAdeMO plug
+// only fits cars with that port (which changes between versions of a model:
+// the 2026 Nissan Leaf has CCS2, older ones CHAdeMO), and a driver sent to one
+// with any other car can't charge: so CHAdeMO sockets stay out unless the
+// assistant lists CHADEMO in connectors (the car has the port, or the user
+// asked). `allPlugs`: counts about the network, not a driver (list_operators).
+const filterOf = (a, { allPlugs = false } = {}) => ({
+  minKw: a.min_kw, connectors: a.connectors, hide: allPlugs ? undefined : ['CHADEMO'], dcOnly: a.dc_only, minVoltage: a.min_voltage,
   cardPayment: a.card_payment, cable: a.cable_attached, openAt: a.open_now ? (a.at ? new Date(a.at) : new Date()) : undefined,
 });
 
@@ -194,6 +200,9 @@ const socketFields = p => ({
   cable: p.cable ?? undefined,
 });
 const fromOsm = p => p.napKw !== undefined || p.napV !== undefined || p.napA !== undefined;
+// Which plug to use and, on MOBI.E, the grid (BT/MT) and the TAR it picks.
+// See socket.js.
+const plugFields = (p, t) => ({ connector: p.connector, plug: plugLabel(p, t), dc: p.dc, ...gridOf(p, t) });
 
 // What a driver wants to know about the site before going, and the notes it
 // needs: opening hours (and whether it's open at `at`), where it is in the car
@@ -305,7 +314,7 @@ function siteCard(h, live, t, audiences = [], notes = []) {
     const fromNap = !p.opc?.REGULAR;
     const napPrice = p.regime === 'sem_ceme' ? napEurPerKwh(lp, p.napPrice) : undefined;
     const card = {
-      ...socketFields(p), connector: p.connector, dc: p.dc, level: p.level ?? undefined, regime: p.regime,
+      ...socketFields(p), ...plugFields(p, t), regime: p.regime,
       operatorFee: fee ? describePlan(fee, t, { vatIncluded: fromNap && vatIn }) : undefined,
       operatorFeeSource: fee ? (fromNap ? 'nap' : 'mobie') : undefined,
       adHoc: p.opc?.AD_HOC_PAYMENT ? describePlan(p.opc.AD_HOC_PAYMENT, t) : undefined,
@@ -335,9 +344,10 @@ function siteCard(h, live, t, audiences = [], notes = []) {
   };
 }
 
-// A socket in a summary line. The NAP leaves power and plug blank on some
-// sockets: kw arrives as null and connector as the text "nan".
-const socketLine = q => `${q.kw ?? '?'} kW ${q.connector === 'nan' ? '?' : q.connector ?? '?'}`;
+// A socket in a summary line, with the TAR (BT/MT) on MOBI.E. The NAP leaves
+// power and plug blank on some sockets: kw arrives as null and connector as
+// the text "nan".
+const socketLine = q => `${q.kw ?? '?'} kW ${q.connector === 'nan' ? '?' : q.connector ?? '?'}${q.tar ? `, ${q.tar}` : ''}`;
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
@@ -347,6 +357,9 @@ const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 // A tariff the user would have to switch to (notYours) isn't a way to pay yet.
 const waysToPay = q => (q.options ?? []).filter(o => !o.notYours).length;
 export const moreWays = (results, t) => results.some(q => waysToPay(q) > 1) ? [t('note.moreWays')] : [];
+// DC durations without the car's curve are a generic guess; the note says
+// where the assistant can find the real one.
+export const curveNote = (results, a, t) => !a.charge_curve && results.some(q => q.dc) ? [t('note.curve')] : [];
 // Without tariff_ids only the popular tariffs are priced, and drivers often
 // hold a cheaper one they never thought to mention (see unlistedCheaper).
 export const unlistedNote = (results, t) => results.some(q => q.unlistedCheaper) ? [t('note.unlisted')] : [];
@@ -385,6 +398,15 @@ const canonical = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' &&
 // hours, a closing warning would be lost or invented.
 export const socketKindKey = (site, point) => canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, site.operatorId, !!site.operatorInferred, site.hours ?? null, site.osm?.openingHours ?? null]);
 
+// Nothing found because CHAdeMO was hidden (filterOf), while the words do
+// name a charger: it only has CHAdeMO. Said so, or a CHAdeMO driver whose
+// assistant forgot connectors would hear "no such charger".
+function chademoOnly(ds, a, t) {
+  if (a.connectors?.length) return null;
+  const all = ds.lookup(a.query, { limit: 1, ...filterOf(a, { allPlugs: true }) });
+  return all.results.length && !all.results[0].missing?.length ? err(t('err.onlyChademo', { query: a.query }), 'chademo') : null;
+}
+
 function pointsFor(ds, live, a, t) {
   if (a.point_id) {
     const hit = ds.findPoint(a.point_id);
@@ -393,7 +415,10 @@ function pointsFor(ds, live, a, t) {
   }
   if (!a.site) return { error: t('err.which'), code: 'which' };
   const r = ds.lookup(a.site, { limit: Infinity, ...filterOf(a) });
-  if (!r.results.length || r.results[0].missing?.length) return { error: t('err.lookup', { query: a.site }), code: 'lookup' };
+  if (!r.results.length || r.results[0].missing?.length) {
+    const only = !r.results.length && chademoOnly(ds, { ...a, query: a.site }, t);
+    return only ? { error: only.structuredContent.message, code: only.structuredContent.code } : { error: t('err.lookup', { query: a.site }), code: 'lookup' };
+  }
   // Several sites in the same spot are one place to the driver (a service
   // area often has one NAP site per charger). Words can fit several places:
   // the assistant has to ask which. The two sides of one motorway service
@@ -553,7 +578,7 @@ export function createServer(getDataset, live) {
     const towards = resolveTowards(ds, a.towards, t);
     if (towards?.error) return err(towards.error, towards.code);
     const r = ds.lookup(a.query, { near, radiusKm: a.radius_km, limit: Infinity, ...filterOf(a) });
-    if (!r.results.length) return err(t('err.lookup', { query: a.query }), 'lookup');
+    if (!r.results.length) return chademoOnly(ds, a, t) ?? err(t('err.lookup', { query: a.query }), 'lookup');
     // Motorway service areas among the results: with a direction, keep the
     // side the driver can reach; without one, flag them so the assistant asks.
     let results = r.results;
@@ -576,6 +601,9 @@ export function createServer(getDataset, live) {
     if (results[0].missing?.length) notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
     await withLive(live, ctx, t);
     const cards = results.slice(0, a.limit).map(h => siteCard(h, live, t, a.audiences, notes));
+    // CHAdeMO left out (filterOf) at a site shown: a note for the assistant
+    // only, so a CHAdeMO driver's assistant knows to ask again with CHADEMO.
+    if (!a.connectors?.length && results.slice(0, a.limit).some(h => h.site.points.some(p => p.connector === 'CHADEMO'))) notes.push(t('note.chademoHidden'));
     if (results.slice(0, a.limit).some(h => napNote(h.site)?.timeOfUse)) notes.push(t('assume.napTimeOfUse'));
     return ok({
       ...meta(ds, live, lang), query: a.query, total: results.length,
@@ -621,7 +649,7 @@ export function createServer(getDataset, live) {
         ...facts[i].facts,
         access: r.site.osm?.access, parkingFee: r.site.osm?.parkingFee,
         points: r.points.map(p => ({
-          pointId: `${r.site.id}/${p.id}`, ...socketFields(p), connector: p.connector, dc: p.dc, regime: p.regime,
+          pointId: `${r.site.id}/${p.id}`, ...socketFields(p), ...plugFields(p, t), regime: p.regime,
           status: live.get(r.site.id, p.id)?.status ?? null, adHocPayment: !!p.opc?.AD_HOC_PAYMENT,
         })),
       })),
@@ -633,14 +661,14 @@ export function createServer(getDataset, live) {
     description: 'Lists the companies that operate public EV chargers in Portugal (OPCs on MOBI.E and the operators outside it, as the NAP publishes them), biggest first: sites, sockets, DC sockets, max power and voltage, regions, and whether they are on MOBI.E. Filters narrow it to the operators with such chargers ("who runs 800 V chargers in Madeira?"). Use it for "how many operators are there" too, even when the user says licensed: it is the operators with chargers on the NAP, not the DGEG\'s licensing registry, so say that.',
     inputSchema: z.object({
       query: z.string().max(100).optional().describe('Only operators whose name or NAP operatorId contains this, e.g. "galp", "IONY"'),
-      ...Filter, ...Region, ...Lang,
+      ...Filter, connectors: Filter.connectors.describe('Plug types'), ...Region, ...Lang,
       limit: z.number().int().positive().max(300).default(100),
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, async (a, ctx) => {
     const ds = getDataset();
     const lang = langOf(a, ctx), t = translator(lang);
-    let ops = ds.operators({ ...filterOf(a), region: a.region });
+    let ops = ds.operators({ ...filterOf(a, { allPlugs: true }), region: a.region });
     if (a.query) {
       const q = fold(a.query);
       ops = ops.filter(o => [o.operatorId, o.name, ...(o.otherNames ?? [])].some(n => n && fold(n).includes(q)));
@@ -710,6 +738,7 @@ export function createServer(getDataset, live) {
       ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
       ...moreWays(top, t),
       ...unlistedNote(top, t),
+      ...curveNote(top, a, t),
     ];
     const data = { kind: 'ranking', ...meta(ds, live, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: candidates.length,
       ...(truncated && { truncated: true }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
@@ -749,7 +778,7 @@ export function createServer(getDataset, live) {
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return err(t('err.pricing'), 'ceme');
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : 'n/a'} · ${q.session.minutes} min · ${socketLine(q)} [${q.pointId}]`);
-    const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t), ...unlistedNote(results, t)];
+    const notes = [...(cemeDown ? [t('note.noCeme')] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []), ...moreWays(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
     return ok({ kind: 'single', ...meta(ds, live, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
       [...notes, ...lines].join('\n'));
   });
