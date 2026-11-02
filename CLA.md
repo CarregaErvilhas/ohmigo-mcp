@@ -54,10 +54,16 @@ them in any other way, including in other projects under any licence.
 The public source of ohmigo, including Your Contributions, stays available
 under the GNU Affero General Public License version 3 only (AGPL-3.0-only),
 under a later version of the AGPL, or under another licence approved by the
-Open Source Initiative. Whenever the Maintainer distributes a version of
-ohmigo that includes Your Contribution, or makes one available to users over a
-network, the Maintainer will make that version's Corresponding Source (as
-AGPL-3.0 defines it) publicly available at the same time.
+Open Source Initiative that is not permissive: one that requires anyone who
+distributes the code to offer its source. Whenever the Maintainer distributes
+a version of ohmigo that includes Your Contribution, or makes one available to
+users over a network, the Maintainer will make that version's Corresponding
+Source (as AGPL-3.0 defines it) publicly available at the same time.
+
+If the Maintainer hasn't done that within 30 days of written notice from You,
+the licence in section 2 for terms other than the AGPL ends for Your
+Contributions, from that day on. Licences the Maintainer granted before then
+stay valid.
 
 Sections 2 and 3 also let the Maintainer offer the same code under other terms
 (dual licensing); they don't let him withdraw the open source version.

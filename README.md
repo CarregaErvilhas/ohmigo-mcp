@@ -104,8 +104,8 @@ The repository is the Corresponding Source for what runs at ohmigo.pt:
 Not covered by that license:
 
 - **Third-party data**, which keeps its own terms: OpenStreetMap data is
-  ODbL, and `offers/custofinal.json` is Alexandre Moleiro's, used here with
-  his permission. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+  ODbL, and `offers/custofinal.json` is Alexandre Moleiro's, who allows its
+  public use with no restrictions. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 - **The name and the art**: "ohmigo", its mascot and icons, and "O Carro
   Elétrico". A fork needs its own name.
 
