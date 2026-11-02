@@ -21,13 +21,16 @@ import { tariffVoltage } from './ceme.js';
 // Plug codes the dataset uses that the sentences know. Anything else (the NAP
 // leaves some blank, which arrives as "nan") reads as unknown.
 const PLUGS = new Set(['CCS', 'CCS1', 'T2', 'T1', 'CHADEMO', 'SCHUKO', 'CEE']);
+// The NAP's own name for the blue CEE socket, kept as is by the dataset.
+const ALIAS = { iec60309x2single16: 'CEE' };
 // AC sockets where the cable matters: with no cable attached, the driver
 // brings their own.
 const CABLE_MATTERS = new Set(['T2', 'T1']);
 
 // The sentence that says which plug to use at this socket.
 export function plugLabel(point, t) {
-  const c = PLUGS.has(point.connector) ? point.connector : null;
+  const code = ALIAS[point.connector] ?? point.connector;
+  const c = PLUGS.has(code) ? code : null;
   if (!c) return t('plug.unknown');
   const base = t(`plug.${c}`);
   if (!CABLE_MATTERS.has(c) || point.cable == null) return base;

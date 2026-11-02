@@ -49,6 +49,8 @@ anything new about the user, update the privacy page first.
 reporting a security problem. It's generated per request (`securityTxt` in
 `src/server.js`), so `Expires` is always ahead of today.
 
+`GET /llms.txt` is a short plain-text summary for AI crawlers, in English only on purpose: edit `LLMS_TXT` in `src/site.js`.
+
 `GET /healthz` shows how the server is doing: `status` is `ok`, or
 `degraded` with the reasons in `problems` (the last live feed refresh failed,
 ceme-v2 isn't answering, the dataset missed its weekly rebuild). It answers 200
@@ -98,7 +100,8 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `DATASET_URL` | the Pages URL | read the dataset from this URL |
 | `DATASET_CHECK_HOURS` | `6` | how often to check for a new dataset |
 | `LIVE_TTL_SECONDS` | `300` | how long a live feed copy counts as fresh (±10 %) |
-| `LIVE_WAIT_SECONDS` | `25` | how long a request waits for a live download |
+| `LIVE_WAIT_SECONDS` | `25` | how long a request with no usable copy waits for a live download |
+| `LIVE_MAX_STALE_SECONDS` | `3600` | how old a live feed copy can be and still answer at once while it refreshes in the background, flagged stale; past it, a request waits. `0` always waits |
 | `LIVE_WARMUP` | on | `0` skips the boot download |
 | `HEALTHZ_TOKEN` | none | unlocks the detail on `/healthz`, sent in the `x-healthz-token` header. Without it the detail stays private. |
 | `OHMIGO_QA` | off | `1` turns on QA mode: every result carries the quarter-hour `timeline` and a `debug` block, and the assistant is told to show them. Never in production |
