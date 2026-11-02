@@ -159,6 +159,13 @@ test('lookup: filters and radius', () => {
   assert.deepEqual(ids('galp', { near: { lat: 39.74, lon: -8.81 }, radiusKm: 10 }), ['GLP-LRA-00156']);
 });
 
+test('pointFilter: a plug filter finds the lowercase NAP value, never the "nan" of an unknown plug', () => {
+  const ok = ds.pointFilter({ connectors: ['iec60309x2single16'] });
+  assert.equal(ok({ connector: 'iec60309x2single16' }), true);
+  assert.equal(ok({ connector: 'T2' }), false);
+  assert.equal(ok({ connector: 'nan' }), false);
+});
+
 test('resolvePlace: the town before a comma', () => {
   assert.ok(ds.resolvePlace('Leiria, Portugal'));
   assert.equal(ds.resolvePlace(', '), null);

@@ -132,7 +132,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `ui/results.html` | The inline results page |
 | `site/index.html` | The landing page: what ohmigo is and how to install it, every sentence in both languages |
 | `site/legal.html` | The privacy and support pages, every sentence in both languages |
-| `src/site.js` | Renders those pages on the server (landing at `/` and `/en`, privacy at `/privacidade` and `/privacy`, support at `/suporte` and `/support`), with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD on the landing page) and `/sitemap.xml` |
+| `src/site.js` | Renders those pages on the server (landing at `/` and `/en`, privacy at `/privacidade` and `/privacy`, support at `/suporte` and `/support`), with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD on the landing page), `/sitemap.xml` and `/llms.txt` |
 | `site/og.png` | The image link previews show (WhatsApp, Facebook, X) |
 | `site/dados.html` | `/dados`: browse what `src/dump.js` returns. Public, `noindex`, cached by Cloudflare (Cache Rule on the zone, TTLs from the headers in `src/server.js`); Portuguese only |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
@@ -209,7 +209,9 @@ is heading (`src/direction.js`):
   "(OLH-VRA)"). The towns are often road-sign abbreviations: a three-letter
   one is first read as the municipality of the MOBI.E codes, then as a place
   name (`resolveSignTown` in `src/data.js`), and a label that can't be placed
-  still reaches the driver as written. Without one, the **right-hand rule**: Portugal drives on the right,
+  still reaches the driver as written. Compass letters count in capitals
+  only, and "S/N" in an address only when that address is on a motorway:
+  elsewhere it means sem número. Without one, the **right-hand rule**: Portugal drives on the right,
   so the service area to the right of the travel direction. That's a guess
   from coordinates, so it only decides when one side is clearly to the right,
   and the result carries an assumption telling the user to check the signs.
