@@ -50,8 +50,13 @@ const r2 = x => Math.round(x * 100) / 100;
 // Is this site on the network a promotion names? An unknown label, or one we
 // can't pin to operators (scope "unknown"), matches nothing: better to miss a
 // discount than to promise one that isn't there.
+// A private charger (a DPC's: home, condominium, workplace) is on no
+// network: only a promotion that names none holds there. "Rede Mobi.E" means
+// the public chargers, and promising a discount at home that the CEME may not
+// give is worse than missing one.
 export function onNetwork(site, network, networks = NETWORKS) {
   if (network == null) return true; // any MOBI.E charger
+  if (site.private) return false;
   const n = networks[network];
   if (!n) return false;
   if (n.scope === 'mobie') return true;

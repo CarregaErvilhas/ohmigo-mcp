@@ -29,8 +29,16 @@ nobody shows you both together.
 garage, a company car park for its staff or fleet. It is not an operator: no
 OPC, no OPC fee, so a session there costs only the CEME energy, EGME and taxes,
 and only the users its owner authorizes can charge. DPC chargers aren't in the
-NAP, so ohmigo never lists them. AI assistants confuse DPC with OPC easily;
-`INSTRUCTIONS` in `src/mcp.js` spells out the difference for them.
+NAP, so ohmigo never lists them, but it does price a session at one:
+`estimate_charging_cost` with `private` instead of `site` (`privateCharger` in
+`src/quote.js`) asks ceme-v2 for the user's tariffs and adds nothing else.
+Unless the driver says otherwise it's low voltage (BT) and private: not on
+MOBI.E's public list, so a CEME app can't start a session there and only
+tariffs with a card count (ceme-v2's `access`). A few DPCs mark their charger
+public; then the apps work too (`private.public`). AI
+assistants confuse DPC with OPC easily, and go looking for a home wallbox in
+the NAP; `INSTRUCTIONS` in `src/mcp.js` spells out the difference for them and
+sends them to `private`.
 
 **eMSP** — *e-Mobility Service Provider*, the international name for what
 Portugal calls a CEME.
