@@ -2,7 +2,7 @@
 // the matchers the cases use to describe what a good answer does.
 // How the evals work: evals/README.md.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,10 +10,6 @@ export const EVALS = dirname(fileURLToPath(import.meta.url));
 export const ROOT = dirname(EVALS);
 export const CACHE = join(EVALS, '.cache');
 export const RUNS = join(EVALS, 'runs');
-
-// Some clients cut the server's instructions. Claude Code keeps this many
-// characters; the "cut" variant shows the assistant exactly that.
-export const CUT_AT = 4096;
 
 export const readJson = (p, fallback) => existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : fallback;
 export const readLines = p => existsSync(p) ? readFileSync(p, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
@@ -26,6 +22,16 @@ export function caseDir(arg) {
   if (!dir.startsWith(RUNS + sep)) throw new Error(`${arg} is not a case directory under evals/runs`);
   if (!existsSync(join(dir, 'brief.md'))) throw new Error(`${arg} has no brief.md`);
   return dir;
+}
+
+// A --ref worktree shares this checkout's node_modules.
+export function linkModules(dir) {
+  const link = join(dir, 'node_modules');
+  if (existsSync(link)) return;
+  // Not there, or a link to a checkout that's gone: existsSync can't tell, and
+  // symlinkSync fails on the second.
+  rmSync(link, { force: true });
+  symlinkSync(join(ROOT, 'node_modules'), link);
 }
 
 // One JSON-RPC request to the server, the way an MCP client sends it. The
@@ -94,11 +100,13 @@ export function checkCase(expect = {}, calls, answer) {
   return out;
 }
 
-// Judge answers: "yes" and "n/a" pass, "no" fails.
+// Judge answers: a plain "yes" or "n/a" passes ("yes." too), anything else
+// fails, hedges included ("no, it omits...", "yes - but..."). No answer yet is
+// null.
 export function checkJudge(questions = [], verdicts) {
   return questions.map((q, i) => {
-    const v = String(verdicts?.[String(i + 1)] ?? '').toLowerCase();
-    return { check: `judge: ${q}`, pass: v ? v !== 'no' : null, ...(v && { got: v }) };
+    const v = String(verdicts?.[String(i + 1)] ?? '').trim().toLowerCase();
+    return { check: `judge: ${q}`, pass: v ? /^(yes|n\/a)\W*$/i.test(v) : null, ...(v && { got: v }) };
   });
 }
 

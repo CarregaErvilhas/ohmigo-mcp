@@ -44,7 +44,7 @@ What the server works with:
   `--live` fetches the NAP feed.
 
 Variants (`--variant`) show the assistant the instructions whole (`full`), cut
-at 4 096 characters like Claude Code does (`cut`), or not at all (`none`, like
+at `INSTRUCTIONS_MAX` characters (`src/mcp.js`) like Claude Code does (`cut`), or not at all (`none`, like
 a client that ignores them: then the tool descriptions have to carry it).
 
 ## A case
@@ -103,8 +103,8 @@ per case.
   ChatGPT or the Claude app: their system prompts, memory and tool handling
   differ. Read the results as "is the guidance clear enough for a small
   model", not as a forecast for each app.
-- Claude Code cuts long command output, so results over 20 000 characters
-  reach the agent as their summary lines plus a file to read.
+- Claude Code cuts long command output, so results over `PRINT_MAX` characters
+  (`evals/call.mjs`) reach the agent as their summary lines plus a file to read.
 - There's no web search: the agent uses what it knows about cars, as a model
   without search would.
 - One try per case is a coin flip for borderline behaviour: compare versions

@@ -3,6 +3,7 @@
 // not a copy of the blog.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { bandFor, BLOG_HOST, MAX_EUR_PER_KWH, MAX_LABEL_LENGTH, MIN_EUR_PER_KWH, newestPost, offerProblems, parseTables, toOffers } from '../src/offers-parse.js';
 import { AUDIENCES, gaps, isStale, mergeOffers, NAP_NOTES, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
@@ -286,4 +287,16 @@ test('per-session fee: in the total, said in the note; staff offer is half of El
   assert.equal(o.total, 14.24); // 38,71 × 0,36 + 0,30
   assert.equal(o.audience, 'powerdot-staff');
   assert.match(o.note, /0,30 € por sessão/);
+});
+
+test('offers: the parser does not load the network list at import', () => {
+  // The weekly scrape reads networks.json itself and reports what's wrong with it.
+  const script = `import { registerHooks } from 'node:module';
+const seen = [];
+registerHooks({ resolve(spec, ctx, next) { seen.push(spec); return next(spec, ctx); } });
+await import('./src/offers-parse.js');
+console.log(seen.join(' '));`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /promos|lookup/);
 });

@@ -9,13 +9,12 @@
 // What a run is and how to drive it: evals/README.md.
 
 import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CACHE, CUT_AT, EVALS, ROOT, RUNS, dated, lisbonNow, mcp, readJson, rel } from './lib.mjs';
+import { CACHE, EVALS, ROOT, RUNS, dated, linkModules, lisbonNow, mcp, readJson, rel } from './lib.mjs';
 
 const IDLE_MIN = 30;
 const DATA = join(CACHE, 'chargers.json');
-const DATA_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 
 const argv = process.argv.slice(2);
 if (argv[0] === 'stop') stop(argv[1]);
@@ -40,20 +39,41 @@ function parseArgs(a) {
 
 function stop(run) {
   const dirs = run ? [run] : existsSync(RUNS) ? readdirSync(RUNS).map(d => join(RUNS, d)) : [];
+  if (!dirs.length) console.log('no runs to stop');
   for (const d of dirs) {
     const m = readJson(join(d, 'manifest.json'));
-    if (!m?.pid) continue;
-    try { process.kill(m.pid, 'SIGTERM'); console.log(`stopped ${rel(d)} (pid ${m.pid})`); } catch { /* already gone */ }
+    if (!m?.pid) { console.log(`skipped ${rel(d)}: no pid in its manifest`); continue; }
+    if (!isServe(m.pid)) { console.log(`skipped ${rel(d)}: pid ${m.pid} isn't a serve.mjs (long gone, or the number was reused)`); continue; }
+    try { process.kill(m.pid, 'SIGTERM'); console.log(`stopped ${rel(d)} (pid ${m.pid})`); }
+    catch (e) { console.log(`skipped ${rel(d)}: pid ${m.pid} (${e.code})`); }
   }
 }
 
+// A manifest outlives its server and the system reuses pids, so an old run's
+// pid can belong to anything by now: only a serve.mjs gets the signal.
+function isServe(pid) {
+  try {
+    const [cmd, ...args] = execFileSync('ps', ['-o', 'args=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split(/\s+/);
+    return /(^|\/)node$/.test(cmd) && args.some(a => /(^|\/)serve\.mjs$/.test(a));
+  }
+  catch { return false; } // ps exits with an error when the pid is gone
+}
+
 async function serve(o) {
+  // Before anything starts: a typo shouldn't cost a download and a server.
+  const all = JSON.parse(readFileSync(join(EVALS, 'cases.json'), 'utf8')).cases;
+  const cases = o.cases ? all.filter(c => o.cases.includes(c.id)) : all;
+  if (o.cases && cases.length !== o.cases.length) throw new Error(`unknown case in --cases: ${o.cases.filter(id => !all.some(c => c.id === id)).join(', ')}`);
+
+  // Here and not at the top: `stop` has to work when src/ doesn't load.
+  const [{ DEFAULT_URL }, { INSTRUCTIONS_MAX }] = await Promise.all([import('../src/data.js'), import('../src/mcp.js')]);
+
   mkdirSync(CACHE, { recursive: true });
   // One frozen copy of the public dataset, so runs compare on the same data.
   // --refresh-data takes this week's.
   if (o.refreshData || !existsSync(DATA)) {
-    console.log(`downloading the dataset from ${DATA_URL}…`);
-    const r = await fetch(DATA_URL, { signal: AbortSignal.timeout(120_000) });
+    console.log(`downloading the dataset from ${DEFAULT_URL}…`);
+    const r = await fetch(DEFAULT_URL, { signal: AbortSignal.timeout(120_000) });
     if (!r.ok) throw new Error(`dataset: HTTP ${r.status}`);
     writeFileSync(DATA, Buffer.from(await r.arrayBuffer()));
   }
@@ -76,26 +96,26 @@ async function serve(o) {
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
+  // On every way out, a crash below included: the server lives only as long
+  // as this process.
+  process.on('exit', () => child.kill('SIGTERM'));
+  // A signal with no handler ends the process without that 'exit': the same
+  // for a closed terminal (SIGHUP). Set right here, so none slips in early.
+  const shutdown = () => process.exit(0);
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, shutdown);
   const url = await new Promise((resolve, reject) => {
     let out = '';
     child.stdout.on('data', c => { out += c; const m = out.match(/http:\/\/(\S+?)\/mcp/); if (m) resolve(`http://${m[1]}`); });
     child.on('exit', code => reject(new Error(`server exited ${code}: ${out}`)));
   });
-  const shutdown = () => { child.kill('SIGTERM'); process.exit(0); };
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
 
   // What the assistant reads: the instructions (whole, cut like Claude Code
   // cuts them, or none, like a client that ignores them) and the tool list.
   const init = await mcp(url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'ohmigo-evals', version: '1' } });
   const full = init.result.instructions ?? '';
-  const instructions = o.variant === 'none' ? null : o.variant === 'cut' && full.length > CUT_AT ? `${full.slice(0, CUT_AT)}… [truncated]` : full;
+  const instructions = o.variant === 'none' ? null : o.variant === 'cut' && full.length > INSTRUCTIONS_MAX ? `${full.slice(0, INSTRUCTIONS_MAX)}… [truncated]` : full;
   const { tools } = (await mcp(url, 'tools/list')).result;
   const toolsShown = tools.map(({ name, title, description, inputSchema }) => ({ name, title, description, inputSchema }));
-
-  const all = JSON.parse(readFileSync(join(EVALS, 'cases.json'), 'utf8')).cases;
-  const cases = o.cases ? all.filter(c => o.cases.includes(c.id)) : all;
-  if (o.cases && cases.length !== o.cases.length) throw new Error(`unknown case in --cases: ${o.cases.filter(id => !all.some(c => c.id === id)).join(', ')}`);
 
   const runId = `${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}-${o.variant}${o.ref ? `-${o.ref.replace(/[^\w.-]+/g, '_')}` : ''}`;
   const run = join(RUNS, runId);
@@ -171,7 +191,7 @@ function worktree(ref) {
   const dir = join(CACHE, `ref-${ref.replace(/[^\w.-]+/g, '_')}`);
   if (existsSync(dir)) git(dir, 'checkout', '--quiet', '--detach', ref);
   else git(ROOT, 'worktree', 'add', '--quiet', '--detach', dir, ref);
-  if (!existsSync(join(dir, 'node_modules'))) symlinkSync(join(ROOT, 'node_modules'), join(dir, 'node_modules'));
+  linkModules(dir);
   return dir;
 }
 

@@ -1,7 +1,7 @@
 // Live charger status and NAP fees from MOBI.E's DATEX II status feed.
 //
-// The feed is one ~38 MB XML file with no gzip and no byte ranges (13-20 s to
-// download). It's fetched on demand: a request that finds the copy older than
+// The feed is one big XML file (`bytesLast` in /healthz has its size) with no
+// gzip and no byte ranges (13-20 s to download). It's fetched on demand: a request that finds the copy older than
 // the TTL triggers one refresh, every concurrent request shares it, and the
 // next users within the TTL get it for free. A copy past the TTL is still
 // good enough for a while (LIVE_MAX_STALE_SECONDS): the request answers with
@@ -13,14 +13,14 @@
 // info()).
 //
 // Refreshes use If-None-Match (304 with no body when unchanged) and parse the
-// body as a stream, so the 38 MB never sit in memory as text. The feed is
+// body as a stream, so the file never sits in memory as text. The feed is
 // regenerated about every 5 minutes (ETag watched on 2026-10-31), so the TTL
 // matches it: a fresher status is what users ask about, and downloads only
 // happen while someone is asking (at most ~288 a day per instance). Results
 // carry publishedAt, so the assistant can say how old the status is.
 //
 // When the feed is down, failed refreshes back off (30 s, 1, 2, 5 min) instead
-// of starting another 38 MB download on every request.
+// of starting another full download on every request.
 
 import { SaxesParser } from 'saxes';
 
@@ -155,7 +155,7 @@ export class LiveStatus {
   fresh() { return this.fetchedAt != null && Date.now() < this.freshUntil; }
 
   // Past the TTL, but still worth answering with rather than making someone
-  // wait for a 38 MB download.
+  // wait for the whole feed to download.
   usable() { return this.fetchedAt != null && Date.now() - this.fetchedAt < this.maxStaleMs; }
 
   // Makes sure a refresh is on its way when the copy is past the TTL. With a

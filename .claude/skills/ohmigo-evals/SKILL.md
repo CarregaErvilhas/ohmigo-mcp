@@ -21,8 +21,8 @@ node evals/serve.mjs [--variant full|cut|none] [--ref main] [--repeat 3] [--case
   start one server per version, they can run side by side.
 - `--repeat N` gives each case N independent tries (pass rates instead of
   one coin flip); use 3 when comparing two versions.
-- `--variant cut` shows the instructions cut at 4 096 characters (Claude
-  Code), `none` hides them (clients that ignore them).
+- `--variant cut` shows the instructions cut at `INSTRUCTIONS_MAX` characters
+  (Claude Code), `none` hides them (clients that ignore them).
 
 Read its output file until it prints `READY <run dir>` and the list of
 `case …/brief.md` lines (and any `skip` lines: say why they were skipped).

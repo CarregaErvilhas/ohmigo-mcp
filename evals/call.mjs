@@ -46,7 +46,9 @@ try {
 }
 
 appendFileSync(join(dir, 'calls.jsonl'), `${JSON.stringify({ n, tool, args, isError, ...(code && { code }), chars: text.length })}\n`);
-const file = join(dir, 'results', `${String(n).padStart(2, '0')}-${tool}.txt`);
+// The server gets the name as it came (an unknown tool is part of what an
+// eval sees); the file name can't be allowed to walk out of the case directory.
+const file = join(dir, 'results', `${String(n).padStart(2, '0')}-${tool.replace(/[^a-z_]/g, '_').slice(0, 60)}.txt`);
 writeFileSync(file, pretty(text));
 
 if (text.length <= PRINT_MAX) console.log(text);

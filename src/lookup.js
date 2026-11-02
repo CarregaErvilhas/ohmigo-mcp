@@ -23,9 +23,9 @@
 // each with the words it lacks in `missing`, so the assistant can say so or
 // try again with fewer.
 
-import { readFileSync } from 'node:fs';
+import { NETWORKS } from './promos.js';
+import { fold } from './text.js';
 
-export const fold = s => (s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
 const words = s => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
 
 // Words that say nothing about which charger, in both languages: articles
@@ -65,9 +65,8 @@ function siteCodes(site) {
 // Brand names people use for an operator, from offers/networks.json ("Powerdot"
 // for HORZ, "Tesla Supercharger" for TSLA). Data, so no operator lives in code.
 function brandNames() {
-  const { networks } = JSON.parse(readFileSync(new URL('../offers/networks.json', import.meta.url), 'utf8'));
   const by = new Map();
-  for (const [label, n] of Object.entries(networks)) {
+  for (const [label, n] of Object.entries(NETWORKS)) {
     for (const id of n.operatorIds || []) by.set(id, [...(by.get(id) || []), label]);
   }
   return by;

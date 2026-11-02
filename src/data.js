@@ -6,7 +6,7 @@
 // and publishes it at DEFAULT_URL. Things that change by the minute (is the
 // charger free?) are NOT here: live.js reads them from the NAP when asked.
 //
-// Shape (one JSON file, ~6 MB):
+// Shape (one JSON file):
 //   { schema, generatedAt, sites: [{ id, code, lat, lon, region, city, address,
 //     operator, operatorId, name?, hours?, locationDescription?, phone?, osm?,
 //     points: [{ id, kw, v, a, cable, connector, dc, phases, level, regime, opc, osm? }] }] }
@@ -19,8 +19,9 @@
 // hours...), when the community mapped it with the MOBI.E code.
 // All of this is third-party text and numbers: see clean.js for what's kept.
 //
-// ~9k sites fit in memory easily, and a linear scan per query takes a few
-// milliseconds, so there's no spatial index.
+// The sites fit in memory easily, and the linear scan that filters them per
+// query takes a few milliseconds, so that scan has no spatial index. Grouping
+// what it found into places does: see mapSquares in direction.js.
 
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -29,8 +30,9 @@ import { cleanSite, reportLine } from './clean.js';
 import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
-import { fold, Index, lendOperators, operatorKey } from './lookup.js';
+import { Index, lendOperators, operatorKey } from './lookup.js';
 import { usableKw } from './socket.js';
+import { fold } from './text.js';
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 // The dataset format this code understands. nap-dashboard bumps SCHEMA in

@@ -2,8 +2,8 @@
 
 "The dataset" is the slow-changing half of the data: where each charger is,
 its plugs, power and voltage level, how the site lets you pay, and the
-operator fees from MOBI.E's tariff file. It's one JSON file, about 6 MB
-(~520 KB gzipped).
+operator fees from MOBI.E's tariff file. It's one JSON file, served gzipped
+(the URL is `DEFAULT_URL` in `src/data.js`).
 
 What's **not** in it: live status (changes by the minute, see
 [03](03-live-status.md)), CEME prices (ceme-v2's job), and operator direct
@@ -13,7 +13,7 @@ offers (`offers/`, see [04](04-operator-offers.md)).
 
 ```
  Monday 06:00 UTC, nap-dashboard's refresh.yml
-   │  downloads the NAP static XML (~170 MB) and MOBI.E's tariff CSV
+   │  downloads the NAP static XML and MOBI.E's tariff CSV
    │  runs its pipeline (including the OpenStreetMap dump), then scripts/ohmigo_dataset.py
    │  uploads the result as the "ohmigo-dataset" Actions artifact
    ▼
@@ -36,9 +36,9 @@ Monday's new file. Every 6 hours (`DATASET_CHECK_HOURS`) it asks Pages "has
 this changed?", sending the `ETag` of the copy it has:
 
 - **Unchanged** (most checks): Pages answers `304 Not Modified`, a few hundred
-  bytes, and nothing else happens. Over a week that's 27 tiny requests.
-- **Changed** (once a week): the server downloads the new file (~520 KB
-  compressed), checks it, and swaps it in. Requests already running finish on
+  bytes, and nothing else happens.
+- **Changed** (once a week): the server downloads the new file,
+  checks it, and swaps it in. Requests already running finish on
   the old copy.
 - **Failed** (Pages down, bad file): the server keeps the copy it has and
   tries again 6 hours later.
