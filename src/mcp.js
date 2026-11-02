@@ -210,13 +210,18 @@ function placeLine(pl) {
   return `${h.site.id}${more}: ${ops.join(' + ') || '?'}, ${h.site.address ?? ''}, ${h.site.city ?? ''} (${h.site.lat}, ${h.site.lon})`;
 }
 
+// The plug codes in the dataset. A domestic socket isn't one: the NAP has
+// none as Schuko, only the blue CEE one (iec60309x2single16).
+const PLUGS = z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'iec60309x2single16'])).optional();
+const DOMESTIC = 'Domestic: iec60309x2single16 (blue CEE; no Schuko)';
+
 const Filter = {
-  min_kw: z.number().positive().optional().describe('Minimum charger power, kW'),
-  connectors: z.array(z.enum(['T2', 'CCS', 'CHADEMO', 'SCHUKO'])).optional().describe("The car's plugs (exact version/year); CHAdeMO only if listed (that car has the port, or the user asks)"),
+  min_kw: z.number().positive().optional().describe('Minimum power, kW'),
+  connectors: PLUGS.describe(`The car's plugs (exact version/year); CHAdeMO only if the car has the port or the user asks. ${DOMESTIC}`),
   dc_only: z.boolean().optional().describe('Only DC (fast) chargers'),
   min_voltage: z.number().int().positive().max(1500).optional().describe('Minimum socket voltage, V (800 V car: 800)'),
-  card_payment: z.boolean().optional().describe('Only chargers with a bank card terminal or contactless reader'),
-  cable_attached: z.boolean().optional().describe('true: only sockets with a fixed cable; false: only without'),
+  card_payment: z.boolean().optional().describe('Only with a bank card terminal or contactless'),
+  cable_attached: z.boolean().optional().describe('true: fixed cable only; false: none'),
   open_now: z.boolean().optional().describe('Leave out chargers closed now (or at `at`)'),
   car_voltage: z.number().int().min(200).max(1000).optional()
     .describe("Car's battery voltage, V: 400 most, 800 for 800 V cars (look it up). Gives DC sockets' real power for it (kwForCar)")
@@ -730,7 +735,7 @@ export function createServer(getDataset, live) {
     description: 'Lists the companies that operate public EV chargers in Portugal (OPCs on MOBI.E and the operators outside it, as the NAP publishes them), biggest first: sites, sockets, DC sockets, max power and voltage, regions, and whether they are on MOBI.E. Filters narrow it to the operators with such chargers ("who runs 800 V chargers in Madeira?"). Use it for "how many operators are there" too, even when the user says licensed: it is the operators with chargers on the NAP, not the DGEG\'s licensing registry, so say that.',
     inputSchema: z.object({
       query: z.string().max(100).optional().describe('Only operators whose name or NAP operatorId contains this, e.g. "galp", "IONY"'),
-      ...networkFilter, connectors: Filter.connectors.describe('Plug types'), ...Region, ...Lang,
+      ...networkFilter, connectors: PLUGS.describe(`Plug types. ${DOMESTIC}`), ...Region, ...Lang,
       limit: z.number().int().positive().max(300).default(100),
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },

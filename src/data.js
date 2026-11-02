@@ -239,7 +239,7 @@ export class Dataset {
   // socket can give that car (amps × volts, socket.js), not its nameplate:
   // "150 kW for my 400 V car" must not keep a 200 A socket (80 kW).
   pointFilter({ minKw, connectors, hide, dcOnly, minVoltage, cardPayment: card, cable, openAt, carVolts } = {}) {
-    const cs = connectors?.length ? new Set(connectors.map(c => c.toUpperCase())) : null;
+    const cs = connectors?.length ? new Set(connectors) : null;
     const hidden = !cs && hide?.length ? new Set(hide) : null;
     const minV = this.hasVoltage ? minVoltage : null;
     const siteOk = new Map();

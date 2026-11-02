@@ -208,7 +208,9 @@ is heading (`src/direction.js`):
   "(OLH-VRA)"). The towns are often road-sign abbreviations: a three-letter
   one is first read as the municipality of the MOBI.E codes, then as a place
   name (`resolveSignTown` in `src/data.js`), and a label that can't be placed
-  still reaches the driver as written. Without one, the **right-hand rule**: Portugal drives on the right,
+  still reaches the driver as written. Compass letters count in capitals
+  only, and "S/N" in an address only when that address is on a motorway:
+  elsewhere it means sem número. Without one, the **right-hand rule**: Portugal drives on the right,
   so the service area to the right of the travel direction. That's a guess
   from coordinates, so it only decides when one side is clearly to the right,
   and the result carries an assumption telling the user to check the signs.
