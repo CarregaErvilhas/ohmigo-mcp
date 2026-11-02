@@ -12,6 +12,7 @@ test('plugLabel says which plug to use, and when to bring a cable', () => {
   assert.equal(plugLabel({ connector: 'T2' }, en), 'Type 2, AC');
   assert.match(plugLabel({ connector: 'CHADEMO', dc: true }, en), /only for cars with a CHAdeMO port/);
   assert.match(plugLabel({ connector: 'SCHUKO' }, pt), /Schuko/);
+  assert.match(plugLabel({ connector: 'iec60309x2single16' }, pt), /CEE/);
   // The NAP leaves some blank: "nan" in the dataset.
   assert.match(plugLabel({ connector: 'nan' }, en), /not published/);
   assert.match(plugLabel({ connector: 'T2', cable: false }, pt), /leva o teu/);
