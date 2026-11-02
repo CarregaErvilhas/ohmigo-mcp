@@ -56,7 +56,7 @@ reporting a security problem. It's generated per request (`securityTxt` in
 ceme-v2 isn't answering, the dataset missed its weekly rebuild). It answers 200
 either way, so the platform doesn't restart a container over an outage
 elsewhere; point a monitor at `status`. Anyone can read that summary, plus
-`version`, `dataAsOf` and `dataAgeHours`; `problems` names what's wrong, never
+`version`, `commit`, `source`, `dataAsOf` and `dataAgeHours`; `problems` names what's wrong, never
 the raw error. Send the `x-healthz-token` header with the value of
 `HEALTHZ_TOKEN` and the same answer adds the live feed (`publishedAt`, `fresh`,
 `failures`, `retryAt`, `bytesLast`, the last `error`), the ceme-v2 breaker,
@@ -104,6 +104,7 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `LIVE_MAX_STALE_SECONDS` | `3600` | how old a live feed copy can be and still answer at once while it refreshes in the background, flagged stale; past it, a request waits. `0` always waits |
 | `LIVE_WARMUP` | on | `0` skips the boot download |
 | `HEALTHZ_TOKEN` | none | unlocks the detail on `/healthz`, sent in the `x-healthz-token` header. Without it the detail stays private. |
+| `GIT_SHA` | none | the commit this build came from; `/healthz` shows it as `commit`, with `source` linking to that tree, so anyone can check what runs matches the public repo (AGPL section 13). Set it at deploy time; anything that isn't a 7-40 character hex SHA is ignored |
 | `OHMIGO_QA` | off | `1` turns on QA mode: every result carries the quarter-hour `timeline` and a `debug` block, and the assistant is told to show them. Never in production |
 | `NAP_STATUS_URL` | MOBI.E's `evActualStatus` | the live feed |
 

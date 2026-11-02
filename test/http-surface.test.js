@@ -14,6 +14,7 @@ process.env.CEME_API_URL = 'http://127.0.0.1:9';
 const { chargers, dump, forgetDump } = await import('../src/dump.js');
 
 const TOKEN = 'a-long-random-token';
+const SHA = '0123456789abcdef0123456789abcdef01234567';
 const CEME_BODY = 'stack trace from db-internal-7 at /srv/ceme';
 
 let ceme, cemeDown = false, withToken, noToken;
@@ -48,7 +49,7 @@ before(async () => {
     res.end(JSON.stringify(req.url === '/v1/promos' ? { data: [] } : { region: 'CONT', data: [] }));
   }).listen(0, '127.0.0.1');
   await once(ceme, 'listening');
-  [withToken, noToken] = await Promise.all([boot({ HEALTHZ_TOKEN: TOKEN }), boot({})]);
+  [withToken, noToken] = await Promise.all([boot({ HEALTHZ_TOKEN: TOKEN, GIT_SHA: SHA }), boot({ GIT_SHA: '' })]);
   // Each server tries the unreachable live feed, so /healthz has a failure to report.
   await Promise.all([withToken, noToken].map(s => fetch(`${s.base}/mcp`, {
     method: 'POST',
@@ -59,7 +60,7 @@ before(async () => {
 
 after(() => { for (const c of children) c.kill('SIGKILL'); ceme.close(); });
 
-const PUBLIC = ['dataAgeHours', 'dataAsOf', 'ok', 'problems', 'status', 'version'];
+const PUBLIC = ['commit', 'dataAgeHours', 'dataAsOf', 'ok', 'problems', 'source', 'status', 'version'];
 
 test('healthz: the public answer is the summary, with no raw error strings', async () => {
   for (const [server, headers] of [
@@ -71,6 +72,13 @@ test('healthz: the public answer is the summary, with no raw error strings', asy
     const h = await r.json();
     assert.deepEqual(Object.keys(h).sort(), PUBLIC);
     assert.equal(h.ok, true);
+    if (server === withToken) {
+      assert.equal(h.commit, SHA);
+      assert.equal(h.source, `https://github.com/CarregaErvilhas/ohmigo-mcp/tree/${SHA}`);
+    } else {
+      assert.equal(h.commit, null);
+      assert.equal(h.source, 'https://github.com/CarregaErvilhas/ohmigo-mcp');
+    }
     assert.equal(h.status, 'degraded');
     assert.ok(h.problems.includes('live: last refresh failed'), h.problems.join());
     for (const p of h.problems) assert.match(p, /^(live: last refresh failed|ceme-v2: unavailable|ceme-v2: rate limited|dataset: older than 9 days)$/);

@@ -10,3 +10,8 @@ test('mcp: the instructions, QA note included, fit before the clients that cut t
   const n = INSTRUCTIONS.length + QA_NOTE.length;
   assert.ok(n <= INSTRUCTIONS_MAX, `${n} > ${INSTRUCTIONS_MAX} characters: move what one tool needs to its description, and what one result needs to the result`);
 });
+
+test('the instructions point to the source, as AGPL section 13 asks', async () => {
+  const { REPO_URL } = await import('../src/version.js');
+  assert.ok(INSTRUCTIONS.includes(REPO_URL));
+});
