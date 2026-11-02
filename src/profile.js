@@ -62,6 +62,19 @@ export function sessionProfile(segments, start) {
     }));
 }
 
+// The quarter-hours the car stays plugged in after charging ends, as slices
+// of 0 kWh: from the first quarter boundary at or after `end` up to `unplug`.
+// The quarter `end` falls in is already the last charging slice. Most tariffs
+// don't care (0 kWh costs nothing), but a CEME that bills the average OMIE of
+// every hour plugged in counts these hours too (ceme-v2's `billing`).
+export function idleSlices(end, unplug) {
+  const out = [];
+  for (let t = Math.ceil(end.getTime() / QUARTER_MS) * QUARTER_MS; t < unplug.getTime(); t += QUARTER_MS) {
+    out.push({ at: new Date(t).toISOString(), kwh: 0, minutes: Math.round(Math.min(QUARTER_MS, unplug.getTime() - t) / 6_000) / 10, kw: 0 });
+  }
+  return out;
+}
+
 // "21:45" in the region's own time zone.
 const fmt = new Map();
 export function localTime(at, region = 'CONT') {

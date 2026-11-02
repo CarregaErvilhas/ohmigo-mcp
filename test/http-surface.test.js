@@ -141,7 +141,7 @@ test('dados: a new dataset drops the memo that held the old one', async () => {
   await Promise.all([first, second]);
 });
 
-const HTML_PATHS = ['/', '/en', '/privacidade', '/privacy', '/suporte', '/support', '/dados'];
+const HTML_PATHS = ['/', '/en', '/privacidade', '/privacy', '/suporte', '/support', '/termos', '/terms', '/dados'];
 const IMAGES = ['/og.png', '/favicon.ico', '/icon.svg', '/icon-512.png', '/apple-touch-icon.png'];
 
 test('headers: every HTML page asks for isolation', async () => {

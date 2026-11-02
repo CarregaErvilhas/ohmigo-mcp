@@ -167,7 +167,7 @@
         <div class="sub">${q.status ? `<span class="st st-${esc(q.status)}">${esc(s.status[q.status] || q.status)}</span> · ` : ''}${socket(q)} · ${q.regime === 'sem_ceme' ? esc(s.outside) + ' · ' : ''}${km(q.session.kwhBilled)} kWh · ${esc(dist)}${range ? ` · ${s.range} ${range}` : ''}</div>
         ${opts ? `<ul class="opts">${opts}</ul>` : ''}
         <details><summary>${s.breakdown}</summary><dl>
-          ${h ? `<dt>${s.energy}</dt><dd>${h.opcIncluded ? `${eur(h.total)} ${s.allIn}` : eur(h.energyEur)} · ${esc(h.ceme)} ${esc(h.name)}${h.kwhByPeriod ? ' · ' + Object.entries(h.kwhByPeriod).map(([p, k]) => `${km(k)} kWh ${esc(s.period[p] || p)}`).join(', ') : ''}</dd>` : ''}
+          ${h ? `<dt>${s.energy}</dt><dd>${h.opcIncluded ? `${eur(h.total)} ${s.allIn}` : eur(h.energyEur)} · ${esc(h.ceme)} ${esc(h.name)}${h.kwhByPeriod ? ' · ' + Object.entries(h.kwhByPeriod).map(([p, k]) => `${km(k)} kWh ${esc(s.period[p] || p)}`).join(', ') : ''}${h.billing ? `<br>${esc(h.note || '')}` : ''}</dd>` : ''}
           ${timelineHtml(q, h, s)}
           ${q.opc ? `<dt>${s.operator}</dt><dd>${eur(q.opc.eurWithVat)} · ${esc(q.opc.tariff ?? s.notPublished)}</dd>` : ''}
           ${(q.options || []).filter(o => o.kind === 'adhoc' || o.kind === 'opc_direct').map(o => `<dt>${esc(o.label)}</dt><dd>${o.tariff ? esc(o.tariff) + ' · ' : ''}${esc(o.note || '')}</dd>`).join('')}
