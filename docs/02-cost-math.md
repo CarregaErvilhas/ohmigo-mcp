@@ -104,6 +104,45 @@ What the driver gets:
 If ceme-v2 answers without a `profile` field (a version that doesn't know
 it), the session was priced at its start; the assumption says so.
 
+### Tariffs billed by the session's average OMIE
+
+Pricing each kWh at the OMIE of its quarter (the **load curve**) is what the
+section above does, and it's what the electricity really cost. Not every
+CEME bills that way. LUZiGÁS takes the hourly OMIE price of **every hour the
+car is plugged in**, start to end, averages them (each hour counts the same,
+whatever the car drew in it) and charges that one OMIE on every kWh. The TAR
+still follows each kWh's period. So charging at noon with OMIE at zero and
+leaving the car plugged in overnight pays the night's average.
+
+Which tariffs bill like this is ceme-v2's call (`billing` in its seed), and
+so is the math: its reply for them has `totalEur` by the session average
+(the bill), `sessionOmie` (the average and the hours it covers) and `curve`,
+the same session by the load curve. `cemeOption` (`quote.js`) keeps
+ceme-v2's total, so these tariffs rank by what they bill, and adds:
+
+- `billing: "sessionAverage"`, `sessionOmieEurKwh`, and a `note` that names
+  the method and says how long it counted: until you unplug, if you said
+  when, or else assuming you unplug when charging ends;
+- with `detail: true`, `byLoadCurve` (`{ total, energyEur }`, same operator
+  fee and promotions), and the note gives that total too.
+
+### Leaving the car plugged in (`unplug_at`)
+
+`estimate_charging_cost` takes `unplug_at`, for a car left plugged in after
+it's full (overnight at home, a day at work). `planSession` adds the idle
+quarter-hours after the charge as 0 kWh slices (`idleSlices` in
+`profile.js`), up to `MAX_SESSION_HOURS` from the start. They cost nothing
+by the load curve, but a tariff billed by the session average counts those
+hours too. Per-minute operator fees run until you unplug as well, and the
+opening-hours check looks at the whole stay. `session` gains `unplug`,
+`unplugLocal` and `pluggedMinutes`, and an assumption says how long the car
+sat idle. An `unplug_at` before the charge ends is ignored, and an
+assumption says so.
+
+When ceme-v2 lacks the OMIE of one of those hours (not published yet), it
+prices the load curve instead and sends no `curve`. The option then says
+the bill can differ (`option.sessionAverage.unknown`).
+
 Limits: the start time is a guess unless the user gives one, OMIE for
 tomorrow only exists after the day-ahead market publishes (early afternoon),
 and the operator fee doesn't depend on the clock (MOBI.E's tariff file has no

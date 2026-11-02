@@ -50,7 +50,7 @@ import { applicable, cemeOff, isCovered, MAX_RANKINGS, MAX_SIMS_PER_CALL, simula
 import { estimateSession } from './charging.js';
 import { cardPayment } from './data.js';
 import { closesDuring, daysLater, siteOpen } from './hours.js';
-import { localOffset, localTime, MAX_SESSION_HOURS, REGION_TZ, sessionProfile } from './profile.js';
+import { idleSlices, localOffset, localTime, MAX_SESSION_HOURS, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
 import { limiter } from './limit.js';
 import { napEurPerKwh, napPlan } from './live.js';
@@ -176,20 +176,48 @@ function cemeComponents(t, w) {
 // (each tariff has its own cycle, so one session can cross for one and not
 // for another): { VAZIO: 12.4, FORA_VAZIO: 20.1 }.
 //   opc: { low, high } operator fee excl. VAT; vat: the region's multiplier
-function cemeOption(t, { site, opc, vat, detail }) {
+//   tr: the translator, for the note of a tariff billed by the session average
+//   unplugLocal: when the driver said they unplug, if after charging ends
+function cemeOption(t, { site, opc, vat, detail, tr, unplugLocal }) {
   const promos = promosHere(t, site).filter(appliesToCustomers);
   const w = withPromos(promos, { energyEur: t.totalEur, opc, vat });
   return {
     kind: 'ceme', label: `${t.ceme} · ${t.name}`, total: w.high,
     ...(w.low !== w.high && { low: w.low }),
     tariffId: t.id, ceme: t.ceme, name: t.name, tariffKind: t.kind, period: t.period,
-    ...(t.kwhByPeriod && Object.keys(t.kwhByPeriod).length > 1 && { kwhByPeriod: t.kwhByPeriod }),
+    ...(t.kwhByPeriod && Object.values(t.kwhByPeriod).filter(k => k > 0).length > 1 && { kwhByPeriod: Object.fromEntries(Object.entries(t.kwhByPeriod).filter(([, k]) => k > 0)) }),
     requiresOtherContract: !!t.bundle, ...(t.audience && { audience: t.audience }), energyEur: w.energyEur,
     ...(detail && t.parts && { components: cemeComponents(t, w) }),
     // A tariff only for people who sign up now, often a dated campaign
     // (`until`: its last day). Never the headline or `best` by default.
     ...(t.newCustomers && { newCustomersOnly: true }), ...(t.valid_until && { until: t.valid_until }),
     ...(w.applied.length && { promos: w.applied.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }), ...(w.final && { opcIncluded: true }) }),
+    ...(t.billing === 'MEDIA_SESSAO' && sessionBilling(t, w, detail, tr, unplugLocal)),
+  };
+}
+
+// An indexed tariff the CEME bills by the session's average OMIE (ceme-v2's
+// `billing: 'MEDIA_SESSAO'`, LUZiGÁS today): the plain average of the hourly
+// OMIE price over every hour the car is plugged in, start to end, applied to
+// every kWh. Not the load curve, where each kWh pays the OMIE of the
+// quarter-hour it went in: charging at noon with OMIE at zero and staying
+// plugged in overnight pays the night's average. ceme-v2 already priced the
+// total that way (that's what the CEME bills) and sends the load-curve price
+// beside it (`curve`); with `detail` the option carries that too
+// (byLoadCurve), same operator fee and promotions, so the driver sees what
+// the billing method costs. The session ends when charging does unless the
+// driver said when they unplug (`unplug`, local time): the note says which.
+// Without `curve`, ceme-v2 lacked the OMIE of some of those hours (not
+// published yet) and priced the load curve instead.
+function sessionBilling(t, w, detail, tr, unplug) {
+  if (!t.curve) return { billing: 'sessionAverage', note: tr('option.sessionAverage.unknown', { ceme: t.ceme }) };
+  const delta = t.curve.totalEur - t.totalEur;
+  // An all-in promotion (FINAL) is one price whatever the energy: no other.
+  const curve = !w.final && { total: r2(w.high + delta), energyEur: r2(w.energyEur + delta) };
+  return {
+    billing: 'sessionAverage', sessionOmieEurKwh: r4(t.sessionOmie.eurKwh),
+    note: tr('option.sessionAverage', { ceme: t.ceme, hours: t.sessionOmie.hours, omie: tr.num(t.sessionOmie.eurKwh, 4), unplug, curve: detail && curve ? tr.num(curve.total, 2, 2) : null }),
+    ...(detail && curve && { byLoadCurve: curve }),
   };
 }
 
@@ -244,11 +272,12 @@ function feePlan(point, live) {
 // neither the NAP nor OpenStreetMap lists a card terminal, so it's done on the
 // phone (QR code or website at the charger). The label says what the site's
 // data says (cardPayment: data.js), and stays vague when it says nothing.
-function adhocOption(point, session, t, region, site) {
+//   minutes: how long the car is plugged in (per-minute fees run until then)
+function adhocOption(point, session, t, region, site, minutes = session.minutes) {
   const plan = point.opc?.AD_HOC_PAYMENT;
   if (!plan) return null;
   const vat = vatFor(region);
-  const c = opcCost(plan, { kwh: session.kwh, minutes: session.minutes });
+  const c = opcCost(plan, { kwh: session.kwh, minutes });
   const { value: card, disagree } = site ? cardPayment(site) : {};
   return {
     kind: 'adhoc', label: t(card === true ? 'option.adhoc.card' : card === false ? 'option.adhoc.noCard' : 'option.adhoc'),
@@ -289,23 +318,31 @@ const listed = o => ({ ...o, listed: true });
 
 // A cheaper CEME tariff than any the user listed in tariff_ids. It stays visible and says so, but it's not
 // a price they can pay today, so it's never `best` (bestOption).
-const notYours = (o, t) => ({ ...o, notYours: true, note: t(o.requiresOtherContract ? 'option.notYours.contract' : 'option.notYours') });
+const notYours = (o, t) => ({ ...o, notYours: true, note: [t(o.requiresOtherContract ? 'option.notYours.contract' : 'option.notYours'), o.note].filter(Boolean).join(' ') });
 
 export const directOptionsForTest = (direct, session, lang, region) => directOptions(direct, session, translator(lang), region);
 
 // The part of a quote known before asking ceme-v2: the session and, for a socket
 // on MOBI.E, the key of the ceme-v2 call it shares with others of its speed.
+// unplugAt: when the driver unplugs, if they leave the car plugged in after
+// charging. Only a later time counts (`plugged`): the idle quarters go to
+// ceme-v2 as 0 kWh slices, and per-minute fees run until then. Capped at
+// MAX_SESSION_HOURS from the start, like the slices.
 // -> null when the session would run past MAX_SESSION_HOURS.
-function planSession({ site, point }, car, { at, lang, detail = false, qa = false }) {
+function planSession({ site, point }, car, { at, lang, detail = false, qa = false, unplugAt = null }) {
   const session = estimateSession(point, car, translator(lang));
   if (!(session.minutes <= MAX_SESSION_HOURS * 60)) return null;
   // The session starts at `at` (or now), to the minute so points share the
   // ceme-v2 call, and runs for `minutes`.
   const start = new Date(Math.floor((at ?? new Date()).getTime() / 60_000) * 60_000);
+  const end = new Date(start.getTime() + session.minutes * 60_000);
+  const until = unplugAt && new Date(Math.min(unplugAt.getTime(), start.getTime() + MAX_SESSION_HOURS * 3_600_000));
+  const plugged = until && until > end ? { until, minutes: (until - start) / 60_000 } : null;
   const slices = sessionProfile(session.segments, start);
+  if (plugged && slices.length) slices.push(...idleSlices(end, until));
   const key = point.regime === 'sem_ceme' ? null
     : `${site.region}|${detail || qa ? 1 : 0}|${slices.map(x => `${x.at}=${x.kwh}`).join(',') || `${start.toISOString()}=${session.kwh}`}`;
-  return { session, start, slices, key };
+  return { session, start, slices, key, plugged, early: !!unplugAt && !plugged };
 }
 
 // A private charger connected to MOBI.E, as quotePoint takes it. A DPC (see
@@ -353,8 +390,10 @@ export async function quotePoint(hit, car, opts = {}) {
   const t = translator(lang);
   const planned = opts.plan ?? planSession(hit, car, opts);
   if (!planned) return null;
-  const { session, start, slices, key } = planned;
+  const { session, start, slices, key, plugged } = planned;
   const end = new Date(start.getTime() + session.minutes * 60_000);
+  // How long the car occupies the socket: per-minute fees and opening hours.
+  const out = plugged?.until ?? end, pluggedMinutes = plugged?.minutes ?? session.minutes;
   const priv = !!site.private;
   const lp = priv ? null : live?.get(site.id, point.id) ?? null;
   const base = {
@@ -376,6 +415,7 @@ export async function quotePoint(hit, car, opts = {}) {
       minutes: Math.round(session.minutes), peakKw: session.peakKw, targetPct: session.targetPct,
       start: start.toISOString(), end: end.toISOString(),
       startLocal: localTime(start, site.region), endLocal: localTime(end, site.region),
+      ...(plugged && { unplug: out.toISOString(), unplugLocal: localTime(out, site.region), pluggedMinutes: Math.round(pluggedMinutes) }),
     },
     assumptions: [...session.assumptions],
     options: [],
@@ -387,8 +427,10 @@ export async function quotePoint(hit, car, opts = {}) {
   const hours = siteOpen(site, start);
   const hoursText = [hours.nap, hours.osm].filter(Boolean).join(' / ');
   if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: hoursText }));
-  const closes = hours.open ? closesDuring(site, start, end) : null;
-  if (closes) base.assumptions.push(t('assume.closesDuring', { hours: hoursText, at: localTime(closes, site.region), days: daysLater(start, closes, site.region), end: base.session.endLocal }));
+  const closes = hours.open ? closesDuring(site, start, out) : null;
+  if (closes) base.assumptions.push(t('assume.closesDuring', { hours: hoursText, at: localTime(closes, site.region), days: daysLater(start, closes, site.region), end: base.session.unplugLocal ?? base.session.endLocal }));
+  if (plugged) base.assumptions.push(t('assume.unplug', { at: base.session.unplugLocal, minutes: Math.round(pluggedMinutes - session.minutes) }));
+  else if (planned.early) base.assumptions.push(t('assume.unplugEarly', { end: base.session.endLocal }));
   // An offer only a CEME tariff's holders get (manual.json `holdersOnly`, e.g.
   // myAtlante Business's DC price) is left out for everyone else.
   const mine = new Set((tariffIds || []).map(cardKey));
@@ -449,7 +491,7 @@ export async function quotePoint(hit, car, opts = {}) {
   // ad hoc price here: it's the operator's own word, and can be newer than
   // MOBI.E's file (IONITY: 0.51 €/kWh there, 0.63 with VAT, the same as its
   // own price today).
-  const adhoc = priv || ownWalkUp(site, direct) ? null : adhocOption(point, session, t, base.region, site);
+  const adhoc = priv || ownWalkUp(site, direct) ? null : adhocOption(point, session, t, base.region, site, pluggedMinutes);
   const want = detail || qa;
   if (!simCache.has(key)) simCache.set(key, simulate(simArgs(hit, planned, opts)));
   let sim;
@@ -504,14 +546,14 @@ export async function quotePoint(hit, car, opts = {}) {
   const vat = ceme.vat; // the region's VAT multiplier, e.g. 1.23 on the mainland
   const { plan, source } = priv ? { plan: null, source: null } : feePlan(point, lp);
   let opc = { low: 0, high: 0, parts: null };
-  if (plan) opc = opcCost(plan, { kwh: session.kwh, minutes: session.minutes });
+  if (plan) opc = opcCost(plan, { kwh: session.kwh, minutes: pluggedMinutes });
   else if (priv) base.assumptions.push(t('assume.private'));
   else base.assumptions.push(t('assume.noFee'));
   if (source === 'nap') base.assumptions.push(t('assume.napFee'));
   if (opc.low !== opc.high) base.assumptions.push(t('assume.feeRange'));
-  if (plan?.time?.length) base.assumptions.push(t('assume.perMinute'));
+  if (plan?.time?.length) base.assumptions.push(plugged ? t('assume.perMinute.plugged', { at: base.session.unplugLocal }) : t('assume.perMinute'));
 
-  const ctx = { site, opc, vat, detail: want };
+  const ctx = { site, opc, vat, detail: want, tr: t, unplugLocal: base.session.unplugLocal };
   const shownOpts = picked.options.map(o => cemeOption(o, ctx)).map(o => tariffIds?.length ? listed(o) : o);
   // The headline, now that promotions may have changed the order: with the
   // user's tariffs, the cheapest of them; otherwise the cheapest shown one
