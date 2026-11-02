@@ -82,6 +82,7 @@ async function call(name, args, url = base) {
 }
 
 const car = { battery_kwh: 58, start_pct: 20 };
+const r2 = x => Math.round(x * 100) / 100;
 
 // fetch() cleans a URL up before sending it, so odd request targets need a
 // socket. Sends `head`, then `body` if any, and resolves with what came back
@@ -111,8 +112,9 @@ test('http: every tool is read-only and talks to the outside world', async () =>
 // not. Raising this is a decision, not a fix: first trim descriptions or merge
 // tools (src/mcp.js says where guidance belongs). Six tools; list_operators
 // and the socket filters (voltage, card, cable, hours) took it from 18 000;
-// car_voltage (a DC socket's real power for the car) from 20 500.
-const TOOLS_MAX_CHARS = 21_300;
+// car_voltage (a DC socket's real power for the car) from 20 500; private
+// (a DPC's charger, priced with no site, instead of a seventh tool) from 21 300.
+const TOOLS_MAX_CHARS = 21_900;
 
 test('http: the tool list stays small, and every tool says what it is for so tool search finds it', async () => {
   const { tools } = await call('tools/list');
@@ -511,6 +513,29 @@ test('http: a socket with no published power or plug reads "?" in the summary li
   const [view] = renderView(single.structuredContent);
   assert.match(view, /\? kW \?/);
   assert.doesNotMatch(view, /kW nan/);
+});
+
+test('http: a private charger (DPC) is priced from ceme-v2 alone: no site, no live status, no operator fee', async () => {
+  const r = await call('estimate_charging_cost', { ...car, car_ac_kw: 11, private: { kw: 7.4 }, lang: 'en' });
+  assert.equal(r.isError, undefined);
+  const { kind, results: [q], live } = r.structuredContent;
+  assert.equal(kind, 'single');
+  assert.equal(r.structuredContent.private, true);
+  assert.equal(live, undefined);
+  for (const k of ['siteId', 'pointId', 'operator', 'address', 'status', 'plug', 'opc']) assert.equal(q[k], undefined, k);
+  assert.equal(q.session.peakKw, 7.4);
+  assert.equal(q.tar, 'BT');
+  assert.equal(q.best.tariffId, 'edp-bt-x');
+  assert.equal(q.best.total, r2(q.session.kwhBilled * 0.2), 'the CEME total and nothing on top');
+  assert.match(r.content[0].text, /€ · EDP · Stub · \d+ min · private charger/);
+  // A site passed by mistake doesn't turn it into a public charger.
+  const both = await call('estimate_charging_cost', { ...car, site: 'Porto', private: {}, lang: 'en' });
+  assert.equal(both.structuredContent.private, true);
+  const mt = await call('estimate_charging_cost', { ...car, private: { mt: true }, lang: 'en' });
+  assert.equal(mt.structuredContent.results[0].tar, 'MT');
+  const [view] = renderView(r.structuredContent);
+  assert.match(view, /Private charger/);
+  assert.doesNotMatch(view, /undefined|Directions|Status from the NAP/);
 });
 
 test('http: a driver in the view reads no note written for the assistant', async () => {
