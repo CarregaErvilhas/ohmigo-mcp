@@ -96,6 +96,11 @@ The code, docs and evals are licensed under the [GNU Affero General Public
 License v3.0 only](LICENSE) (AGPL-3.0-only). If you run a modified version
 for others over a network, you must offer them its source (section 13).
 
+Copyright (C) 2026 Fernando Miguel and contributors.
+
+The repository is the Corresponding Source for what runs at ohmigo.pt:
+[github.com/CarregaErvilhas/ohmigo-mcp](https://github.com/CarregaErvilhas/ohmigo-mcp).
+
 Not covered by that license:
 
 - **Third-party data**, which keeps its own terms: OpenStreetMap data is
