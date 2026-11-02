@@ -74,6 +74,8 @@ const alternates = paths => [
 // The tags every page shares. Title and description arrive as plain text.
 function seo(lang, paths, title, desc) {
   const url = SITE_URL + paths[lang];
+  // The same image on every page, so the landing page's alt text.
+  const alt = text(S[lang]['meta.ogalt']);
   return [
     `<link rel="canonical" href="${url}">`,
     ...alternates(paths).map(([l, u]) => `<link rel="alternate" hreflang="${l}" href="${u}">`),
@@ -86,7 +88,10 @@ function seo(lang, paths, title, desc) {
     `<meta property="og:image" content="${SITE_URL}/og.png">`,
     `<meta property="og:image:width" content="1200">`,
     `<meta property="og:image:height" content="630">`,
+    `<meta property="og:image:alt" content="${attr(alt)}">`,
     `<meta name="twitter:card" content="summary_large_image">`,
+    // X falls back to og:* for title, description and image, but not for alt.
+    `<meta name="twitter:image:alt" content="${attr(alt)}">`,
   ];
 }
 
@@ -128,6 +133,8 @@ export function render(lang) {
     .replace(/<!-- seo:[^>]*-->/, head(lang))
     // Every data-i element is empty in the source (test/site.test.js).
     .replace(/(<(\w+)\b[^>]*\bdata-i="([^"]+)"[^>]*>)(<\/\2>)/g, (m, open, tag, key, close) => open + (t[key] ?? '') + close)
+    // Names for screen readers: an attribute, so data-i can't fill them.
+    .replace(/data-aria="([^"]+)"/g, (m, key) => `aria-label="${attr(t[key] ?? '')}"`)
     .replace(/ aria-current="page"/g, '')
     .replace(`data-lang="${lang}"`, `data-lang="${lang}" aria-current="page"`);
   return lang === 'en' ? englishLegalLinks(html) : html;
@@ -178,4 +185,21 @@ export const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${[PATHS, ...Object.values(LEGAL).map(p => p.paths)].flatMap(paths => Object.values(paths).map(p => sitemapEntry(p, paths))).join('\n')}
 </urlset>
+`;
+
+// What ohmigo is, for AI crawlers (llmstxt.org). English only on purpose: it's
+// read by models, not by the people the two-language pages are for.
+export const LLMS_TXT = `# ohmigo
+
+> ohmigo is a free MCP server that gives AI assistants the prices at every public EV charger in Portugal published on the National Access Point (NAP), MOBI.E and the networks outside it. It estimates what a charging session costs for each way to pay and whether the charger is available now. No account, no sign-up, no authentication. All prices are estimates.
+
+MCP server (Streamable HTTP): ${SITE_URL}/mcp
+
+## Pages
+
+- [Home, in Portuguese](${SITE_URL + PATHS.pt}): what ohmigo is and how to add it to an assistant
+- [Home, in English](${SITE_URL + PATHS.en})
+- [Privacy](${SITE_URL}/privacy)
+- [Support](${SITE_URL}/support)
+- [Source code](https://github.com/CarregaErvilhas/ohmigo-mcp)
 `;

@@ -35,6 +35,12 @@ const PUBLISH_MS = 6 * 60_000;
 // numbers that repeat), so entries are keyed "SITE/POINT".
 export const pointKey = (siteId, pointId) => `${siteId}/${pointId}`;
 
+// What the feed says about a socket (docs/03-live-status.md has what each
+// means). It goes into answers as it is, so anything else becomes `other`:
+// not `unknown`, which counts as usable and could send a driver to a socket
+// reporting a fault under a word we've never seen.
+const STATUSES = new Set(['available', 'charging', 'unknown', 'outOfOrder', 'inoperative', 'blocked', 'planned']);
+
 // Parses the feed from an async iterable of byte chunks.
 export async function parseStatus(chunks) {
   const points = new Map();
@@ -43,6 +49,7 @@ export async function parseStatus(chunks) {
   const stack = [];
   let text = '';
   let site = null, point = null, policy = null, fee = null;
+  let otherStatuses = 0;
 
   p.on('opentag', n => {
     stack.push(n.local);
@@ -61,7 +68,11 @@ export async function parseStatus(chunks) {
     const v = text.trim();
     switch (n.local) {
       case 'publicationTime': if (stack.length === 1) publicationTime = v; break;
-      case 'status': if (point) point.status = v; break;
+      case 'status':
+        if (!point) break;
+        point.status = !v || STATUSES.has(v) ? v : 'other';
+        if (point.status === 'other') otherStatuses++;
+        break;
       case 'pricingPolicy': policy = v; break;
       case 'minimumDeliveryFee': fee = Number(v); break;
       case 'energyPricingPolicy':
@@ -84,7 +95,7 @@ export async function parseStatus(chunks) {
   }
   p.close();
   if (err) throw err;
-  return { publicationTime, points };
+  return { publicationTime, points, otherStatuses };
 }
 
 // NAP fees -> the same plan shape as the MOBI.E tariff file (see opc.js).
@@ -172,7 +183,7 @@ export class LiveStatus {
           this.lastError = null;
           this.failures = 0;
           this.retryAt = 0;
-          console.log(`[ohmigo] live: ${this.points.size} points, published ${this.publicationTime}, ${this.bytesLast ?? '?'} bytes, ${Date.now() - t0} ms`);
+          console.log(`[ohmigo] live: ${this.points.size} points, published ${this.publicationTime}, ${this.bytesLast ?? '?'} bytes, ${this.otherStatuses} unrecognised statuses, ${Date.now() - t0} ms`);
           break;
         } catch (e) {
           this.lastError = e.message;
@@ -197,9 +208,10 @@ export class LiveStatus {
     });
     if (res.status === 304) { this.markFetched(); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const { publicationTime, points } = await parseStatus(res.body);
+    const { publicationTime, points, otherStatuses } = await parseStatus(res.body);
     if (points.size < 1000) throw new Error(`only ${points.size} points parsed`);
     this.points = points;
+    this.otherStatuses = otherStatuses;
     this.publicationTime = publicationTime;
     this.etag = res.headers.get('etag');
     this.bytesLast = Number(res.headers.get('content-length')) || null;
