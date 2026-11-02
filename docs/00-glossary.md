@@ -136,7 +136,8 @@ for both.
 **Plug types** — `T2` (Type 2, AC; the socket may have a cable attached or not,
 then you bring yours), `CCS` (Combo 2, DC, most cars), `CHADEMO` (DC, only a few
 cars, and it depends on the version: the Nissan Leaf had it until the 2026
-one, which has CCS2), `SCHUKO` (household socket). Every answer says
+one, which has CCS2), `iec60309x2single16` (the blue CEE socket; the NAP lists
+no household Schuko socket). Every answer says
 which one to use (`plug`).
 
 **400 V / 800 V cars** — the voltage of the car's battery: about 400 V for

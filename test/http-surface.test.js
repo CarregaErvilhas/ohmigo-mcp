@@ -179,7 +179,7 @@ test('headers: the landing page and /dados allow exactly their own inline script
 });
 
 test('cors: open on /mcp and what assistants fetch, absent from pages and operations', async () => {
-  const open = ['/mcp', '/dados.json', '/dados/postos.json?op=CONT', ...IMAGES, '/.well-known/security.txt', '/.well-known/oauth-protected-resource/mcp'];
+  const open = ['/mcp', '/llms.txt', '/dados.json', '/dados/postos.json?op=CONT', ...IMAGES, '/.well-known/security.txt', '/.well-known/oauth-protected-resource/mcp'];
   for (const path of open) {
     const r = await fetch(`${noToken.base}${path}`, { headers: { origin: 'https://claude.ai' } });
     assert.equal(r.headers.get('access-control-allow-origin'), '*', path);
