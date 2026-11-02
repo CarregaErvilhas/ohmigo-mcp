@@ -129,14 +129,32 @@ especially above 80 %.
 
 **Charging curve** — the power a car accepts at each SoC; every model has its
 own. **10-80 % time** — how long a car takes on a fast enough DC charger to go
-from 10 to 80 %. Most spec sites publish it.
+from 10 to 80 %. Most spec sites publish it. ohmigo points the assistant to
+[ev-database.org](https://ev-database.org/) and [evkx.net](https://evkx.net/)
+for both.
+
+**Plug types** — `T2` (Type 2, AC; the socket may have a cable attached or not,
+then you bring yours), `CCS` (Combo 2, DC, most cars), `CHADEMO` (DC, only a few
+cars, and it depends on the version: the Nissan Leaf had it until the 2026
+one, which has CCS2), `SCHUKO` (household socket). Every answer says
+which one to use (`plug`).
+
+**400 V / 800 V cars** — the voltage of the car's battery: about 400 V for
+most cars, about 800 V for some (Porsche Taycan, Hyundai Ioniq 5, Kia EV6...).
+On DC the charger delivers volts × amps, and the volts are the battery's,
+while the amps are capped by the charger and its cable. A DC charger's kW is
+what it gives at the top of its voltage range, so a 400 V car often gets much
+less: 600 A × 400 V = 240 kW at a "400 kW" charger. Every DC socket says what
+it gives a 400 V car (`kwAt400V`) and, with the car's voltage
+(`car_voltage`), what it gives that car (`kwForCar`).
 
 **Charging losses** — energy that turns into heat between the charger's meter
 and the battery. You pay for it anyway.
 
 **Voltage level (BT / MT)** — chargers connect to the grid at low (BT, BTN,
 BTE) or medium (MT) voltage. The TAR differs, so each CEME tariff exists in a
-BT and an MT version.
+BT and an MT version. Every MOBI.E socket in an answer says which (`tar`,
+`gridLabel`); it's not the socket's volts.
 
 ## The AI side
 

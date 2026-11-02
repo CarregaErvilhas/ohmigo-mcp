@@ -18,9 +18,17 @@ at the slower of car and charger. How we estimate it depends on what the
 assistant found out about the car:
 
 1. **Charging curve** (kW at each SoC): we walk it 1 % at a time, capped by
-   the charger. This is the best case.
+   the charger. This is the best case. Without it, a DC estimate carries a
+   note pointing the assistant to ev-database.org and evkx.net, where the
+   curves are published.
    The charger's power is OpenStreetMap's where it differs from the NAP's
    ([05](05-dataset.md)), and the estimate says so in its assumptions.
+   On DC, with the car's battery voltage (`car_voltage`), "the charger" is
+   what the socket can give that car: its max current × the car's volts (or
+   the socket's own max volts, if lower), when that's below its kW. A 400 V
+   car at a 400 kW, 600 A socket is capped at 240 kW. That's `kwForCar` in
+   `src/socket.js`; it applies to all three cases below, and the estimate
+   says so when it, not the car, is the limit.
 2. **10-80 % time**: 70 % of the battery charged in that many minutes gives
    the car's real average speed below 80 %, at the battery. The meter counts
    the losses too, so that speed is scaled up to the meter's side, and a
@@ -143,7 +151,7 @@ Each plug gets `options`, one entry per way to pay:
 **`ceme`** — total = ceme-v2's total for that tariff (energy + TAR + IEC +
 EGME + VAT) + OPC fee × VAT. ceme-v2 quotes every tariff in one call, and we
 keep the ones that fit this plug:
-- the right voltage version (BT or MT, from the socket's voltage level);
+- the right voltage version (BT or MT, from the charger's grid voltage level; every answer shows it in `tar`);
 - no AC-only tariffs on DC chargers (Atlante's "(AC)" tariffs);
 - if the user gave their `tariff_ids`, only those; otherwise the top 3 (or
   `tariffs_shown`) of ceme-v2's "popular" list.
@@ -239,6 +247,14 @@ Two summary fields:
   affected, since `tariff_ids` says nothing about which apps the user has.
   **The ranking sorts by `best`.** That's how an IONITY whose own app beats
   every CEME ends up where it belongs.
+
+Without `tariff_ids` you only see the popular tariffs, plus the cheapest of
+all as a tip. **`unlistedCheaper`** counts the other ones left out that would
+cost less than the headline (one per card, never new-sign-up-only ones). It's
+a count, not a list: many of those tariffs need another contract or are
+closed to new sign-ups, so the point is to make the driver say which card
+they hold. The `note.unlisted` note tells the assistant to ask once, and the
+results view shows "+N cheaper tariffs not listed" under the options.
 
 ## 4. Ranking (`quote.js`, `rank`)
 

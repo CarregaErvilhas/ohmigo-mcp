@@ -103,6 +103,12 @@ Monday.
   `src/data.js` puts them in `kw`/`v`/`a` when it loads the file and keeps the
   NAP's in `napKw`/`napV`/`napA`: filters, the session duration and the price
   band all use OSM's, and every answer that does says so.
+- `osmSame` (point): the fields (`kw`, `v`, `a`) where OpenStreetMap agrees
+  with the NAP. With `osm`, it tells a value checked on the charger from one
+  only the operator declared: `src/data.js` turns it into `ampsSource`
+  (`osm` or `nap`), which every `kwAt400V`/`kwForCar` carries. Optional:
+  older files don't have it, and then every current not corrected by OSM
+  reads as `nap`.
 - `level`: the voltage level of the site's grid connection (`BTN`, `BTE`,
   `MT`), which picks the BT or MT version of each CEME tariff. Not the
   socket's voltage (that's `v`).

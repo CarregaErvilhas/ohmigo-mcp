@@ -223,6 +223,29 @@
       }
     },
     {
+      "id": "motorway-side-in-search",
+      "why": "A search near a town returns a motorway service area with a charger on each side: say which direction each side serves (or that there is one on each side); never present one side as if it were the whole stop.",
+      "message": "Tenho um Tesla Model 3, onde posso carregar com a maior potência em Tavira?",
+      "requires": [
+        {
+          "site": "CPS-OLH-00047"
+        },
+        {
+          "site": "CPS-OLH-00048"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_chargers|find_cheapest_charging"
+          }
+        ],
+        "judge": [
+          "If the reply mentions the Moeve/Cepsa chargers on the A22 at Olhão, does it say there is one on each side of the motorway, or which direction (sentido) the one it recommends serves? Answer n/a if it doesn't mention them."
+        ]
+      }
+    },
+    {
       "id": "employee-which-company",
       "why": "\"Sou colaborador\" alone doesn't say which group: ask which company, never pick one.",
       "message": "Sou colaborador e acho que tenho um preço especial. Quanto me custa carregar no posto LRA-00156? Nissan Leaf de 40 kWh, de 20% a 80%.",
@@ -449,6 +472,30 @@
         ],
         "judge": [
           "If the tool results include a price or promotion only for new customers (newCustomers or newCustomersOnly: true), does the reply present it as a tip for people who aren't clients yet (for example \"if you sign up by …\"), not as the price to pay? Answer n/a if the results have none."
+        ]
+      }
+    },
+    {
+      "id": "unlisted-ask",
+      "why": "Without tariff_ids only popular tariffs are priced; when cheaper ones are left out (unlistedCheaper), say so once and ask which CEME card the user has, without listing them.",
+      "message": "Quanto me custa carregar amanhã às 9h no posto da EDP na Zona Portuária de Viana do Castelo? Tesla Model 3 Long Range, de 20% a 80%.",
+      "requires": [
+        {
+          "site": "EDP-VCT-00049"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "tariff_ids": false
+            }
+          }
+        ],
+        "judge": [
+          "If a result has unlistedCheaper above 0, does the reply say, briefly, that there are cheaper tariffs not shown and ask whether the user has a card from another CEME (or which one)? Answer n/a if no result has unlistedCheaper.",
+          "Does the reply still lead with a price for the charge, rather than only asking questions?"
         ]
       }
     },
@@ -846,6 +893,221 @@
         ],
         "judge": [
           "Does the reply explain that without a CEME card the user can pay ad hoc on their phone (QR code or website), without claiming that a bank card works at a terminal on that charger?"
+        ]
+      }
+    },
+    {
+      "id": "no-chademo-ccs-car",
+      "why": "CHAdeMO sockets only for a car with that port or when the user asks: a CCS car never hears about CHAdeMO.",
+      "message": "Quanto me custa carregar no posto LRA-00156? Tenho um Hyundai Kona Electric de 64 kWh, estou com 20% e quero ir até aos 80%.",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "noCalls": [
+          {
+            "args": {
+              "connectors": "CHADEMO"
+            }
+          }
+        ],
+        "answer": {
+          "noMatch": [
+            "chademo"
+          ]
+        }
+      }
+    },
+    {
+      "id": "leaf-chademo",
+      "why": "A car version with a CHAdeMO port (a 2020 Nissan Leaf): pass CHADEMO in connectors, so its DC sockets show.",
+      "message": "Tenho um Nissan Leaf de 2020, de 40 kWh, e estou com 15%. Quanto custa carregar rápido no posto LRA-00156 até aos 80%?",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger|find_cheapest_charging",
+            "args": {
+              "connectors": "CHADEMO"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "say-the-plug",
+      "why": "Always say which plug the driver must use (plug).",
+      "message": "Vou carregar no posto LRA-00156 com o meu Peugeot e-208 de 50 kWh, de 30% a 80%. Quanto custa?",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply say which plug or socket type the driver should use (for example CCS or Type 2) for the price it gives?"
+        ]
+      }
+    },
+    {
+      "id": "say-bt-mt",
+      "why": "Say whether a MOBI.E charger is on a low (BT) or medium voltage (MT) grid connection (tar), without calling it the socket's voltage.",
+      "message": "Quanto custa carregar no posto LRA-00156? Tesla Model Y Long Range, de 25% a 80%.",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply say whether the charger is connected at low voltage (BT) or medium voltage (MT), without presenting that as the socket's voltage in volts?"
+        ]
+      }
+    },
+    {
+      "id": "leaf-2026-ccs",
+      "why": "Ports depend on the exact version, not the model: the 2026 Nissan Leaf has CCS2, so no CHAdeMO.",
+      "message": "Tenho o Nissan Leaf novo, de 2026, com bateria de 75 kWh. Estou com 20%. Quanto custa carregar rápido no posto LRA-00156 até aos 80%?",
+      "requires": [
+        {
+          "site": "GLP-LRA-00156"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "LRA-00156"
+            }
+          }
+        ],
+        "noCalls": [
+          {
+            "args": {
+              "connectors": "CHADEMO"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply send the user to a CCS (CCS2) socket for fast charging, without telling them to use a CHAdeMO plug?"
+        ]
+      }
+    },
+    {
+      "id": "dc-power-400v-car",
+      "why": "A DC charger's kW is for its top voltage: a 400 V car gets amps × 400 V. The answer tells the driver the power they'll really get (kwAt400V, or kwForCar with car_voltage).",
+      "message": "Vou parar no IONITY de Abrantes com o meu Tesla Model 3 Long Range de 2022. A que potência vou carregar lá?",
+      "requires": [
+        {
+          "site": "IOY-ABT-00039"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|estimate_charging_cost|find_chargers"
+          }
+        ],
+        "judge": [
+          "Does the reply say the car gets less than the charger's 400 kW there, because of its 400 V battery and the charger's current limit (about 240 kW)?"
+        ]
+      }
+    },
+    {
+      "id": "most-powerful-400v",
+      "why": "\"Most powerful for my 400 V car\" is ordered by amps × 400 V, not by the nameplate: find_chargers with car_voltage and no place.",
+      "message": "O meu carro tem bateria de 400 V. Quais são os postos em Portugal que me dão mais potência a mim?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_chargers",
+            "args": {
+              "car_voltage": [
+                350,
+                450
+              ],
+              "place": false,
+              "lat": false,
+              "route": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dc-power-400v-no-car",
+      "why": "Without a car, a DC socket's nameplate is still not what most cars get: the answer passes on kwAt400V (amps × 400 V).",
+      "message": "Qual é a potência dos carregadores do IONITY de Abrantes?",
+      "requires": [
+        {
+          "site": "IOY-ABT-00039"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|find_chargers"
+          }
+        ],
+        "judge": [
+          "Does the reply say that a car with a 400 V battery (most cars) gets less there than the 400 kW nameplate, about 240 kW?"
+        ]
+      }
+    },
+    {
+      "id": "dc-power-800v-car",
+      "why": "kwAt400V is for 400 V cars: for an 800 V car the assistant passes car_voltage and doesn't cap it at the 400 V figure.",
+      "message": "Vou parar no IONITY de Abrantes com o meu Porsche Taycan de 2025. A que potência vou carregar lá?",
+      "requires": [
+        {
+          "site": "IOY-ABT-00039"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|estimate_charging_cost|find_chargers",
+            "args": {
+              "car_voltage": [
+                700,
+                950
+              ]
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply avoid saying this car is limited to about 240 kW there (that figure is for 400 V cars; an 800 V Taycan can take far more of the charger's 400 kW)?"
         ]
       }
     }

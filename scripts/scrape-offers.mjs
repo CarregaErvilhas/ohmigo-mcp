@@ -8,14 +8,15 @@
 //
 // The author publishes a NEW post for each update (not an edit of the old
 // one), so we can't use a fixed URL. Blogger serves every blog's posts as a
-// JSON feed; we take the newest post that contains the price table.
+// JSON feed; we take the most recently published post that contains the price
+// table (an edit to an old post doesn't count, see newestPost()).
 //
 // Exit codes: 0 ok; 1 nothing usable (feed down, no table, layout changed);
 // 3 ok but some "Postos" labels aren't in offers/networks.json (the PR says
 // which, and those rows are left out until someone maps them).
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parseTables, toOffers } from '../src/offers-parse.js';
+import { newestPost, parseTables, toOffers } from '../src/offers-parse.js';
 
 const FEED = 'https://custofinal.blogspot.com/feeds/posts/default?alt=json&max-results=25';
 const OUT = new URL('../offers/custofinal.json', import.meta.url);
@@ -24,10 +25,7 @@ const check = process.argv.includes('--check');
 
 const res = await fetch(FEED, { headers: { 'user-agent': 'ohmigo-offers-scraper (+https://github.com/CarregaErvilhas)' }, signal: AbortSignal.timeout(30_000) });
 if (!res.ok) { console.error(`feed: HTTP ${res.status}`); process.exit(1); }
-const entries = (await res.json()).feed?.entry || [];
-const post = entries
-  .filter(e => /class="[^"]*evtable/.test(e.content?.$t || ''))
-  .sort((a, b) => b.updated.$t.localeCompare(a.updated.$t))[0];
+const post = newestPost((await res.json()).feed?.entry || []);
 if (!post) { console.error('no post with a price table in the feed'); process.exit(1); }
 
 const url = post.link.find(l => l.rel === 'alternate')?.href;

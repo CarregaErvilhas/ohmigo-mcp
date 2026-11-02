@@ -11,7 +11,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { moreWays, socketKindKey } from '../src/mcp.js';
+import { moreWays, socketKindKey, unlistedNote } from '../src/mcp.js';
 import { renderView } from './view-harness.js';
 
 let ceme, cemeDown = false, cheapTip = false, server, base, serverLog = '';
@@ -110,8 +110,9 @@ test('http: every tool is read-only and talks to the outside world', async () =>
 // The tool list is in the assistant's context in every conversation, used or
 // not. Raising this is a decision, not a fix: first trim descriptions or merge
 // tools (src/mcp.js says where guidance belongs). Six tools; list_operators
-// and the socket filters (voltage, card, cable, hours) took it from 18 000.
-const TOOLS_MAX_CHARS = 20_500;
+// and the socket filters (voltage, card, cable, hours) took it from 18 000;
+// car_voltage (a DC socket's real power for the car) from 20 500.
+const TOOLS_MAX_CHARS = 21_300;
 
 test('http: the tool list stays small, and every tool says what it is for so tool search finds it', async () => {
   const { tools } = await call('tools/list');
@@ -152,6 +153,12 @@ test('the more-ways note does not count a tariff the user would have to switch t
   const t = key => key;
   assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2, notYours: true }] }], t), []);
   assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2 }] }], t), ['note.moreWays']);
+});
+
+test('the unlisted note shows only when a charger has cheaper tariffs left out', () => {
+  const t = key => key;
+  assert.deepEqual(unlistedNote([{ unlistedCheaper: 0 }, {}], t), []);
+  assert.deepEqual(unlistedNote([{}, { unlistedCheaper: 2 }], t), ['note.unlisted']);
 });
 
 test('http: estimate_charging_cost answers with structuredContent, and the text carries it too for text-only clients', async () => {
@@ -198,6 +205,25 @@ test('http: find_chargers filters by declared voltage and says the values are de
   assert.ok(points.length > 0);
   assert.ok(points.every(p => p.volts >= 800 && p.dc), JSON.stringify(points));
   assert.ok(d.notes.some(n => /declares/.test(n)));
+});
+
+test('http: with car_voltage, DC sockets say what they give that car, and the cost tools use it', async () => {
+  // CNT-9648PR0002: 150 kW (OSM) and 120 kW at 200 A, 80 kW for a 400 V car.
+  const found = (await call('find_chargers', { car_voltage: 400, dc_only: true, lang: 'en' })).structuredContent;
+  assert.match(found.notes.join('\n'), /most powerful first for a 400 V car/);
+  assert.match(found.notes.join('\n'), /kwForCar is the most a DC socket can give/);
+  const cnt = found.sites.find(s => s.siteId === 'CNT-9648PR0002').points;
+  assert.deepEqual(cnt.map(p => [p.kw, p.kwForCar]).sort(), [[120, 80], [150, 80]]);
+  // 800 V: 200 A × 800 V = 160 kW covers both; nothing to say.
+  const at800 = (await call('lookup_charger', { query: 'CNT-9648PR0002', car_voltage: 800, lang: 'en' })).structuredContent;
+  assert.ok(at800.sites[0].sockets.every(g => g.kwForCar === undefined));
+  // Without car_voltage, what a usual 400 V car gets, and whose amps they are.
+  const plain = (await call('lookup_charger', { query: 'CNT-9648PR0002', lang: 'en' })).structuredContent;
+  assert.deepEqual(plain.sites[0].sockets.filter(g => g.dc).map(g => [g.kw, g.kwAt400V, g.ampsSource, g.kwForCar]).sort(), [[120, 80, 'nap', undefined], [150, 80, 'nap', undefined]]);
+  assert.match(plain.notes.join('\n'), /kwAt400V is the most a DC socket gives a car with a 400 V battery/);
+  const cost = (await call('estimate_charging_cost', { site: 'CNT-9648PR0002', point_id: 'CNT-9648PR0002/9648PR0002.01', battery_kwh: 77, start_pct: 10, car_dc_kw: 200, car_voltage: 400, lang: 'en' })).structuredContent;
+  assert.equal(cost.results[0].kwForCar, 80);
+  assert.ok(cost.results[0].assumptions.some(x => /at most 80 kW, not its 150 kW nameplate/.test(x)));
 });
 
 test('http: find_chargers searches the whole country only when a filter keeps the list meaningful', async () => {
@@ -443,13 +469,14 @@ test('http: list_ceme_tariffs says so when it cuts the list, and only then', asy
 });
 
 test('http: a socket with no published power or plug reads "?" in the summary lines', async () => {
-  const unknown = /\(?\? kW \?\)? \[EDP-FAR-00001\/FAR-00001-01\]/;
+  // ", BT": the TAR of a MOBI.E socket, low voltage when the level is unknown.
+  const unknown = /\(?\? kW \?(, BT)?\)? \[EDP-FAR-00001\/FAR-00001-01\]/;
   const ranked = await call('find_cheapest_charging', { place: 'Faro', ...car });
   assert.match(ranked.content[0].text.split('\n\n')[0], unknown);
   const single = await call('estimate_charging_cost', { site: 'EDP-FAR-00001', ...car });
   assert.match(single.content[0].text.split('\n\n')[0], unknown);
   const found = await call('lookup_charger', { query: 'EDP-FAR-00001' });
-  assert.match(found.content[0].text.split('\n\n')[0], /1× \? kW \?$/m);
+  assert.match(found.content[0].text.split('\n\n')[0], /1× \? kW \?(, BT)?$/m);
   // Only the text: the data keeps what the dataset says.
   assert.equal(single.structuredContent.results[0].connector, 'nan');
   // The view, which reads the data, says "?" too.
@@ -717,6 +744,80 @@ test('http: free-text arguments have a length limit', async () => {
   assert.equal((await call('estimate_charging_cost', { point_id: at(200), ...car })).structuredContent.code, 'point');
   assert.ok((await call('list_ceme_tariffs', { query: at(200) })).structuredContent);
   assert.equal((await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, tariff_ids: [at(100)] })).isError, undefined);
+});
+
+test('http: CHAdeMO sockets only show when the car has the port (connectors lists CHADEMO)', async () => {
+  const sockets = async args => (await call('lookup_charger', { query: 'GLP-LRA-00156', lang: 'en', ...args })).structuredContent.sites[0].sockets;
+  assert.ok(!(await sockets({})).some(g => g.connector === 'CHADEMO'));
+  const hidden = (await call('lookup_charger', { query: 'GLP-LRA-00156', lang: 'en' })).structuredContent;
+  assert.ok(hidden.notes.some(x => /CHAdeMO sockets, left out/.test(x)), 'the assistant hears they exist, to ask again for a CHAdeMO car');
+  const shown = (await call('lookup_charger', { query: 'GLP-LRA-00156', connectors: ['CHADEMO', 'T2'], lang: 'en' })).structuredContent;
+  assert.ok(!shown.notes?.some(x => /left out/.test(x)));
+  assert.ok((await sockets({ connectors: ['CHADEMO', 'T2'] })).some(g => g.connector === 'CHADEMO'));
+  const near = (await call('find_chargers', { place: 'Leiria', radius_km: 20 })).structuredContent;
+  assert.ok(near.sites.every(s => s.points.every(p => p.connector !== 'CHADEMO')));
+  const est = (await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, lang: 'en' })).structuredContent;
+  assert.ok(est.results.every(q => q.connector !== 'CHADEMO'));
+  // list_operators counts the network, not one driver's plugs: every socket.
+  const fixture = JSON.parse(readFileSync(new URL('fixtures/chargers.json', import.meta.url)));
+  const ops = (await call('list_operators', {})).structuredContent.operators;
+  assert.equal(ops.reduce((n, o) => n + o.points, 0), fixture.sites.reduce((n, s) => n + s.points.length, 0));
+});
+
+test('http: every socket says which plug to use and, on MOBI.E, BT or MT', async () => {
+  const looked = (await call('lookup_charger', { query: 'GLP-LRA-00156', lang: 'en' }));
+  for (const g of looked.structuredContent.sites[0].sockets) {
+    assert.ok(g.plug, g.connector);
+    assert.equal(g.tar, 'MT');
+    assert.match(g.gridLabel, /medium voltage/);
+  }
+  assert.match(looked.structuredContent.sites[0].sockets.find(g => g.connector === 'T2').plug, /bring your own/);
+  assert.match(looked.content[0].text, /kW CCS, MT/);
+  const est = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, lang: 'en' });
+  for (const q of est.structuredContent.results) {
+    assert.ok(q.plug);
+    assert.equal(q.tar, 'MT');
+  }
+  assert.match(est.content[0].text.split('\n\n')[0], /, MT\)? \[GLP-LRA-00156/);
+  // Outside MOBI.E there's no CEME and no TAR to show.
+  const outside = (await call('lookup_charger', { query: 'CNT-9648PR0002', lang: 'en' })).structuredContent.sites[0];
+  assert.ok(outside.sockets.every(g => g.plug && g.tar === undefined));
+  const found = (await call('find_chargers', { place: 'Leiria', radius_km: 20 })).structuredContent;
+  assert.ok(found.sites.every(s => s.points.every(p => p.plug)));
+});
+
+test('http: a DC estimate without the car\'s curve says where to find it', async () => {
+  const curve = n => /ev-database\.org.*evkx\.net/.test(n);
+  const without = (await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, lang: 'en' })).structuredContent;
+  assert.ok(without.notes.some(curve));
+  const withCurve = (await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, charge_curve: [{ soc: 10, kw: 100 }, { soc: 80, kw: 50 }], lang: 'en' })).structuredContent;
+  assert.ok(!withCurve.notes?.some(curve));
+  const ac = (await call('estimate_charging_cost', { site: 'GLP-LRA-00156', connectors: ['T2'], ...car, lang: 'en' })).structuredContent;
+  assert.ok(!ac.notes?.some(curve), 'AC only: the DC curve does not matter');
+});
+
+test('http: a charger with only CHAdeMO says so instead of "no such charger"', async () => {
+  const data = JSON.parse(readFileSync(new URL('fixtures/chargers.json', import.meta.url)));
+  const site = data.sites.find(s => s.id === 'GLP-LRA-00156');
+  site.points = site.points.filter(p => p.connector === 'CHADEMO');
+  const dir = mkdtempSync(join(tmpdir(), 'ohmigo-'));
+  writeFileSync(join(dir, 'chargers.json'), JSON.stringify(data));
+  const only = await boot(join(dir, 'chargers.json'));
+  try {
+    const looked = await call('lookup_charger', { query: 'GLP-LRA-00156', lang: 'en' }, only.url);
+    assert.equal(looked.structuredContent.code, 'chademo');
+    assert.match(looked.content[0].text, /only has CHAdeMO/);
+    const est = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, lang: 'en' }, only.url);
+    assert.equal(est.structuredContent.code, 'chademo');
+    const leaf = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', connectors: ['CHADEMO', 'T2'], ...car, lang: 'en' }, only.url);
+    assert.equal(leaf.isError, undefined);
+    assert.equal(leaf.structuredContent.results[0].connector, 'CHADEMO');
+    // A charger that doesn't exist is still "no such charger".
+    assert.equal((await call('lookup_charger', { query: 'XPTO-NOWHERE-99999' }, only.url)).structuredContent.code, 'lookup');
+  } finally {
+    only.proc.kill('SIGKILL');
+    rmSync(dir, { recursive: true });
+  }
 });
 
 // Last: it stops the server.

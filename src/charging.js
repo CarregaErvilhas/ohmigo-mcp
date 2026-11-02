@@ -18,6 +18,7 @@
 //     battery directly, and slow down as the battery fills up.
 
 import { translator } from './i18n.js';
+import { kwForCar } from './socket.js';
 
 export const DEFAULTS = {
   // Charging past 80 % on DC is slow, and per-minute fees add up, so 80 % is
@@ -58,8 +59,8 @@ function curveKwAt(points, soc) {
   return points.at(-1).kw;
 }
 
-// point: { kw, dc } (from the dataset)
-// car:   { batteryKwh, startPct, targetPct, acKw, dcKw, dc10to80Minutes, curve: [{ soc, kw }] }
+// point: { kw, dc, v, a } (from the dataset)
+// car:   { batteryKwh, volts, startPct, targetPct, acKw, dcKw, dc10to80Minutes, curve: [{ soc, kw }] }
 // t:     translator from i18n.js, for the assumption sentences
 //
 // The more the assistant knows about the car, the better the duration:
@@ -87,8 +88,15 @@ export function estimateSession(point, car, t = translator('en')) {
     carKw = point.dc ? DEFAULTS.carDcKw : DEFAULTS.carAcKw;
     assumptions.push(t('assume.carLimitUnknown', { kind: point.dc ? 'DC' : 'AC', kw: carKw }));
   }
-  const chargerKw = point.kw ?? (Number.isFinite(carKw) ? carKw : DEFAULTS.carDcKw);
-  if (point.kw == null) assumptions.push(t('assume.chargerKwUnknown'));
+  // On DC, the socket's amps at the car's battery voltage can be well under
+  // its nameplate (socket.js): that, not the nameplate, caps the session.
+  const forCar = kwForCar(point, car.volts);
+  const socketKw = forCar?.kw ?? point.kw;
+  const chargerKw = socketKw ?? (Number.isFinite(carKw) ? carKw : DEFAULTS.carDcKw);
+  if (socketKw == null) assumptions.push(t('assume.chargerKwUnknown'));
+  // Said only when it's what slows the session, not the car.
+  else if (forCar?.limited && forCar.kw < carKw) assumptions.push(t('assume.kwForCar', { kw: forCar.kw, nameplate: point.kw, amps: point.a, volts: forCar.volts, carVolts: car.volts, declared: point.ampsSource === 'nap' }));
+  if (forCar?.boosted) assumptions.push(t('assume.boosted', { volts: point.v, carVolts: car.volts }));
   const peak = Math.min(chargerKw, carKw);
 
   let minutes;

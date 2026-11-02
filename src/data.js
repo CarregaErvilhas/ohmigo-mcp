@@ -28,6 +28,7 @@ import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
 import { fold, Index, lendOperators, operatorKey } from './lookup.js';
+import { usableKw } from './socket.js';
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 // The dataset format this code understands. nap-dashboard bumps SCHEMA in
@@ -68,6 +69,11 @@ export class Dataset {
         for (const [k, nap] of [['kw', 'napKw'], ['v', 'napV'], ['a', 'napA']]) {
           if (p.osm?.[k] > 0 && p[nap] === undefined) { p[nap] = p[k] ?? null; p[k] = p.osm[k]; }
         }
+        // Where the max current comes from: OpenStreetMap (it corrected the
+        // NAP, or confirmed it: osmSame) or only the operator's declaration.
+        // A DC socket's amps decide what a 400 V car gets (socket.js), so the
+        // answers say which.
+        if (p.a > 0) p.ampsSource = p.napA !== undefined || p.osmSame?.includes('a') ? 'osm' : 'nap';
         // A point id is only unique within its site ("19" exists on several
         // sites), so the key is "SITE/POINT". The bare id also resolves when
         // it happens to be unique.
@@ -133,6 +139,28 @@ export class Dataset {
     const lat = hits.reduce((a, s) => a + s.lat, 0) / hits.length;
     const lon = hits.reduce((a, s) => a + s.lon, 0) / hits.length;
     return { lat, lon, matchedSites: hits.length };
+  }
+
+  // A town as a service area's direction label writes it ("Lisboa", "LIS",
+  // "OLH"; direction.js): a three-letter abbreviation is first read as the
+  // municipality of the MOBI.E codes ("OLH-00047" is in Olhão), then like
+  // any place name. null when it can't be placed (VRA, POR: several towns).
+  resolveSignTown(name) {
+    const code = String(name).trim().toUpperCase();
+    if (/^[A-Z]{3}$/.test(code)) {
+      if (!this.codeCities) {
+        this.codeCities = new Map();
+        for (const s of this.sites) {
+          const c = s.code?.match(/^([A-Z]{3})-\d/)?.[1];
+          if (!c || !s.city) continue;
+          if (!this.codeCities.has(c)) this.codeCities.set(c, new Set());
+          this.codeCities.get(c).add(s.city);
+        }
+      }
+      const cities = this.codeCities.get(code);
+      if (cities?.size === 1) return this.resolvePlace([...cities][0]);
+    }
+    return this.resolvePlace(name);
   }
 
   // The towns a name could be, when resolvePlace can't pick one (up to 8).
@@ -205,16 +233,23 @@ export class Dataset {
   //   openAt       a Date: only sites not known to be closed then (unknown
   //                hours pass: most sites have them, and a guess would hide
   //                chargers that are open)
-  pointFilter({ minKw, connectors, dcOnly, minVoltage, cardPayment: card, cable, openAt } = {}) {
+  // `hide`: plugs left out when `connectors` isn't given (the tools hide
+  // CHAdeMO from drivers who didn't say their car has that port).
+  // `carVolts`: the car's battery voltage. minKw then reads the power a DC
+  // socket can give that car (amps × volts, socket.js), not its nameplate:
+  // "150 kW for my 400 V car" must not keep a 200 A socket (80 kW).
+  pointFilter({ minKw, connectors, hide, dcOnly, minVoltage, cardPayment: card, cable, openAt, carVolts } = {}) {
     const cs = connectors?.length ? new Set(connectors.map(c => c.toUpperCase())) : null;
+    const hidden = !cs && hide?.length ? new Set(hide) : null;
     const minV = this.hasVoltage ? minVoltage : null;
     const siteOk = new Map();
     const siteFits = s => {
       if (!siteOk.has(s)) siteOk.set(s, (!card || cardPayment(s).value === true) && (!openAt || siteOpen(s, openAt).open !== false));
       return siteOk.get(s);
     };
-    return (p, s) => (minKw == null || (p.kw ?? 0) >= minKw)
+    return (p, s) => (minKw == null || (usableKw(p, carVolts) ?? 0) >= minKw)
       && (!cs || cs.has(p.connector))
+      && (!hidden || !hidden.has(p.connector))
       && (!dcOnly || p.dc)
       && (minV == null || (p.v ?? 0) >= minV)
       && (cable == null || p.cable === cable)
@@ -223,7 +258,9 @@ export class Dataset {
 
   // Sites near a point or along a route, nearest first (or in route order),
   // each with only the points that pass the filter. With neither, the whole
-  // country ("every charger above 500 V"), most powerful first.
+  // country ("every charger above 500 V"), most powerful first: for the car,
+  // when filter.carVolts is given ("the most powerful chargers for a 400 V
+  // car" are not the ones with the biggest nameplate).
   // `only`: a Set of site ids to keep (a text filter, from lookup()).
   search({ near, radiusKm = 5, route, corridorKm = 2, limit = 20, only, region, ...filter }) {
     const ok = this.pointFilter(filter);
@@ -244,7 +281,7 @@ export class Dataset {
       const points = s.points.filter(p => ok(p, s));
       if (points.length) out.push({ site: s, points, ...dist });
     }
-    const maxKw = r => Math.max(...r.points.map(p => p.kw ?? 0));
+    const maxKw = r => Math.max(...r.points.map(p => usableKw(p, filter.carVolts) ?? 0));
     out.sort(route ? (a, b) => a.alongKm - b.alongKm
       : near ? (a, b) => a.km - b.km
       : (a, b) => maxKw(b) - maxKw(a) || a.site.id.localeCompare(b.site.id));
@@ -305,7 +342,7 @@ export class Dataset {
     const drop = new Set();
     for (const area of serviceAreas(clusterPlaces(results))) {
       if (area.length < 2) continue;
-      const pick = sideFor(area, area[0][0].seg, name => this.resolvePlace(name), { geometry: false });
+      const pick = sideFor(area, area[0][0].seg, name => this.resolveSignTown(name), { geometry: false });
       if (pick) for (const pl of area) if (!pick.places.includes(pl)) pl.forEach(h => drop.add(h));
     }
     return results.filter(r => !drop.has(r));

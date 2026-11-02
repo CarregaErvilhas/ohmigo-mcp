@@ -168,6 +168,23 @@ test('pickTariffs: default is top 3 popular, headline skips ones needing another
   assert.deepEqual(pickTariffs(quotes, { level: 'BTN', dc: false }, null, 4).options.map(o => o.id), ['a-bt-x', 'c-bt-z', 'd-bt-w', 'e-bt-v']);
 });
 
+test('pickTariffs: counts the cheaper tariffs the default list leaves out', () => {
+  // The K=0,010 case: not popular, needs another contract, cheaper than the
+  // headline but not the cheapest of all (that one is the tip).
+  const quotes = [
+    q('l-bt-casa', 3, { popular: true, bundle: true }), q('l-bt-k0010', 3.5, { bundle: true }),
+    q('m-bt-closed-4', 4), q('m-bt-closed-5', 4.2), q('n-bt-promo', 2, { newCustomers: true }),
+    q('l-bt-ceme', 6, { popular: true }), q('x-bt-dear', 9),
+  ];
+  const t = pickTariffs(quotes, { level: 'BTN', dc: false });
+  assert.equal(t.headline.id, 'l-bt-ceme');
+  assert.equal(t.best.id, 'l-bt-casa');
+  // k0010 and closed (two cycles, one card); not the promo, not the dearer one
+  assert.equal(t.unlistedCheaper, 2);
+  assert.equal(pickTariffs([q('a-bt-x', 5, { popular: true })], { level: 'BTN', dc: false }).unlistedCheaper, 0);
+  assert.equal(pickTariffs(quotes, { level: 'BTN', dc: false }, ['l-bt-ceme']).unlistedCheaper, undefined);
+});
+
 test('pickTariffs: a new-sign-ups-only tariff is never best or headline by default', () => {
   const quotes = [q('l-bt-promo', 3, { newCustomers: true, popular: true }), q('b-bt-y', 5), q('c-bt-z', 6, { popular: true })];
   const t = pickTariffs(quotes, { level: 'BTN', dc: false });

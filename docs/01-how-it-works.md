@@ -116,6 +116,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/direction.js` | Motorway service areas: which side the driver can reach, from where they're heading |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |
 | `src/quote.js` | Prices one plug for every way to pay; ranks plugs |
+| `src/socket.js` | What the driver must know about a socket: which plug to use (`plug`), on MOBI.E the grid it's on (`tar`: BT or MT), and on DC the power it gives a 400 V car or the user's at its battery voltage (`kwAt400V`, `kwForCar`) |
 | `src/charging.js` | Session energy and duration, as constant-power segments |
 | `src/profile.js` | Lays the session on the clock: kWh per quarter-hour, local times |
 | `src/opc.js` | Operator fee math (flat, per kWh, per-minute tiers) |
@@ -194,9 +195,20 @@ is heading (`src/direction.js`):
   with the sides and tells the assistant to ask the user which way they're
   going, then call again with `towards` (a town or lat/lon).
   `lookup_charger` flags the pair (`directionNeeded`, `otherSide`).
+- **In a search near a place** (`find_chargers`, `find_cheapest_charging`),
+  each side carries the direction it says it serves (`direction`, as
+  published) and the side across the road (`otherSide`), and the other side
+  comes along even when the limit cut it. When the search centre is a few km
+  away, a note names the side a driver coming from there reaches (`markSides`
+  in `src/mcp.js`).
 - **With a direction**, the side is the one whose published direction
-  agrees ("N/S", "S-N", "sentido Lisboa", in the NAP address or the OSM
-  name). Without one, the **right-hand rule**: Portugal drives on the right,
+  agrees, in the OSM name, the NAP name or the NAP address: compass points
+  ("N/S", "sentido Norte-Sul"), "sentido" and a town or two ("sentido
+  Lisboa", "sentido Marateca - Caia"), or two towns in brackets ("(LIS/POR)",
+  "(OLH-VRA)"). The towns are often road-sign abbreviations: a three-letter
+  one is first read as the municipality of the MOBI.E codes, then as a place
+  name (`resolveSignTown` in `src/data.js`), and a label that can't be placed
+  still reaches the driver as written. Without one, the **right-hand rule**: Portugal drives on the right,
   so the service area to the right of the travel direction. That's a guess
   from coordinates, so it only decides when one side is clearly to the right,
   and the result carries an assumption telling the user to check the signs.
@@ -226,6 +238,33 @@ poller would download 38 MB every few minutes for nobody ([03](03-live-status.md
 **Why one JSON file for the dataset, not a database?** ~9k sites fit in
 memory in a few MB, and a search is a few milliseconds of looping. A database
 would be one more service to run, for no gain.
+
+**Why are CHAdeMO sockets hidden by default?** Only some cars have that port,
+and which port a car has depends on its exact version, not just the model
+(the Nissan Leaf had CHAdeMO until the 2026 one, which has CCS2). Send any other
+driver to a CHAdeMO socket and they can't charge. So the driver tools leave
+CHAdeMO out unless the assistant lists `CHADEMO` in `connectors` (`filterOf` in
+`mcp.js`): the car has the port, or the user asked. If the words name a charger
+that only has CHAdeMO, the answer says that instead of "no such charger".
+`list_operators` counts every socket: it describes the network, not one car.
+
+**Why does every socket carry `plug` and `tar`?** The driver has to know which
+plug to grab (and whether to bring a cable), and at a MOBI.E charger whether it
+hangs from low (BT) or medium voltage (MT), which picks the TAR inside the CEME
+price. Both come from `src/socket.js`, in the user's language.
+
+**Why does a DC socket sometimes carry `kwAt400V` or `kwForCar`?** Its `kw` is
+what it gives at the top of its voltage range, and most cars have a 400 V
+battery: what they get is the socket's amps × their volts, often far less (a
+400 kW, 600 A socket gives a 400 V car 240 kW). So every DC socket whose amps
+cap it below `kw` says what a 400 V car gets (`kwAt400V`). When the assistant
+passes `car_voltage`, it says what that car gets instead (`kwForCar`), and
+`min_kw`, the whole-country order of `find_chargers` ("the most powerful
+chargers for my 400 V car") and the session's duration use that figure.
+Without `car_voltage`, filters, order and duration stay on `kw`: we don't
+guess the car. Both carry `ampsSource`: `osm` when OpenStreetMap saw that
+current on the charger, `nap` when it's only the operator's declaration
+([05](05-dataset.md)).
 
 **Why does the assistant send `lang`?** Some of our text reaches the user
 almost word for word (assumptions, payment labels, the progress message, the
