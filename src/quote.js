@@ -176,7 +176,8 @@ function cemeComponents(t, w) {
 // (each tariff has its own cycle, so one session can cross for one and not
 // for another): { VAZIO: 12.4, FORA_VAZIO: 20.1 }.
 //   opc: { low, high } operator fee excl. VAT; vat: the region's multiplier
-function cemeOption(t, { site, opc, vat, detail }) {
+//   tr: the translator, for the note of a tariff billed by the session average
+function cemeOption(t, { site, opc, vat, detail, tr }) {
   const promos = promosHere(t, site).filter(appliesToCustomers);
   const w = withPromos(promos, { energyEur: t.totalEur, opc, vat });
   return {
@@ -190,6 +191,31 @@ function cemeOption(t, { site, opc, vat, detail }) {
     // (`until`: its last day). Never the headline or `best` by default.
     ...(t.newCustomers && { newCustomersOnly: true }), ...(t.valid_until && { until: t.valid_until }),
     ...(w.applied.length && { promos: w.applied.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }), ...(w.final && { opcIncluded: true }) }),
+    ...(t.billing === 'MEDIA_SESSAO' && sessionBilling(t, w, detail, tr)),
+  };
+}
+
+// An indexed tariff the CEME bills by the session's average OMIE (ceme-v2's
+// `billing: 'MEDIA_SESSAO'`, LUZiGÁS today): the plain average of the hourly
+// OMIE price over every hour the car is plugged in, start to end, applied to
+// every kWh. Not the load curve, where each kWh pays the OMIE of the
+// quarter-hour it went in: charging at noon with OMIE at zero and staying
+// plugged in overnight pays the night's average. ceme-v2 already priced the
+// total that way (that's what the CEME bills) and sends the load-curve price
+// beside it (`curve`); with `detail` the option carries that too
+// (byLoadCurve), same operator fee and promotions, so the driver sees what
+// the billing method costs. The session here ends when charging does: the
+// note says so. Without `curve`, ceme-v2 lacked the OMIE of some of those
+// hours (not published yet) and priced the load curve instead.
+function sessionBilling(t, w, detail, tr) {
+  if (!t.curve) return { billing: 'sessionAverage', note: tr('option.sessionAverage.unknown', { ceme: t.ceme }) };
+  const delta = t.curve.totalEur - t.totalEur;
+  // An all-in promotion (FINAL) is one price whatever the energy: no other.
+  const curve = !w.final && { total: r2(w.high + delta), energyEur: r2(w.energyEur + delta) };
+  return {
+    billing: 'sessionAverage', sessionOmieEurKwh: r4(t.sessionOmie.eurKwh),
+    note: tr('option.sessionAverage', { ceme: t.ceme, hours: t.sessionOmie.hours, omie: tr.num(t.sessionOmie.eurKwh, 4), curve: detail && curve ? tr.num(curve.total, 2, 2) : null }),
+    ...(detail && curve && { byLoadCurve: curve }),
   };
 }
 
@@ -289,7 +315,7 @@ const listed = o => ({ ...o, listed: true });
 
 // A cheaper CEME tariff than any the user listed in tariff_ids. It stays visible and says so, but it's not
 // a price they can pay today, so it's never `best` (bestOption).
-const notYours = (o, t) => ({ ...o, notYours: true, note: t(o.requiresOtherContract ? 'option.notYours.contract' : 'option.notYours') });
+const notYours = (o, t) => ({ ...o, notYours: true, note: [t(o.requiresOtherContract ? 'option.notYours.contract' : 'option.notYours'), o.note].filter(Boolean).join(' ') });
 
 export const directOptionsForTest = (direct, session, lang, region) => directOptions(direct, session, translator(lang), region);
 
@@ -511,7 +537,7 @@ export async function quotePoint(hit, car, opts = {}) {
   if (opc.low !== opc.high) base.assumptions.push(t('assume.feeRange'));
   if (plan?.time?.length) base.assumptions.push(t('assume.perMinute'));
 
-  const ctx = { site, opc, vat, detail: want };
+  const ctx = { site, opc, vat, detail: want, tr: t };
   const shownOpts = picked.options.map(o => cemeOption(o, ctx)).map(o => tariffIds?.length ? listed(o) : o);
   // The headline, now that promotions may have changed the order: with the
   // user's tariffs, the cheapest of them; otherwise the cheapest shown one
