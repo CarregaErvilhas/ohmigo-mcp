@@ -17,7 +17,7 @@ way you could pay there: your CEME card, a bank card at the charger, or the
 operator's own app or subscription. Chat apps that support MCP Apps also show
 the results as a small inline page.
 
-ohmigo stores nothing about you. Your assistant remembers your car and cards
+ohmigo keeps nothing linked to you. Your assistant remembers your car and cards
 and sends them with each question.
 
 **New to EV charging in Portugal?** Read the [glossary](docs/00-glossary.md)
