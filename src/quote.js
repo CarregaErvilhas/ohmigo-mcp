@@ -18,6 +18,9 @@
 //   direct       anything outside the CEME system: a walk-up card terminal or
 //                QR, the operator's own app or subscription, a roaming app
 //                (Electroverse, Elli...). From offers/ (see src/offers.js).
+//   (private)    a DPC's charger (home wallbox, condominium, workplace): not
+//                in the NAP and no operator, so only `ceme` options, with no
+//                operator fee (privateCharger builds its site and point)
 //   opc_direct   chargers outside MOBI.E (Continente, Tesla...): the NAP's
 //                price for this site + the region's VAT; next to any direct
 //                offers, never instead. offers/nap-notes.json can drop it,
@@ -305,6 +308,32 @@ function planSession({ site, point }, car, { at, lang, detail = false, qa = fals
   return { session, start, slices, key };
 }
 
+// A private charger connected to MOBI.E, as quotePoint takes it. A DPC (see
+// docs/00-glossary.md) holds it: it isn't in the NAP and has no operator, so
+// there's no fee, walk-up price or direct offer, only the user's CEME tariff
+// (energy + TAR + IEC + EGME + VAT, all ceme-v2's). `level`: a home or a
+// condominium is low voltage (BTN); a big workplace car park may be MT. AC
+// only: a DPC with a DC charger is rare enough not to cost every assistant
+// the schema for it.
+// kw: the charger's power, null when the user doesn't know it (then the car's
+// AC limit, assumed).
+// isPublic: almost every DPC charger is private, so it isn't in MOBI.E's
+// public list and a CEME app can't find it to start a session: only the
+// CEME's card (RFID) works there, and tariffs without one are left out
+// (cardOnly). A few DPCs mark theirs public; then the app works too.
+export function privateCharger({ kw = null, level = 'BTN', region = 'CONT', isPublic = false }) {
+  return {
+    site: { id: 'private', private: true, public: isPublic, region },
+    point: { id: 'private', private: true, kw, dc: false, level, regime: 'mobie', connector: 'T2', cable: null, opc: null },
+  };
+}
+
+// ceme-v2's `access` for a tariff: CARTAO (card only), APP (app only) or
+// AMBOS (card and app). A tariff that doesn't say is kept:
+// better a price the driver can check than a tariff dropped on a guess.
+const CARD = new Set(['CARTAO', 'AMBOS']);
+const cardOnly = quotes => quotes.filter(q => q.access == null || CARD.has(q.access));
+
 const simArgs = ({ site }, { session, start, slices }, { detail = false, qa = false, monthKwh = null, signal }) =>
   ({ kwh: session.kwh, at: start, region: site.region, profile: slices, detail: detail || qa, monthKwh, signal });
 
@@ -326,7 +355,8 @@ export async function quotePoint(hit, car, opts = {}) {
   if (!planned) return null;
   const { session, start, slices, key } = planned;
   const end = new Date(start.getTime() + session.minutes * 60_000);
-  const lp = live?.get(site.id, point.id) ?? null;
+  const priv = !!site.private;
+  const lp = priv ? null : live?.get(site.id, point.id) ?? null;
   const base = {
     pointId: `${site.id}/${point.id}`, siteId: site.id, code: site.code,
     operator: site.operator, ...(site.operatorInferred && { operatorInferred: true }), address: site.address, city: site.city,
@@ -362,7 +392,7 @@ export async function quotePoint(hit, car, opts = {}) {
   // An offer only a CEME tariff's holders get (manual.json `holdersOnly`, e.g.
   // myAtlante Business's DC price) is left out for everyone else.
   const mine = new Set((tariffIds || []).map(cardKey));
-  const direct = offersAt(site, point, audiences)
+  const direct = priv ? [] : offersAt(site, point, audiences)
     .filter(x => !x.offer.holdersOnly || x.offer.cemeTariffs?.some(k => mine.has(k)));
 
   if (point.regime === 'sem_ceme') {
@@ -419,7 +449,7 @@ export async function quotePoint(hit, car, opts = {}) {
   // ad hoc price here: it's the operator's own word, and can be newer than
   // MOBI.E's file (IONITY: 0.51 €/kWh there, 0.63 with VAT, the same as its
   // own price today).
-  const adhoc = ownWalkUp(site, direct) ? null : adhocOption(point, session, t, base.region, site);
+  const adhoc = priv || ownWalkUp(site, direct) ? null : adhocOption(point, session, t, base.region, site);
   const want = detail || qa;
   if (!simCache.has(key)) simCache.set(key, simulate(simArgs(hit, planned, opts)));
   let sim;
@@ -447,7 +477,9 @@ export async function quotePoint(hit, car, opts = {}) {
     : t('assume.startOnly', { from: base.session.startLocal }));
   if (opts.monthKwhLost) base.assumptions.push(t('assume.monthKwhLost'));
   if (sim.staleSince) base.assumptions.push(t('assume.cemeStale', { minutes: Math.ceil((Date.now() - sim.staleSince) / 60_000) }));
-  const quotes = eligible(sim.data, audiences, tariffIds);
+  const byCard = priv && !site.public;
+  const quotes = eligible(byCard ? cardOnly(sim.data) : sim.data, audiences, tariffIds);
+  if (byCard) base.assumptions.push(t('assume.privateCard'));
   const picked = pickTariffs(quotes, point, tariffIds, shown);
   const ceme = picked.headline;
   const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region, mine)];
@@ -470,9 +502,10 @@ export async function quotePoint(hit, car, opts = {}) {
   if (point.level == null) base.assumptions.push(t('assume.levelUnknown'));
 
   const vat = ceme.vat; // the region's VAT multiplier, e.g. 1.23 on the mainland
-  const { plan, source } = feePlan(point, lp);
+  const { plan, source } = priv ? { plan: null, source: null } : feePlan(point, lp);
   let opc = { low: 0, high: 0, parts: null };
   if (plan) opc = opcCost(plan, { kwh: session.kwh, minutes: session.minutes });
+  else if (priv) base.assumptions.push(t('assume.private'));
   else base.assumptions.push(t('assume.noFee'));
   if (source === 'nap') base.assumptions.push(t('assume.napFee'));
   if (opc.low !== opc.high) base.assumptions.push(t('assume.feeRange'));
@@ -489,10 +522,10 @@ export async function quotePoint(hit, car, opts = {}) {
     ?? cemeOption(ceme, ctx);
   // complete: false when the operator fee is unknown, so the total is only
   // the energy part. Rankings put these after the complete ones.
-  base.total = { eur: head.total, low: head.low ?? head.total, high: head.total, complete: !!plan };
+  base.total = { eur: head.total, low: head.low ?? head.total, high: head.total, complete: !!plan || priv };
   base.eurPerKwh = session.batteryKwh > 0 ? r2(head.total / session.batteryKwh) : null;
   base.headline = head;
-  base.opc = {
+  if (!priv) base.opc = {
     tariff: plan ? describePlan(plan, t) : null, source,
     eurExVat: r2(opc.high), eurWithVat: r2(opc.high * vat),
     parts: opc.parts && Object.fromEntries(Object.entries(opc.parts).map(([k, v]) => [k, r2(v.high)])),
