@@ -42,13 +42,13 @@ const TIP_PROMO_SIM = { ...SIM, data: [quote('enable-bt-simples', 'Enable Mobili
 // Only tariffs dearer than any direct offer: the offers are what's left to win.
 const DEAR_SIM = { ...SIM, data: [quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 5000)] };
 
-let quotePoint, sim = SIM;
+let quotePoint, privateCharger, sim = SIM;
 before(async () => {
   globalThis.fetch = async (url) => {
     const body = String(url).endsWith('/v1/session') ? { token: 't', expires_in: 3600 } : sim;
     return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
   };
-  ({ quotePoint } = await import('../src/quote.js'));
+  ({ quotePoint, privateCharger } = await import('../src/quote.js'));
 });
 
 // A 50 kW DC socket with a 1 € flat + 0.20 €/kWh operator fee (excl. VAT).
@@ -102,6 +102,26 @@ test('EDP × UVE at an EDP charger: the all-in price is the total, operator fee 
   assert.ok(q.assumptions.some(a => a.includes('0,47 €/kWh tudo incluído')));
   const away = await quotePoint({ site: site('GLPP'), point }, car, { at, tariffIds: ['edp-bt-cartoedp-2'], lang: 'pt' });
   assert.equal(away.headline.total, r2(7 + (1 + 0.2 * away.session.kwhBilled) * 1.23), 'not at Galp');
+});
+
+test('private charger (DPC): only the CEME tariff, no operator fee, and no promotion tied to a network', async () => {
+  const any = { ...MIIO_PROMO, id: 'everywhere', network: null, target: 'ENERGIA', eurKwh: 0.01, totalEur: 7, newCustomers: false };
+  const mobie = { ...any, id: 'rede-mobie', network: 'Rede Mobi.E', totalEur: 6 };
+  sim = { ...SIM, data: [quote('miio-bt-miiobihor', 'miio', 'miio sem subscrição', 10, { promos: [MIIO_PROMO, mobie, any] })] };
+  try {
+    const q = await quotePoint(privateCharger({ kw: 7.4 }), { batteryKwh: 60, startPct: 20, targetPct: 80, acKw: 11 }, { at, tariffIds: ['miio-bt-miiobihor'], lang: 'en' });
+    assert.equal(q.session.peakKw, 7.4, 'the wallbox, not the car, limits it');
+    assert.equal(q.total.complete, true, 'nothing missing: there is no operator fee');
+    assert.equal(q.opc, undefined);
+    assert.equal(q.best.tariffId, 'miio-bt-miiobihor');
+    assert.equal(q.best.total, 7, 'a promotion for any MOBI.E charger holds; the Powerdot and "Rede Mobi.E" ones don\'t');
+    assert.ok(!q.options.some(o => o.kind !== 'ceme'), 'no walk-up price or direct offer at a private charger');
+    assert.ok(q.assumptions.some(a => /private charger/.test(a) && /no operator fee/.test(a)));
+    assert.ok(!q.assumptions.some(a => /operator fee not published/.test(a)));
+    const unknownKw = await quotePoint(privateCharger({}), { batteryKwh: 60, startPct: 20, acKw: 11 }, { at, lang: 'en' });
+    assert.equal(unknownKw.session.peakKw, 11);
+    assert.ok(unknownKw.assumptions.some(a => /charger power not given/.test(a)));
+  } finally { sim = SIM; }
 });
 
 test('outside MOBI.E: the NAP site price, plus VAT, is ranked like any other', async () => {

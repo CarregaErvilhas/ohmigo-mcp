@@ -28,7 +28,7 @@ import { cardPayment } from './data.js';
 import { siteOpen } from './hours.js';
 import { COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
 import { describePlan } from './opc.js';
-import { byBest, quotePoint, rank, rankingSlot, tariffKey } from './quote.js';
+import { byBest, privateCharger, quotePoint, rank, rankingSlot, tariffKey } from './quote.js';
 import { fold } from './text.js';
 import { MAX_SESSION_HOURS } from './profile.js';
 import { logged } from './stats.js';
@@ -55,7 +55,7 @@ export const INSTRUCTIONS = `Prices EV charging at every public charger in Portu
 
 Language: answer in the user's language and pass it as lang on every call; text comes back in Portuguese or English, translate for others.
 
-Who's who on MOBI.E (don't mix them up): the CEME sells the energy (the user's card/app) and sets its price. The OPC operates a PUBLIC charger (IONITY, Powerdot, Galp...) and bills a fee on top; every charger here has one. A DPC holds a PRIVATE charger connected to MOBI.E (home wallbox, condo garage, company car park): not an operator, no OPC fee, not in the NAP, so ohmigo can't list or price it; a session there costs the user's CEME tariff (list_ceme_tariffs) plus the EGME fee and taxes. Never call an OPC a DPC or the reverse.
+Who's who on MOBI.E (don't mix them up): the CEME sells the energy (the user's card/app) and sets its price. The OPC operates a PUBLIC charger (IONITY, Powerdot, Galp...) and bills a fee on top; every charger here has one. A DPC holds a PRIVATE charger connected to MOBI.E (home wallbox, condo garage, company car park): not an operator, no OPC fee, not in the NAP: never search for it or ask where it is; price it with estimate_charging_cost private. Never call an OPC a DPC or the reverse.
 
 Never ask for a charger id: when the user names a charger (brand or operator + town, a shop, an address, the code on its sticker), call lookup_charger with their words, then pass its siteId as site to estimate_charging_cost. At a motorway service area, when a result asks for the direction, ask where the user is heading.
 
@@ -595,6 +595,26 @@ const heldBackOnly = list => !list.some(q => q.cemeUnavailable && !q.cemeHeldBac
 const noCemeNote = (list, t) => t(heldBackOnly(list) ? 'note.cemeBusy' : 'note.noCeme');
 const noCemeError = (list, t) => err(t(heldBackOnly(list) ? 'err.pricingBusy' : 'err.pricing'), 'ceme');
 
+// estimate_charging_cost at a DPC's charger (home wallbox, condominium garage,
+// workplace car park): private, not in the NAP, no operator, so no site, no
+// live status and nothing but ceme-v2's prices (quote.js privateCharger). An
+// argument rather than its own tool: the tool list has a budget, and the
+// INSTRUCTIONS point the assistant here so it stops hunting the NAP for it.
+async function privateCost(a, ctx, lang, t) {
+  const signal = ctx?.mcpReq?.signal;
+  const hit = privateCharger({ kw: a.private.kw ?? null, level: a.private.mt ? 'MT' : 'BTN', region: a.private.region });
+  const q = await quotePoint(hit, car(a), { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, lang,
+    audiences: a.audiences, detail: !!a.detail, qa: QA, signal, ...await monthKwh(a, signal) });
+  if (!q) return err(t('err.tooLong', { hours: MAX_SESSION_HOURS, n: 1 }), 'tooLong');
+  if (q.cemeUnavailable) return noCemeError([q], t);
+  // Nothing about a site or a socket: there is none.
+  const { pointId, siteId, code, operator, address, city, lat, lon, status, regime, connector, cable, plug, ...result } = q;
+  const notes = [...moreWays([q], t), ...unlistedNote([q], t)];
+  const line = `${q.best ? `${q.best.total.toFixed(2)} € · ${q.best.label}` : t('summary.noPrice')} · ${q.session.minutes} min · ${t('summary.private')}`;
+  return ok({ kind: 'single', private: true, version: VERSION, lang, ...(QA && { qa: true }), ...(notes.length && { notes }), results: [{ ...result, private: true }] },
+    [...notes, line].join('\n'));
+}
+
 // `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
 // every few hours, and each request should see the current one.
 export function createServer(getDataset, live) {
@@ -880,8 +900,13 @@ export function createServer(getDataset, live) {
 
   registerAppTool(server, 'estimate_charging_cost', {
     title: 'Estimate charging cost',
-    description: 'Estimated cost and duration of a charging session at one public EV charger in Portugal (site) or one socket (point_id), with the full breakdown and every way to pay. Each kind of socket at the site is priced, cheapest first.',
+    description: 'Estimated cost and duration of a charging session at one public EV charger in Portugal (site) or one socket (point_id), with the full breakdown and every way to pay. Each kind of socket at the site is priced, cheapest first. Home/condo/workplace charger: private.',
     inputSchema: z.object({
+      private: z.object({
+        kw: z.number().min(1).max(43).optional().describe('kW if known (home: 3.7, 7.4, 11); else the car\'s AC limit'),
+        mt: z.boolean().optional().describe('Only if the user says it is on medium voltage'),
+        region: z.enum(['CONT', 'MAD', 'AZO']).default('CONT'),
+      }).optional().describe('Instead of site: a PRIVATE charger on MOBI.E (DPC: home, condo, workplace). Not in the NAP and its location doesn\'t matter: never look for it or ask where. CEME tariff only, no operator fee'),
       site: z.string().max(200).optional().describe('The charger: siteId from lookup_charger or the other tools (e.g. "GLP-LRA-00156"), its sticker code ("LRA-00156"), or the user\'s words for one site'),
       point_id: z.string().max(200).optional().describe('One socket, "SITE/POINT"; only when the user picked one'),
       ...Towards, ...Filter, ...Car, ...Audience, ...Detail, ...Lang,
@@ -892,6 +917,7 @@ export function createServer(getDataset, live) {
     const ds = getDataset();
     const lang = langOf(a, ctx), t = translator(lang);
     if (a.target_pct <= a.start_pct) return err(t('err.target'), 'target');
+    if (a.private) return privateCost(a, ctx, lang, t);
     const where = targetsFor(ds, a, t);
     if (where.error) return err(where.error, where.code);
     const status = await withLive(live, ctx, t);
