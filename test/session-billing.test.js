@@ -15,13 +15,15 @@ const SIM = {
   data: [quote('meo-dinamica-bt', 'MEO', 'Dinâmica', 5.34), luz()],
 };
 
-let quotePoint, sim = SIM;
+let quotePoint, idleSlices, sim = SIM, sent = null;
 before(async () => {
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, init) => {
+    if (!String(url).endsWith('/v1/session')) sent = JSON.parse(init.body);
     const body = String(url).endsWith('/v1/session') ? { token: 't', expires_in: 3600 } : sim;
     return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   ({ quotePoint } = await import('../src/quote.js'));
+  ({ idleSlices } = await import('../src/profile.js'));
 });
 
 // A 22 kW AC socket with a 1 € flat operator fee (excl. VAT).
@@ -63,4 +65,37 @@ test("ceme-v2 lacked some hours' OMIE: the load curve, and the note says the bil
   assert.equal(o.billing, 'sessionAverage');
   assert.match(o.note, /isn't published yet, so this total follows the load curve/);
   assert.equal(o.byLoadCurve, undefined);
+});
+
+test('idleSlices: 0 kWh quarters from the end of charging to the unplug time', () => {
+  const at = s => new Date(`2026-11-10T${s}:00Z`);
+  assert.deepEqual(idleSlices(at('13:20'), at('14:05')).map(x => [x.at.slice(11, 16), x.kwh, x.minutes]),
+    [['13:30', 0, 15], ['13:45', 0, 15], ['14:00', 0, 5]]);
+  // Ending on a boundary: that quarter is already idle.
+  assert.equal(idleSlices(at('13:30'), at('13:45'))[0].at, '2026-11-10T13:30:00.000Z');
+  assert.deepEqual(idleSlices(at('13:30'), at('13:20')), []);
+});
+
+test('unplug_at: the idle hours go to ceme-v2 as 0 kWh, per-minute fees run until then, the note says so', async () => {
+  sim = SIM;
+  const perMinute = { ...point, opc: { REGULAR: { flat: [], energy: [], time: [{ eur: 0.01, from: 0, to: null }] } } };
+  const start = new Date('2026-11-10T13:00:00Z'), unplugAt = new Date('2026-11-10T20:00:00Z');
+  const plain = await quotePoint({ site, point: perMinute }, car, { at: start, tariffIds: ids, lang: 'en' });
+  const q = await quotePoint({ site, point: perMinute }, car, { at: start, unplugAt, tariffIds: ids, lang: 'en' });
+  const slices = sent.profile;
+  assert.equal(slices.at(-1).at, '2026-11-10T19:45:00.000Z');
+  assert.ok(slices.filter(x => x.kwh === 0).length > 10);
+  assert.equal(r2(slices.reduce((a, x) => a + x.kwh, 0)), r2(plain.session.kwhBilled));
+  assert.equal(q.session.unplugLocal, '20:00');
+  assert.equal(q.session.pluggedMinutes, 420);
+  assert.ok(q.assumptions.some(a => a.startsWith('Car left plugged in until 20:00')));
+  assert.ok(q.assumptions.some(a => a.includes('per-minute fee counted until you unplug at 20:00')));
+  assert.ok(q.opc.eurExVat > plain.opc.eurExVat, 'more minutes, more fee');
+  const o = q.options.find(x => x.tariffId === 'luzigas-ceme-bt');
+  assert.match(o.note, /over these 22 h, until you unplug at 20:00/);
+  assert.doesNotMatch(o.note, /assumes you unplug/);
+  // Before charging ends: priced to the target, and said.
+  const early = await quotePoint({ site, point: perMinute }, car, { at: start, unplugAt: new Date('2026-11-10T13:10:00Z'), tariffIds: ids, lang: 'en' });
+  assert.equal(early.session.unplugLocal, undefined);
+  assert.ok(early.assumptions.some(a => a.startsWith('unplug_at is before charging ends')));
 });

@@ -121,11 +121,23 @@ the same session by the load curve. `cemeOption` (`quote.js`) keeps
 ceme-v2's total, so these tariffs rank by what they bill, and adds:
 
 - `billing: "sessionAverage"`, `sessionOmieEurKwh`, and a `note` that names
-  the method and says the total assumes you unplug when charging ends: the
-  session here ends with the charge, and idle hours plugged in would join
-  the average;
+  the method and says how long it counted: until you unplug, if you said
+  when, or else assuming you unplug when charging ends;
 - with `detail: true`, `byLoadCurve` (`{ total, energyEur }`, same operator
   fee and promotions), and the note gives that total too.
+
+### Leaving the car plugged in (`unplug_at`)
+
+`estimate_charging_cost` takes `unplug_at`, for a car left plugged in after
+it's full (overnight at home, a day at work). `planSession` adds the idle
+quarter-hours after the charge as 0 kWh slices (`idleSlices` in
+`profile.js`), up to `MAX_SESSION_HOURS` from the start. They cost nothing
+by the load curve, but a tariff billed by the session average counts those
+hours too. Per-minute operator fees run until you unplug as well, and the
+opening-hours check looks at the whole stay. `session` gains `unplug`,
+`unplugLocal` and `pluggedMinutes`, and an assumption says how long the car
+sat idle. An `unplug_at` before the charge ends is ignored, and an
+assumption says so.
 
 When ceme-v2 lacks the OMIE of one of those hours (not published yet), it
 prices the load curve instead and sends no `curve`. The option then says
