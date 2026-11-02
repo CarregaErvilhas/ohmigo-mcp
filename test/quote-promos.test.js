@@ -126,7 +126,7 @@ test('private charger (DPC): only the CEME tariff, no operator fee, and no promo
 
 test('private charger (DPC): card only, unless the driver says it is public', async () => {
   sim = { ...SIM, data: [
-    quote('appy-bt-x', 'Appy', 'App only', 5, { access: 'APP' }),
+    quote('viaverde-bt-x', 'Via Verde', 'App only', 5, { access: 'APP' }),
     quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 8, { access: 'AMBOS' }),
     quote('iberdrola-bt-x', 'Iberdrola', 'Cartão', 9, { access: 'CARTAO' }),
   ] };
@@ -134,12 +134,12 @@ test('private charger (DPC): card only, unless the driver says it is public', as
   const car = { batteryKwh: 60, startPct: 25, targetPct: 80, acKw: 11 };
   try {
     const q = await quotePoint(privateCharger({}), car, { at, lang: 'en' });
-    assert.ok(!q.options.some(o => o.tariffId === 'appy-bt-x'), 'no card, no session at a private charger');
+    assert.ok(!q.options.some(o => o.tariffId === 'viaverde-bt-x'), 'no card, no session at a private charger');
     assert.equal(q.best.tariffId, 'edp-bt-cartoedp');
     assert.equal(q.tar, 'BT', 'low voltage unless the driver says otherwise');
     assert.ok(q.assumptions.some(a => /card \(RFID\)/.test(a)));
     const open = await quotePoint(privateCharger({ isPublic: true }), car, { at, lang: 'en' });
-    assert.equal(open.best.tariffId, 'appy-bt-x', 'marked public: the app works');
+    assert.equal(open.best.tariffId, 'viaverde-bt-x', 'marked public: the app works');
     assert.ok(!open.assumptions.some(a => /RFID/.test(a)));
   } finally { sim = SIM; }
 });
