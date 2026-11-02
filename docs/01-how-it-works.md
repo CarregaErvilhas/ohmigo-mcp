@@ -134,8 +134,8 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/version.js` | The version, read from `package.json` |
 | `ui/results.html` | The inline results page |
 | `site/index.html` | The landing page: what ohmigo is and how to install it, every sentence in both languages |
-| `site/legal.html` | The privacy and support pages, every sentence in both languages |
-| `src/site.js` | Renders those pages on the server (landing at `/` and `/en`, privacy at `/privacidade` and `/privacy`, support at `/suporte` and `/support`), with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD on the landing page), `/sitemap.xml` and `/llms.txt` |
+| `site/legal.html` | The privacy, support and terms pages, every sentence in both languages |
+| `src/site.js` | Renders those pages on the server (landing at `/` and `/en`, privacy at `/privacidade` and `/privacy`, support at `/suporte` and `/support`, terms at `/termos` and `/terms`), with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD on the landing page), `/sitemap.xml` and `/llms.txt` |
 | `site/og.png` | The image link previews show (WhatsApp, Facebook, X) |
 | `site/dados.html` | `/dados`: browse what `src/dump.js` returns. Public, `noindex`, cached by Cloudflare (Cache Rule on the zone, TTLs from the headers in `src/server.js`); Portuguese only |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
