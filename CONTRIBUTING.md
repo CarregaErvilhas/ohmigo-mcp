@@ -4,12 +4,12 @@ ohmigo is licensed under the [GNU Affero General Public License v3.0
 only](LICENSE) (AGPL-3.0-only).
 
 Before your first pull request can be merged, sign the [Contributor License
-Agreement](CLA.md): comment on the pull request with
+Agreement](CLA.md): comment on the pull request with exactly
 
-> I have read CLA.md as of commit &lt;sha&gt; and I agree to it, for my past and
-> future contributions to ohmigo.
+> I have read CLA.md and I agree to it, for my past and future contributions to ohmigo.
 
-Use the commit of the CLA.md you read; the comment is your signature. You keep
+A bot checks every pull request and records your signature, so you only sign
+once (again only if CLA.md changes). You keep
 the copyright in what you write. The agreement lets the maintainer keep the
 project going under the AGPL and, if needed, offer it under other terms as
 well; the open source version stays.

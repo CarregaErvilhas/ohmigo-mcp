@@ -88,13 +88,14 @@ any kind, unless You agree otherwise in writing.
 
 ## How to sign
 
-Comment on your first pull request with:
+Comment on your first pull request with exactly:
 
-> I have read CLA.md as of commit &lt;sha&gt; and I agree to it, for my past and
-> future contributions to ohmigo.
+> I have read CLA.md and I agree to it, for my past and future contributions to ohmigo.
 
-Use the commit of the CLA.md You read, which is the file at the tip of the
-branch You are contributing to. The comment, under your GitHub account, is
-your signature. It covers every Contribution You made before signing as well.
+The comment, under your GitHub account, is your signature. It covers the
+version of this file on the branch You are contributing to at the time of the
+comment, and every Contribution You made before signing as well. A bot records
+it (the comment, its date and the pull request) so You only sign once.
+
 If this file changes later, the new version covers only the Contributions You
-make after it is published, unless You sign that one too.
+make after You sign it; the bot asks You to on your next pull request.
