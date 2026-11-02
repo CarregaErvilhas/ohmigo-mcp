@@ -328,8 +328,8 @@ export function privateCharger({ kw = null, level = 'BTN', region = 'CONT', isPu
   };
 }
 
-// ceme-v2's `access` for a tariff: CARTAO (card only), APP (app only: Via
-// Verde, Repsol, miio without a subscription) or AMBOS (card and app). A tariff that doesn't say is kept:
+// ceme-v2's `access` for a tariff: CARTAO (card only), APP (app only) or
+// AMBOS (card and app). A tariff that doesn't say is kept:
 // better a price the driver can check than a tariff dropped on a guess.
 const CARD = new Set(['CARTAO', 'AMBOS']);
 const cardOnly = quotes => quotes.filter(q => q.access == null || CARD.has(q.access));
