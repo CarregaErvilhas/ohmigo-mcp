@@ -124,6 +124,26 @@ test('private charger (DPC): only the CEME tariff, no operator fee, and no promo
   } finally { sim = SIM; }
 });
 
+test('private charger (DPC): card only, unless the driver says it is public', async () => {
+  sim = { ...SIM, data: [
+    quote('appy-bt-x', 'Appy', 'App only', 5, { access: 'APP' }),
+    quote('edp-bt-cartoedp', 'EDP Comercial', 'Cartão EDP', 8, { access: 'AMBOS' }),
+    quote('iberdrola-bt-x', 'Iberdrola', 'Cartão', 9, { access: 'CARTAO' }),
+  ] };
+  // Another session than the test above: ceme.js caches replies by session.
+  const car = { batteryKwh: 60, startPct: 25, targetPct: 80, acKw: 11 };
+  try {
+    const q = await quotePoint(privateCharger({}), car, { at, lang: 'en' });
+    assert.ok(!q.options.some(o => o.tariffId === 'appy-bt-x'), 'no card, no session at a private charger');
+    assert.equal(q.best.tariffId, 'edp-bt-cartoedp');
+    assert.equal(q.tar, 'BT', 'low voltage unless the driver says otherwise');
+    assert.ok(q.assumptions.some(a => /card \(RFID\)/.test(a)));
+    const open = await quotePoint(privateCharger({ isPublic: true }), car, { at, lang: 'en' });
+    assert.equal(open.best.tariffId, 'appy-bt-x', 'marked public: the app works');
+    assert.ok(!open.assumptions.some(a => /RFID/.test(a)));
+  } finally { sim = SIM; }
+});
+
 test('outside MOBI.E: the NAP site price, plus VAT, is ranked like any other', async () => {
   const p = { id: 'p1', kw: 250, dc: true, connector: 'CCS', regime: 'sem_ceme', napPrice: 0.3 };
   const q = await quotePoint({ site: { ...site('ZZZZ'), operator: 'Someone' }, point: p }, car, { at, lang: 'en' });

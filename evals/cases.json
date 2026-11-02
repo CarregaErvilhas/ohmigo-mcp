@@ -355,7 +355,7 @@
     },
     {
       "id": "dpc-home-no-place",
-      "why": "A home wallbox on MOBI.E (DPC): never ask where it is or look for it in the NAP; price it with private and compare the user's CEME tariffs.",
+      "why": "A home wallbox on MOBI.E (DPC): never ask where it is or look for it in the NAP; price it with private and compare the user's CEME tariffs. Defaults: BT and private (card only), so no mt and no public unless the user says so.",
       "message": "Tenho uma wallbox DPC em casa. Quanto me custa carregar hoje à noite das 23h, de 15% a 90%? Tenho cartões de EDP, Galp, Prio e Via Verde. A localização não interessa.",
       "memory": "Carro: Tesla Model 3 Long Range 2024 (75 kWh úteis), AC até 11 kW.",
       "expect": {
@@ -390,6 +390,12 @@
             "args": {
               "site": true
             }
+          },
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "private": "\"(mt|public)\":true"
+            }
           }
         ],
         "answer": {
@@ -399,6 +405,37 @@
         },
         "judge": [
           "Does the reply say which of the user's CEME cards is cheapest for this session, with a price in euros?"
+        ]
+      }
+    },
+    {
+      "id": "dpc-public-app",
+      "why": "A DPC's charger marked public on MOBI.E: the user says so, so private.public is passed (CEME apps work there); still no NAP search.",
+      "message": "Carrego no posto da empresa onde trabalho, que é um DPC mas está marcado como público na MOBI.E. Uso a app miio. Quanto custa ir de 30% a 80%?",
+      "memory": "Carro: Renault Megane E-Tech 60 kWh (60 kWh úteis), AC até 22 kW.",
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "ok": true,
+            "args": {
+              "private": "\"public\":true",
+              "tariff_ids": "miio",
+              "start_pct": [
+                30,
+                30
+              ],
+              "target_pct": [
+                80,
+                80
+              ]
+            }
+          }
+        ],
+        "noCalls": [
+          {
+            "tool": "find_chargers|find_cheapest_charging|lookup_charger"
+          }
         ]
       }
     },

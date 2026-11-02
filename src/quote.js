@@ -317,12 +317,22 @@ function planSession({ site, point }, car, { at, lang, detail = false, qa = fals
 // the schema for it.
 // kw: the charger's power, null when the user doesn't know it (then the car's
 // AC limit, assumed).
-export function privateCharger({ kw = null, level = 'BTN', region = 'CONT' }) {
+// isPublic: almost every DPC charger is private, so it isn't in MOBI.E's
+// public list and a CEME app can't find it to start a session: only the
+// CEME's card (RFID) works there, and tariffs without one are left out
+// (cardOnly). A few DPCs mark theirs public; then the app works too.
+export function privateCharger({ kw = null, level = 'BTN', region = 'CONT', isPublic = false }) {
   return {
-    site: { id: 'private', private: true, region },
+    site: { id: 'private', private: true, public: isPublic, region },
     point: { id: 'private', private: true, kw, dc: false, level, regime: 'mobie', connector: 'T2', cable: null, opc: null },
   };
 }
+
+// ceme-v2's `access` for a tariff: CARTAO (card only) or AMBOS (card and app).
+// Anything else says there's no card. A tariff that doesn't say is kept:
+// better a price the driver can check than a tariff dropped on a guess.
+const CARD = new Set(['CARTAO', 'AMBOS']);
+const cardOnly = quotes => quotes.filter(q => q.access == null || CARD.has(q.access));
 
 const simArgs = ({ site }, { session, start, slices }, { detail = false, qa = false, monthKwh = null, signal }) =>
   ({ kwh: session.kwh, at: start, region: site.region, profile: slices, detail: detail || qa, monthKwh, signal });
@@ -467,7 +477,9 @@ export async function quotePoint(hit, car, opts = {}) {
     : t('assume.startOnly', { from: base.session.startLocal }));
   if (opts.monthKwhLost) base.assumptions.push(t('assume.monthKwhLost'));
   if (sim.staleSince) base.assumptions.push(t('assume.cemeStale', { minutes: Math.ceil((Date.now() - sim.staleSince) / 60_000) }));
-  const quotes = eligible(sim.data, audiences, tariffIds);
+  const byCard = priv && !site.public;
+  const quotes = eligible(byCard ? cardOnly(sim.data) : sim.data, audiences, tariffIds);
+  if (byCard) base.assumptions.push(t('assume.privateCard'));
   const picked = pickTariffs(quotes, point, tariffIds, shown);
   const ceme = picked.headline;
   const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region, mine)];

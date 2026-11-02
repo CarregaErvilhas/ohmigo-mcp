@@ -64,6 +64,7 @@ export const MESSAGES = {
     // A DPC's private charger (estimate_charging_cost private): no operator, so no fee.
     'assume.private': () => 'private charger connected to MOBI.E (home, condominium or workplace): you pay only your CEME tariff (energy, TAR, IEC, the EGME fee and VAT), no operator fee',
     'assume.privateKwUnknown': () => "charger power not given, assumed the car's AC limit",
+    'assume.privateCard': () => "a private charger isn't on MOBI.E's public list, so a CEME's app can't start a session there: pay with the CEME's card (RFID); tariffs without a card are left out",
     'assume.napFee': () => 'operator fee from the NAP live feed: rounded to the cent, no time tiers',
     'assume.feeRange': () => 'two values published for one fee component; showing the range',
     'assume.perMinute': () => 'per-minute fee counted until the target %, unplugging right away',
@@ -250,6 +251,7 @@ export const MESSAGES = {
     'assume.noFee': () => 'tarifa do operador não publicada (ficheiro MOBI.E ou PAN); o total não a inclui',
     'assume.private': () => 'posto privado ligado à MOBI.E (casa, condomínio ou empresa): paga-se só o tarifário CEME (energia, TAR, IEC, a taxa EGME e IVA), sem tarifa de operador',
     'assume.privateKwUnknown': () => 'potência do posto não indicada, assumido o limite AC do carro',
+    'assume.privateCard': () => 'um posto privado não está na lista pública da MOBI.E, por isso a app do CEME não consegue iniciar lá o carregamento: paga-se com o cartão do CEME (RFID); os tarifários sem cartão ficam de fora',
     'assume.napFee': () => 'tarifa do operador vinda do PAN em tempo real: arredondada ao cêntimo, sem escalões por tempo',
     'assume.feeRange': () => 'dois valores publicados para a mesma componente; mostramos o intervalo',
     'assume.perMinute': () => 'tarifa por minuto contada até à % pretendida, desligando logo a seguir',
