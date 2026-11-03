@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 Fernando Miguel and contributors. Source: https://github.com/CarregaErvilhas/ohmigo-mcp
 // The process entry point: an HTTP server. POST /mcp is the MCP server;
 // GET / is a landing page for people (site/index.html, src/site.js).
 //
@@ -25,7 +27,7 @@ import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
 import { LEGAL, LEGAL_PAGES, LLMS_TXT, PAGES, SITEMAP, SITE_URL } from './site.js';
 import { statsSummary } from './stats.js';
-import { VERSION } from './version.js';
+import { COMMIT, SOURCE_URL, VERSION } from './version.js';
 
 const PORT = Number(process.env.PORT || 3002);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -206,7 +208,7 @@ function health(detail) {
   // The dataset is rebuilt weekly; past ~9 days the pipeline has missed one.
   if (ageH > 9 * 24) problems.push('dataset: older than 9 days');
   const summary = {
-    ok: true, status: problems.length ? 'degraded' : 'ok', problems, version: VERSION,
+    ok: true, status: problems.length ? 'degraded' : 'ok', problems, version: VERSION, commit: COMMIT, source: SOURCE_URL,
     dataAsOf: ds.generatedAt, dataAgeHours: Math.round(ageH * 10) / 10,
   };
   if (!detail) return summary;

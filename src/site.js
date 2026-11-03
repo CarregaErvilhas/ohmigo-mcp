@@ -17,6 +17,7 @@
 // place a browser has nothing left to do, so those pages send no script.
 
 import { readFileSync } from 'node:fs';
+import { REPO_URL } from './version.js';
 
 export const SITE_URL = (process.env.SITE_URL || 'https://ohmigo.ocarroeletrico.com').replace(/\/$/, '');
 export const PATHS = { pt: '/', en: '/en' };
@@ -66,7 +67,7 @@ export const LEGAL = {
 };
 const NEW_TAB = 'target="_blank" rel="noopener"';
 export const CTA = [
-  { key: 's1.cta1', attrs: `href="https://github.com/CarregaErvilhas/ohmigo-mcp/issues" ${NEW_TAB}` },
+  { key: 's1.cta1', attrs: `href="${REPO_URL}/issues" ${NEW_TAB}` },
   { key: 's1.cta2', attrs: 'class="sec" href="mailto:info@ocarroeletrico.com"' },
   { key: 's1.cta3', attrs: `class="sec" href="https://m.me/OCarroEletricoDotCom" ${NEW_TAB}` },
 ];
@@ -217,5 +218,5 @@ MCP server (Streamable HTTP): ${SITE_URL}/mcp
 - [Privacy](${SITE_URL}/privacy)
 - [Support](${SITE_URL}/support)
 - [Terms of service](${SITE_URL}/terms)
-- [Source code](https://github.com/CarregaErvilhas/ohmigo-mcp)
+- [Source code](${REPO_URL})
 `;
