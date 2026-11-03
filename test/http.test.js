@@ -599,8 +599,8 @@ test('http: the landing page is rendered in each language at its own URL, for cr
   assert.equal(og.headers.get('content-type'), 'image/png');
 });
 
-test('http: privacy and support, one rendered copy per URL', async () => {
-  for (const [path, lang, h1] of [['/privacidade', 'pt-PT', 'Privacidade'], ['/privacy', 'en', 'Privacy'], ['/suporte', 'pt-PT', 'Fala connosco'], ['/support', 'en', 'Get in touch']]) {
+test('http: privacy, support and terms, one rendered copy per URL', async () => {
+  for (const [path, lang, h1] of [['/privacidade', 'pt-PT', 'Privacidade'], ['/privacy', 'en', 'Privacy'], ['/suporte', 'pt-PT', 'Fala connosco'], ['/support', 'en', 'Get in touch'], ['/termos', 'pt-PT', 'Termos de serviço'], ['/terms', 'en', 'Terms of service']]) {
     const r = await fetch(`${base}${path}`);
     assert.equal(r.status, 200, path);
     const html = await r.text();

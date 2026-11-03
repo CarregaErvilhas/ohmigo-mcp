@@ -89,3 +89,25 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
   NAP price known to be wrong.
 - **Direct offers come from one public price list.** Each one shows its
   source and date; `npm run offers:gaps` shows operators with no offer yet.
+
+## License
+
+The code, docs and evals are licensed under the [GNU Affero General Public
+License v3.0 only](LICENSE) (AGPL-3.0-only). If you run a modified version
+for others over a network, you must offer them its source (section 13).
+
+Copyright (C) 2026 Fernando Miguel and contributors.
+
+The repository is the Corresponding Source for what runs at ohmigo.pt:
+[github.com/CarregaErvilhas/ohmigo-mcp](https://github.com/CarregaErvilhas/ohmigo-mcp).
+
+Not covered by that license:
+
+- **Third-party data**, which keeps its own terms: OpenStreetMap data is
+  ODbL, and `offers/custofinal.json` is Alexandre Moleiro's, who allows its
+  public use with no restrictions. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+- **The name and the art**: "ohmigo", its mascot and icons, and "O Carro
+  Elétrico". A fork needs its own name.
+
+Contributions need the [Contributor License Agreement](CLA.md), signed once
+by a comment on the first pull request ([CONTRIBUTING.md](CONTRIBUTING.md)).

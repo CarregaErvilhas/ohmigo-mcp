@@ -34,9 +34,9 @@ same keys (`test/site.test.js` checks). A browser that opens `/mcp` is sent to
 `/#instalar`, since people paste the address there by mistake; MCP clients
 never ask for HTML, so they're unaffected.
 
-`GET /privacidade` and `GET /suporte` are the privacy and support pages that the
-assistants' directories ask for, in Portuguese; `GET /privacy` and
-`GET /support` are their English copies. They work the same way: one source,
+`GET /privacidade`, `GET /suporte` and `GET /termos` are the privacy, support and
+terms pages that the assistants' directories ask for, in Portuguese;
+`GET /privacy`, `GET /support` and `GET /terms` are their English copies. They work the same way: one source,
 `site/legal.html`, with the same two-language strings block and parity test, and
 `src/site.js` renders one copy per URL at boot (`LEGAL` lists each page's
 sections). These pages send no script, and their CSP says so: the language

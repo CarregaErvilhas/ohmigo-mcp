@@ -113,6 +113,10 @@ const inWindow = s => {
   return ms >= -AT_PAST_DAYS * 86_400_000 && ms <= AT_AHEAD_DAYS * 86_400_000;
 };
 
+// A time argument: ISO 8601 with offset, inside the window above.
+const isoAt = name => z.string().max(40).refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), `${name} must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00`)
+  .refine(inWindow, `${name} must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`).optional();
+
 // The least a car takes, kW. AC charging can't go below 6 A on one phase
 // (1.4 kW under IEC 61851) and DC chargers start well above that, so this
 // only turns away figures that aren't a car's. charging.js floors a curve at
@@ -130,9 +134,7 @@ const Car = {
     .describe("Car's DC charging curve, kW at each state of charge %, e.g. [{soc:10,kw:150},{soc:80,kw:60}]. On ev-database.org or evkx.net"),
   tariff_ids: z.array(z.string().max(100)).max(20).optional().describe("The user's CEME tariffs (ids from list_ceme_tariffs), only those they hold: each charger uses the cheapest. Omit for the popular ones"),
   tariffs_shown: z.number().int().min(1).max(20).default(QA ? QA_SHOWN : 3).describe('Without tariff_ids: popular tariffs per charger'),
-  at: z.string().max(40).refine(s => ISO_OFFSET.test(s) && !Number.isNaN(Date.parse(s)), 'at must be ISO 8601 with a UTC offset, e.g. 2026-05-01T18:30:00+01:00')
-    .refine(inWindow, `at must be between ${AT_PAST_DAYS} days ago and ${AT_AHEAD_DAYS} days ahead`).optional()
-    .describe(`When the charge starts, ISO 8601 with offset (default now; ${AT_PAST_DAYS} days back to ${AT_AHEAD_DAYS} ahead). Energy prices change between peak and off-peak (vazio) hours`),
+  at: isoAt('at').describe(`When the charge starts, ISO 8601 with offset (default now; ${AT_PAST_DAYS} days back to ${AT_AHEAD_DAYS} ahead)`),
   month_kwh: z.record(z.string().max(64), z.number().min(0).max(100000)).optional()
     .describe('Tariffs with a monthly free-kWh promotion: kWh charged with each this calendar month (Portugal time), by tariff_id, e.g. {"goldenergy-bt-clientesgold": 12.4}. Keep your own log of the user\'s sessions (kWh from their invoice/app, else the kwhBilled you estimated), reset on the 1st; with no count, ask'),
 };
@@ -603,11 +605,13 @@ const noCemeError = (list, t) => err(t(heldBackOnly(list) ? 'err.pricingBusy' : 
 // live status and nothing but ceme-v2's prices (quote.js privateCharger). An
 // argument rather than its own tool: the tool list has a budget, and the
 // INSTRUCTIONS point the assistant here so it stops hunting the NAP for it.
+const unplugOf = a => (a.unplug_at ? new Date(a.unplug_at) : null);
+
 async function privateCost(a, ctx, lang, t) {
   const signal = ctx?.mcpReq?.signal;
   const hit = privateCharger({ kw: a.private.kw ?? null, level: a.private.mt ? 'MT' : 'BTN', region: a.private.region, isPublic: !!a.private.public });
   const q = await quotePoint(hit, car(a), { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, lang,
-    audiences: a.audiences, detail: !!a.detail, qa: QA, signal, ...await monthKwh(a, signal) });
+    audiences: a.audiences, detail: !!a.detail, qa: QA, signal, unplugAt: unplugOf(a), ...await monthKwh(a, signal) });
   if (!q) return err(t('err.tooLong', { hours: MAX_SESSION_HOURS, n: 1 }), 'tooLong');
   if (q.cemeUnavailable) return noCemeError([q], t);
   // Nothing about a site or a socket: there is none.
@@ -913,6 +917,9 @@ export function createServer(getDataset, live) {
       }).optional().describe('Instead of site: a PRIVATE charger on MOBI.E (DPC: home, condo, workplace), not in the NAP; location doesn\'t matter: never look for it or ask where. CEME card only (BT), no operator fee'),
       site: z.string().max(200).optional().describe('The charger: siteId from lookup_charger or the other tools (e.g. "GLP-LRA-00156"), its sticker code ("LRA-00156"), or the user\'s words for one site'),
       point_id: z.string().max(200).optional().describe('One socket, "SITE/POINT"; only when the user picked one'),
+      // Only here: one session. Per-minute fees and CEMEs that bill every
+      // hour plugged in (session-average OMIE) charge for idle time.
+      unplug_at: isoAt('unplug_at').describe('Unplug time if left plugged in after charging: idle time can cost'),
       ...Towards, ...Filter, ...Car, ...Audience, ...Detail, ...Lang,
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -929,7 +936,7 @@ export function createServer(getDataset, live) {
     const assumptions = [...(where.assumptions ?? []), ...voltageNotes(ds, a, t)];
     const signal = ctx?.mcpReq?.signal;
     const opts = { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live: status, lang, audiences: a.audiences, detail: !!a.detail, qa: QA, simCache: new Map(),
-      signal, ...await monthKwh(a, signal) };
+      signal, unplugAt: unplugOf(a), ...await monthKwh(a, signal) };
     // Quoting is cheap once the first one has called ceme-v2 (simCache), so
     // every kind is priced and the cheapest are kept.
     const quoted = await Promise.all(targets.map(hit => quotePoint(hit, car(a), opts)));

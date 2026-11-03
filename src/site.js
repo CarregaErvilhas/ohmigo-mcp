@@ -1,4 +1,4 @@
-// The landing, privacy and support pages, rendered on the server in each
+// The landing, privacy, support and terms pages, rendered on the server in each
 // language.
 //
 // site/index.html carries every sentence in both languages (its #strings
@@ -12,8 +12,8 @@
 // plus the tags that tell search engines what the page is: canonical URL,
 // the other language (hreflang), Open Graph for link previews, and JSON-LD.
 //
-// site/legal.html works the same way for the privacy and support pages, one
-// source for four URLs. There the strings block stays behind: with the text in
+// site/legal.html works the same way for the privacy, support and terms pages, one
+// source for six URLs. There the strings block stays behind: with the text in
 // place a browser has nothing left to do, so those pages send no script.
 
 import { readFileSync } from 'node:fs';
@@ -48,6 +48,20 @@ export const LEGAL = {
       ['s2.h', ['s2.li1', 's2.li2', 's2.li3', 's2.li4']],
       ['s3.h', ['s3.li1', 's3.li2', 's3.li3', 's3.li4']],
       ['s4.h', 's4.p'],
+    ],
+  },
+  terms: {
+    paths: { pt: '/termos', en: '/terms' },
+    sections: [
+      ['t1.h', 't1.p'],
+      ['t2.h', 't2.p1', 't2.p2'],
+      ['t3.h', ['t3.li1', 't3.li2', 't3.li3'], 't3.p'],
+      ['t4.h', 't4.p'],
+      ['t5.h', 't5.p'],
+      ['t6.h', 't6.p'],
+      ['t7.h', 't7.p'],
+      ['t8.h', 't8.p'],
+      ['t9.h', 't9.p', 't9.updated'],
     ],
   },
 };
@@ -123,7 +137,8 @@ function head(lang) {
 // URLs don't detect a language, so each link has to name the right page.
 const englishLegalLinks = html => html
   .replaceAll('href="/privacidade"', `href="${LEGAL.privacy.paths.en}"`)
-  .replaceAll('href="/suporte"', `href="${LEGAL.support.paths.en}"`);
+  .replaceAll('href="/suporte"', `href="${LEGAL.support.paths.en}"`)
+  .replaceAll('href="/termos"', `href="${LEGAL.terms.paths.en}"`);
 
 export function render(lang) {
   const t = S[lang];
@@ -202,5 +217,6 @@ MCP server (Streamable HTTP): ${SITE_URL}/mcp
 - [Home, in English](${SITE_URL + PATHS.en})
 - [Privacy](${SITE_URL}/privacy)
 - [Support](${SITE_URL}/support)
+- [Terms of service](${SITE_URL}/terms)
 - [Source code](${REPO_URL})
 `;

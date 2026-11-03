@@ -1248,6 +1248,33 @@
           "Does the reply avoid saying this car is limited to about 240 kW there (that figure is for 400 V cars; an 800 V Taycan can take far more of the charger's 400 kW)?"
         ]
       }
+    },
+    {
+      "id": "unplug-overnight",
+      "why": "A car left plugged in after charging: the unplug time goes in unplug_at (idle hours count for per-minute fees and CEMEs billing the session's average OMIE), not folded into the start time or ignored.",
+      "message": "Ligo o carro na wallbox de casa hoje às 23h com o cartão LUZiGÁS e só o desligo amanhã às 8h, quando saio para o trabalho. Quanto me custa? É um MG4 de 64 kWh, de 30% a 80%.",
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "ok": true,
+            "args": {
+              "private": true,
+              "tariff_ids": "luzigas",
+              "at": "T23:",
+              "unplug_at": "T0?8:"
+            }
+          }
+        ],
+        "every": {
+          "args": {
+            "lang": "^pt"
+          }
+        },
+        "judge": [
+          "Does the reply give a cost in euros for charging at home overnight?"
+        ]
+      }
     }
   ]
 }
