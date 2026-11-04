@@ -113,8 +113,10 @@ test('http: every tool is read-only and talks to the outside world', async () =>
 // tools (src/mcp.js says where guidance belongs). Six tools; list_operators
 // and the socket filters (voltage, card, cable, hours) took it from 18 000;
 // car_voltage (a DC socket's real power for the car) from 20 500; private
-// (a DPC's charger, priced with no site, instead of a seventh tool) from 21 300.
-const TOOLS_MAX_CHARS = 21_900;
+// (a DPC's charger, priced with no site, instead of a seventh tool) from 21 300;
+// the presentation rules, moved out of INSTRUCTIONS (cut at 2048 by Claude
+// Code) onto both pricing tools, from 21 900.
+const TOOLS_MAX_CHARS = 25_000;
 
 test('http: the tool list stays small, and every tool says what it is for so tool search finds it', async () => {
   const { tools } = await call('tools/list');

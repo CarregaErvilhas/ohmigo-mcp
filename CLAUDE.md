@@ -42,7 +42,7 @@ node evals/serve.mjs                      # behaviour evals with a model: use th
   there), not here. Format changes go there first, with a `SCHEMA` bump if
   incompatible (`src/data.js` refuses unknown schemas).
 - **Guidance for the assistant goes in the narrowest place.** `INSTRUCTIONS`
-  only for what spans tools (it has a budget, `test/mcp.test.js`); one tool's
+  only for what spans tools (it has a budget, `test/budget.test.js`); one tool's
   rules in its description or `.describe()`; one answer's in the result's
   notes. See "What the assistant reads" in `docs/01-how-it-works.md`. After
   changing any of it, run the evals (`ohmigo-evals` skill) and compare with
