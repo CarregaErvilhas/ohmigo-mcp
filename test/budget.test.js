@@ -46,6 +46,10 @@ test('budget: the first 512 characters say what ohmigo covers, the language rule
   for (const must of [/Portugal/, /NAP/, /\blang\b/, /user's language/, /\bCEME\b/, /\bOPC\b/, /\bDPC\b/]) assert.match(head, must);
 });
 
+test('budget: the plug rule stays in the instructions: every tool returns sockets, and users look for a plug', () => {
+  assert.match(INSTRUCTIONS, /which plug to use \("plug"\)/);
+});
+
 test('budget: every tool description fits before Claude Code cuts it, and the list stays short', async () => {
   const tools = await listTools();
   assert.ok(tools.length <= TOOLS_MAX, `${tools.length} tools, budget ${TOOLS_MAX}`);
