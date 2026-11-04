@@ -77,8 +77,10 @@ instructions short. So you put each piece of guidance in the narrowest place
 it applies:
 
 - **`INSTRUCTIONS`**: only what holds across tools (who's who on MOBI.E, never
-  ask for a charger id, what to look up yourself, how to present a price).
-  `INSTRUCTIONS_MAX` is its budget and `test/mcp.test.js` enforces it.
+  ask for a charger id, what to look up yourself). `INSTRUCTIONS_MAX` is its
+  budget, with the essentials in the first 512 characters; `test/budget.test.js`
+  enforces it and each tool description's 2048. How to present a price lives
+  in the two pricing tools' descriptions.
 - **A tool's description, or an argument's `.describe()`**: what only that
   tool or argument needs. Clients that load tools on demand only read these
   when the tool is about to be used, so this text costs nothing until then.
