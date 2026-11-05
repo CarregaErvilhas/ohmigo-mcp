@@ -155,7 +155,8 @@ test('http: with tariff_ids, a tariff the user lacks is a tip in both cost tools
     const ranked = asked[1];
     const q = ranked.structuredContent.results.find(x => x.options.some(o => o.notYours));
     const line = ranked.content[0].text.split('\n').find(l => l.includes(`[${q.pointId}]`));
-    assert.ok(line.includes(`(+${q.options.length - 2} more ways to pay)`), line);
+    // `options` lists the ways to pay besides `best` (slim.js); the tip is one of them.
+    assert.ok(line.includes(`(+${q.options.length - 1} more ways to pay)`), line);
     const open = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...args, tariff_ids: undefined, battery_kwh: 62 });
     const options = open.structuredContent.results.flatMap(q => q.options);
     assert.ok(options.some(o => o.cheaperElsewhere), 'the tip is there');

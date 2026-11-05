@@ -123,7 +123,9 @@
   // Outside the CEME options the label is the server's, already in data.lang:
   // it's what says how you really pay at this charger (bank card, or only on
   // the phone where no terminal is listed).
-  const optName = o => o.kind === 'ceme' ? `${o.ceme} ${o.name}` : o.label;
+  // src/slim.js leaves a CEME option only its label, "CEME · tariff".
+  const cemeName = o => o.ceme ? `${o.ceme} ${o.name}` : (o.label ?? '').replace(' · ', ' ');
+  const optName = o => o.kind === 'ceme' ? cemeName(o) : o.label;
   // A peak price is a ceiling, the most it can cost. Signed as in the text
   // summary (mcp.js), which writes "<=".
   const optEur = o => (o.peakPrice ? '≤ ' : '') + eur(o.total);
@@ -159,12 +161,14 @@
     list.innerHTML = banner + rows.map((q, i) => {
       const range = q.total && q.total.low !== q.total.high ? `${eur(q.total.low)}–${eur(q.total.high)}` : '';
       const dist = q.km != null ? `${km(q.km)} ${s.away}` : q.alongKm != null ? s.route(Math.round(q.alongKm), km(q.offRouteKm)) : '';
-      const h = q.headline ?? (q.best?.kind === 'ceme' ? q.best : null);
+      // `best` is out of `options` (src/slim.js): it goes first, marked.
+      const all = q.best && !(q.options || []).some(o => optKey(o) === optKey(q.best)) ? [q.best, ...(q.options || [])] : (q.options || []);
+      const h = q.headline ?? (q.headlineTariffId ? all.find(o => o.tariffId === q.headlineTariffId) : null) ?? (q.best?.kind === 'ceme' ? q.best : null);
       const dn = meta?.driverNotes?.[q.pointId] ?? {};
       const promos = q.promos?.map(p => ({ ...data.promos?.[p.id], ...p }));
       const assumptions = [...(data.assumptions || []), ...(q.assumptions || [])];
-      const own = (q.options || []).find(o => o.kind === 'direct');
-      const opts = (q.options || []).map(o => `<li class="${q.best && optKey(o) === optKey(q.best) ? 'hl' : ''}"><span>${optEur(o)}</span> ${esc(optName(o))}`
+      const own = all.find(o => o.kind === 'direct');
+      const opts = all.map(o => `<li class="${q.best && optKey(o) === optKey(q.best) ? 'hl' : ''}"><span>${optEur(o)}</span> ${esc(optName(o))}`
         + `${o.requiresOtherContract && !o.listed ? ` <em>${s.contract}</em>` : ''}${o.cheaperElsewhere ? ` <em>${s.cheapest}</em>` : ''}${o.notYours ? ` <em>${s.notYours}</em>` : ''}`
         + `${o.subscription ? ` <em>${esc(o.subscription.text)}</em>` : ''}${o.promos ? ` <em>${s.promo}</em>` : ''}</li>`).join('')
         + (q.unlistedCheaper ? `<li><em>${s.unlisted(q.unlistedCheaper)}</em></li>` : '');
@@ -175,10 +179,10 @@
         <div class="sub">${q.status ? `<span class="st st-${esc(q.status)}">${esc(s.status[q.status] || q.status)}</span> · ` : ''}${socket(q)} · ${q.regime === 'sem_ceme' ? esc(s.outside) + ' · ' : ''}${km(q.session.kwhBilled)} kWh · ${esc(dist)}${range ? ` · ${s.range} ${range}` : ''}</div>
         ${opts ? `<ul class="opts">${opts}</ul>` : ''}
         <details><summary>${s.breakdown}</summary><dl>
-          ${h ? `<dt>${s.energy}</dt><dd>${h.opcIncluded ? `${eur(h.total)} ${s.allIn}` : eur(h.energyEur)} · ${esc(h.ceme)} ${esc(h.name)}${h.kwhByPeriod ? ' · ' + Object.entries(h.kwhByPeriod).map(([p, k]) => `${km(k)} kWh ${esc(s.period[p] || p)}`).join(', ') : ''}${h.billing ? `<br>${esc(h.note || '')}` : ''}</dd>` : ''}
+          ${h ? `<dt>${s.energy}</dt><dd>${h.opcIncluded ? `${eur(h.total)} ${s.allIn}` : eur(h.energyEur)} · ${esc(cemeName(h))}${h.kwhByPeriod ? ' · ' + Object.entries(h.kwhByPeriod).map(([p, k]) => `${km(k)} kWh ${esc(s.period[p] || p)}`).join(', ') : ''}${h.billing ? `<br>${esc(h.note || '')}` : ''}</dd>` : ''}
           ${timelineHtml(q, h, s)}
           ${q.opc ? `<dt>${s.operator}</dt><dd>${eur(q.opc.eurWithVat)} · ${esc(q.opc.tariff ?? s.notPublished)}</dd>` : ''}
-          ${(q.options || []).filter(o => o.kind === 'adhoc' || o.kind === 'opc_direct').map(o => `<dt>${esc(o.label)}</dt><dd>${o.tariff ? esc(o.tariff) + ' · ' : ''}${esc(o.note || '')}</dd>`).join('')}
+          ${all.filter(o => o.kind === 'adhoc' || o.kind === 'opc_direct').map(o => `<dt>${esc(o.label)}</dt><dd>${o.tariff ? esc(o.tariff) + ' · ' : ''}${esc(o.note || '')}</dd>`).join('')}
           ${own ? `<dt>${s.own}</dt><dd>${s.ownNote}${own.note ? ' ' + esc(own.note) : ''}</dd>` : ''}
           ${promos ? `<dt>${s.promos}</dt><dd>${promos.map(p => `${esc(p.label)}: ${eur(p.total)} · ${esc(dn.promos?.[p.id] ?? p.note)}`).join('<br>')}</dd>` : ''}
           ${q.note ? `<dt>${s.note}</dt><dd>${esc(dn.note ?? q.note)}</dd>` : ''}
@@ -190,7 +194,7 @@
     }).join('');
     const lv = data.live || {};
     const at = lv.publishedAt ? new Date(lv.publishedAt).toLocaleTimeString(lang === 'pt' ? 'pt-PT' : 'en', { hour: '2-digit', minute: '2-digit' }) : null;
-    const hasDirect = rows.some(q => (q.options || []).some(o => o.kind === 'direct'));
+    const hasDirect = rows.some(q => [q.best, ...(q.options || [])].some(o => o?.kind === 'direct'));
     document.getElementById('foot').textContent = (rows.some(q => q.unlistedCheaper) ? s.unlistedAsk + ' ' : '')
       + (data.private ? s.estimates : s.foot(at, !lv.fresh || !!lv.outdated, (data.dataAsOf || '').slice(0, 10)))
       + (hasDirect ? ' ' + s.credit : '');

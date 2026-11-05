@@ -57,3 +57,14 @@ test('slim: the driver\'s notes go to _meta, out of what the assistant reads', (
   assert.deepEqual(meta.driverNotes['B/1'], { promos: { gold: 'tell the assistant' } });
   assert.equal(slim({ results: [result('A')] }).meta, null);
 });
+
+test('slim: best leaves options, a headline that isn\'t best is named by its tariff', () => {
+  const head = opt({ tariffId: 'b-bt-y', label: 'B · Y', ceme: 'B', name: 'Y', total: 6, requiresOtherContract: false });
+  const direct = { kind: 'direct', label: 'App', total: 4, walkUp: false, subscription: null, stale: false, source: 'custofinal' };
+  const q = { pointId: 'A/1', assumptions: [], options: [head, { ...direct }], best: { ...direct }, headline: { ...head } };
+  const { data: { results: [r] } } = slim({ results: [q] });
+  assert.deepEqual(r.best, { kind: 'direct', label: 'App', total: 4, source: 'custofinal' });
+  assert.deepEqual(r.options, [{ kind: 'ceme', tariffId: 'b-bt-y', label: 'B · Y', total: 6 }], 'no copy of best; ceme, name and false flags gone');
+  assert.equal(r.headline, undefined);
+  assert.equal(r.headlineTariffId, 'b-bt-y');
+});

@@ -95,3 +95,11 @@ test('view: what the server said once, at the top, shows on every row', () => {
   assert.match(rows[0], /<dt>Energy<\/dt><dd>6\.00 € · EDP X/);
   assert.match(rows[0], /<dt>Direct<\/dt><dd>outside the CEME system, final with VAT; can vary a few cents by site\. Card terminal/);
 });
+
+test('view: best, out of options (slim.js), still heads the list, marked', () => {
+  const best = { kind: 'ceme', tariffId: 'a-bt-x', label: 'EDP · X', total: 9, energyEur: 6 };
+  const other = { kind: 'ceme', tariffId: 'b-bt-y', label: 'Galp · Y', total: 11, energyEur: 8 };
+  const [r] = renderView({ lang: 'en', results: [row({ best, options: [other], headlineTariffId: 'b-bt-y' })] });
+  assert.match(r, /<li class="hl"><span>9\.00 €<\/span> EDP X<\/li><li class=""><span>11\.00 €<\/span> Galp Y/);
+  assert.match(r, /<dt>Energy<\/dt><dd>8\.00 € · Galp Y/, 'the headline, found by its tariff');
+});

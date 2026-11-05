@@ -18,7 +18,13 @@
 //                the top-level `promos`, by id.
 //   sources      the source of the "direct" prices (the custofinal blog), once,
 //                where an option names it (`source`).
-//   headline     left out when it's the same option as `best`.
+//   best         whole, once: the option it is leaves `options`, which then
+//                lists the other ways to pay.
+//   headline     left out when it's `best`; otherwise it's one of the
+//                options, named by `headlineTariffId`.
+//   options      a CEME option's label is already "CEME · tariff", so `ceme`
+//                and `name` go; flags that are false (requiresOtherContract,
+//                walkUp, stale, no subscription) go too: absent means no.
 //   driverNote   written for the driver, not for the assistant (quote.js,
 //                promos.js). It goes in the result's `_meta`, which the
 //                results page (ui/results.html) receives and the assistant
@@ -31,6 +37,28 @@
 import { SOURCE } from './offers.js';
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// `best` and `headline` are copies of options (quote.js): keep one of each.
+function oneCopy(q) {
+  const opts = q.options ?? [];
+  if (q.best) {
+    const i = opts.findIndex(o => same(o, q.best));
+    if (i >= 0) opts.splice(i, 1);
+  }
+  if (q.headline) {
+    if (!same(q.headline, q.best) && q.headline.tariffId && opts.some(o => same(o, q.headline))) q.headlineTariffId = q.headline.tariffId;
+    else if (!same(q.headline, q.best)) return; // not an option: keep it whole
+    delete q.headline;
+  }
+}
+
+// What an option says twice, or says as "no".
+const FALSE = { requiresOtherContract: false, walkUp: false, stale: false, subscription: null };
+function trim(o) {
+  if (!o) return;
+  if (o.kind === 'ceme' && o.label === `${o.ceme} · ${o.name}`) { delete o.ceme; delete o.name; }
+  for (const [k, v] of Object.entries(FALSE)) if (Object.hasOwn(o, k) && o[k] === v) delete o[k];
+}
 
 // Assumptions that every result has, in the order of the first one.
 function commonAssumptions(results) {
@@ -79,7 +107,10 @@ export function slim(data) {
   const common = commonAssumptions(results);
   if (common.length) for (const q of results) q.assumptions = q.assumptions.filter(a => !common.includes(a));
   const promos = sharedPromos(results);
-  for (const q of results) if (q.headline && same(q.headline, q.best)) delete q.headline;
+  for (const q of results) {
+    oneCopy(q);
+    for (const o of [q.best, q.headline, ...(q.options ?? [])]) trim(o);
+  }
   const fromBlog = results.some(q => (q.options ?? []).some(o => o.source === 'custofinal'));
   return {
     data: {
