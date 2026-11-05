@@ -90,12 +90,25 @@ it applies:
   `src/i18n.js`): what holds only for some answers (a peak price, a promotion
   for new customers, a missing direction). It shows up exactly when it
   applies, and every client passes it on. `ui/results.html` puts some of these
-  in front of the driver with no assistant in between: each result's
-  `assumptions` and `note`, the `note` of the non-CEME options, and each
-  promotion's `note`. A result or
-  promotion whose `note` is written for the assistant also carries a
-  `driverNote`, and the page shows that instead. The top-level `notes` list
-  isn't shown there, so it's free to give the assistant orders.
+  in front of the driver with no assistant in between: the `assumptions`, each
+  result's `note`, the `note` of the non-CEME options, and each promotion's
+  `note`. Where a result's or a promotion's `note` is written for the
+  assistant, `quote.js` also writes a `driverNote`, and the page shows that
+  instead. The top-level `notes` list isn't shown there, so it's free to give
+  the assistant orders.
+
+Before a pricing answer goes out, `src/slim.js` takes the repetition out of
+it, because the whole result stays in the assistant's context for the rest of
+the conversation. The same car and start time give every charger the same
+assumptions, so those go once into a top-level `assumptions`. A promotion that
+shows up at several chargers keeps its id, label and what differs (`total`,
+`saving`) in each result, and the rest goes once into a top-level `promos`, by
+id. The blog's name goes once into `sources` (each direct option says
+`source: "custofinal"`), and `headline` is left out when it's the same option
+as `best`. The `driverNote`s go into the result's `_meta`
+(`driverNotes`, by point), which the page receives and the assistant doesn't
+read. With one result, its assumptions stay where they are. The page puts the
+pieces back together, so the driver sees each charger whole.
 
 The tool list has a budget too (`TOOLS_MAX_CHARS` in `test/http.test.js`).
 When it bites, trim before you raise it, and prefer one more argument on an
@@ -120,6 +133,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/direction.js` | Motorway service areas: which side the driver can reach, from where they're heading |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |
 | `src/quote.js` | Prices one plug for every way to pay; ranks plugs |
+| `src/slim.js` | Says once what every result of a pricing answer shares; moves the driver's notes to `_meta` for the page |
 | `src/socket.js` | What the driver must know about a socket: which plug to use (`plug`), on MOBI.E the grid it's on (`tar`: BT or MT), and on DC the power it gives a 400 V car or the user's at its battery voltage (`kwAt400V`, `kwForCar`) |
 | `src/charging.js` | Session energy and duration, as constant-power segments |
 | `src/profile.js` | Lays the session on the clock: kWh per quarter-hour, local times |

@@ -1275,6 +1275,26 @@
           "Does the reply give a cost in euros for charging at home overnight?"
         ]
       }
+    },
+    {
+      "id": "ranking-shared-context",
+      "why": "A ranking says once, at the top, what every result shares (assumptions, a promotion's terms by id in promos, the blog in sources). The assistant still passes the main assumptions on, keeps a promotion's terms right and credits the blog for a direct price.",
+      "message": "Onde é mais barato carregar em Leiria? Renault Megane E-Tech de 60 kWh, estou com 25% e quero chegar aos 80%. Não tenho pressa.",
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_cheapest_charging",
+            "args": {
+              "*": "leiria|\"lat\":39\\.7"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply state at least one assumption behind the prices (for example charging losses, the hours the session is priced for, or a per-minute fee counted until the target %)? Count the top-level \"assumptions\" of the tool result as well as each result's own.",
+          "If the reply mentions a promotion, are its terms (who it is for, until when, whether it is in the price) consistent with the tool result, reading each result's promos together with the top-level \"promos\" entry of the same id? Answer n/a if it mentions none.",
+          "If the reply quotes a price of kind \"direct\" whose source is the blog (source \"custofinal\"), does it credit the blog (Alexandre Moleiro, or Preços (finais) kWh Portugal)? Answer n/a if it quotes none."
+        ]
+      }
     }
   ]
 }

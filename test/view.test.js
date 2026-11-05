@@ -71,10 +71,27 @@ test('view: with ceme-v2 down a banner sits above the rows, in the answer\'s lan
 });
 
 test('view: the driver gets driverNote, never the note written for the assistant', () => {
-  const promo = { label: 'Gold', total: 4, note: 'priced as is: pass month_kwh', driverNote: 'priced as is' };
-  const [r] = renderView({ lang: 'en', results: [row({ note: 'Say so to the user.', driverNote: 'Try again later.', promos: [promo] })] });
+  const promo = { id: 'gold', label: 'Gold', total: 4, note: 'priced as is: pass month_kwh' };
+  const q = row({ note: 'Say so to the user.', promos: [promo] });
+  const [r] = renderView({ lang: 'en', results: [q] }, { driverNotes: { [q.pointId]: { note: 'Try again later.', promos: { gold: 'priced as is' } } } });
   assert.match(r, /Try again later\./);
   assert.match(r, /Gold: 4\.00 € · priced as is</);
   assert.doesNotMatch(r, /Say so|month_kwh/);
   assert.match(renderView({ lang: 'en', results: [row({ note: 'Outside MOBI.E.' })] })[0], /Outside MOBI\.E\./);
+});
+
+test('view: what the server said once, at the top, shows on every row', () => {
+  const best = { kind: 'ceme', label: 'EDP · X', ceme: 'EDP', name: 'X', total: 9, energyEur: 6 };
+  const promo = { id: 'gold', label: 'Gold', total: 4 };
+  const direct = { kind: 'direct', label: 'App', total: 10, source: 'custofinal', note: 'Card terminal (TPA) or QR at the charger, no account needed.' };
+  const rows = renderView({
+    lang: 'en', assumptions: ['12% charging losses'], promos: { gold: { note: 'for every Gold customer' } },
+    results: [row({ pointId: 'A/1', best, options: [best, direct], assumptions: ['own'], promos: [promo] }), row({ pointId: 'B/1', best, options: [best] })],
+  });
+  for (const r of rows) assert.match(r, /12% charging losses/);
+  assert.match(rows[0], /12% charging losses; own/);
+  assert.match(rows[0], /Gold: 4\.00 € · for every Gold customer/);
+  // `headline` left out because it was `best`: the energy line still shows.
+  assert.match(rows[0], /<dt>Energy<\/dt><dd>6\.00 € · EDP X/);
+  assert.match(rows[0], /<dt>Direct<\/dt><dd>outside the CEME system, final with VAT; can vary a few cents by site\. Card terminal/);
 });

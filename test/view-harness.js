@@ -7,7 +7,8 @@ import vm from 'node:vm';
 const html = readFileSync(new URL('../ui/results.html', import.meta.url), 'utf8');
 const script = html.match(/<script>\/\*__BRIDGE__\*\/<\/script>\s*<script>([\s\S]*?)<\/script>/)[1];
 
-export function renderView(structuredContent) {
+// meta: the result's _meta (the driver's notes, src/slim.js).
+export function renderView(structuredContent, meta) {
   const els = { list: { className: '', textContent: '', innerHTML: '' }, foot: { textContent: '' } };
   let app;
   vm.runInNewContext(script, {
@@ -21,7 +22,7 @@ export function renderView(structuredContent) {
       },
     },
   });
-  app.ontoolresult({ structuredContent });
+  app.ontoolresult({ structuredContent, _meta: meta });
   // One string per charger row, the first being the top of the ranking, and
   // in `above` whatever comes before the rows.
   const [above, ...rows] = els.list.innerHTML.split('<div class="row');

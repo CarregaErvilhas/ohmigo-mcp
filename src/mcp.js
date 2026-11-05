@@ -35,6 +35,7 @@ import { fold } from './text.js';
 import { MAX_SESSION_HOURS } from './profile.js';
 import { logged } from './stats.js';
 import { SITE_URL } from './site.js';
+import { slim } from './slim.js';
 import { REPO_URL, VERSION } from './version.js';
 import { viewHtml } from './view.js';
 
@@ -75,8 +76,8 @@ Source: ${REPO_URL}`;
 const PRESENTING = `
 
 Presenting: lead with "best", the cheapest option the user can use now: total in €, duration, how to pay, main assumptions. Before the user goes, mention "openNow" false or "hours" (a car park that closes is unusable then), "cardPayment", "locationDescription", "support". More ways to pay sit in "options": other CEMEs, "adhoc" (no CEME card; its label says card at the charger or phone: always mention it), "direct" (operator apps, subscriptions, roaming; a subscription's fee is not in the total), "opc_direct" (the operator's NAP price outside MOBI.E). Say there are more, offer to list them, point out a cheaper subscription or CEME. MOBI.E and other networks share one ranking: the price decides.
-Pass on the result's assumptions, notes and each option's note: peak prices (the most it can cost, usually less off-peak), promotions in or out of the total, stale or island-VAT prices, sources that disagree. Offers for new sign-ups (newCustomersOnly, newCustomers) are tips ("signing up by <until> gets <price>"), never the price. A price for one group (audience) only for drivers who said they belong to it: never infer, say whom it is for.
-Credit OpenStreetMap for "osm" data and, for "direct" prices, the source in the note (the blog: Alexandre Moleiro). If live.fresh is false, say the live status may be stale.`;
+Pass on the result's assumptions (top-level ones hold for every result), notes and each option's note: peak prices (the most it can cost, usually less off-peak), promotions in or out of the total, stale or island-VAT prices, sources that disagree. Offers for new sign-ups (newCustomersOnly, newCustomers) are tips ("signing up by <until> gets <price>"), never the price. A price for one group (audience) only for drivers who said they belong to it: never infer, say whom it is for.
+A promotion's fields shared by every result sit once in top-level "promos", by id. Credit OpenStreetMap for "osm" data and, for "direct" prices, their source (the blog: Alexandre Moleiro). If live.fresh is false, say the live status may be stale.`;
 
 // Argument schemas, shared by the tools. zod turns them into the JSON Schema
 // the assistant sees, and validates what it sends back.
@@ -326,8 +327,10 @@ const err = (msg, code = 'error', extra) => ({ isError: true, structuredContent:
 // JSON, after a few summary lines: with the lines alone, those assistants saw
 // one price per charger, none of the other ways to pay, assumptions or fees.
 // The MCP spec asks for this too. Payload is kept down elsewhere (merged
-// timeline, timeline only on the first results), not by thinning the text.
-const ok = (data, summary) => ({ structuredContent: data, content: [{ type: 'text', text: `${summary ? `${summary}\n\n` : ''}${JSON.stringify(data)}` }] });
+// timeline, timeline only on the first results, what every result shares
+// said once in slim.js), not by thinning the text.
+// `meta`: the result's _meta, for the results page only (slim.js).
+const ok = (data, summary, meta = null) => ({ structuredContent: data, content: [{ type: 'text', text: `${summary ? `${summary}\n\n` : ''}${JSON.stringify(data)}` }], ...(meta && { _meta: meta }) });
 
 // The language for this call: the `lang` argument, else the locale some
 // clients put in the request metadata (ChatGPT sends "openai/locale").
@@ -429,6 +432,8 @@ const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 // A tariff the user would have to switch to (notYours) isn't a way to pay yet.
 const waysToPay = q => (q.options ?? []).filter(o => !o.notYours).length;
 export const moreWays = (results, t) => results.some(q => waysToPay(q) > 1) ? [t('note.moreWays')] : [];
+// What every "direct" price shares (quote.js directOptions), once per answer.
+export const directNote = (results, t) => results.some(q => (q.options ?? []).some(o => o.kind === 'direct')) ? [t('note.direct')] : [];
 // DC durations without the car's curve are a generic guess; the note says
 // where the assistant can find the real one.
 export const curveNote = (results, a, t) => !a.charge_curve && results.some(q => q.dc) ? [t('note.curve')] : [];
@@ -624,8 +629,8 @@ async function privateCost(a, ctx, lang, t) {
   const { pointId, siteId, code, operator, address, city, lat, lon, status, regime, connector, cable, plug, ...result } = q;
   const notes = [...moreWays([q], t), ...unlistedNote([q], t)];
   const line = `${q.best ? `${q.best.total.toFixed(2)} € · ${q.best.label}` : t('summary.noPrice')} · ${q.session.minutes} min · ${t('summary.private')}`;
-  return ok({ kind: 'single', private: true, version: VERSION, lang, ...(QA && { qa: true }), ...(notes.length && { notes }), results: [{ ...result, private: true }] },
-    [...notes, line].join('\n'));
+  const out = slim({ kind: 'single', private: true, version: VERSION, lang, ...(QA && { qa: true }), ...(notes.length && { notes }), results: [{ ...result, private: true }] });
+  return ok(out.data, [...notes, line].join('\n'), out.meta);
 }
 
 // `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
@@ -895,6 +900,7 @@ export function createServer(getDataset, live) {
           ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
           ...kwForCarQuoteNote(top, a, t),
           ...moreWays(top, t),
+          ...directNote(top, t),
           ...unlistedNote(top, t),
           ...curveNote(top, a, t),
         ];
@@ -902,7 +908,8 @@ export function createServer(getDataset, live) {
           ...(truncated && { truncated: true }), ...(ranked.socketsLeftOut && { socketsLeftOut: ranked.socketsLeftOut }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
         // Summary lines on top of the JSON in the text (see ok).
         const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` ${t('summary.moreWays', { n: waysToPay(q) - 1 })}` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : t('summary.noPrice')} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q, t)}) [${q.pointId}]`);
-        return ok(data, [...notes, ...lines].join('\n'));
+        const out = slim(data);
+        return ok(out.data, [...notes, ...lines].join('\n'), out.meta);
       });
     } catch (e) {
       if (e.busy) return err(t('err.busy'), 'busy');
@@ -955,9 +962,9 @@ export function createServer(getDataset, live) {
     if (cemeDown && !results.some(q => q.best)) return noCemeError(results, t);
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : t('summary.noPrice')} · ${q.session.minutes} min · ${socketLine(q, t)} [${q.pointId}]`);
     const notes = [...liveNotes(status, t), ...(cemeDown ? [noCemeNote(results, t)] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []),
-      ...kwForCarQuoteNote(results, a, t), ...moreWays(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
-    return ok({ kind: 'single', ...meta(ds, status, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results },
-      [...notes, ...lines].join('\n'));
+      ...kwForCarQuoteNote(results, a, t), ...moreWays(results, t), ...directNote(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
+    const out = slim({ kind: 'single', ...meta(ds, status, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results });
+    return ok(out.data, [...notes, ...lines].join('\n'), out.meta);
   });
 
   registerAppResource(server, 'Charging results', VIEW_URI, {

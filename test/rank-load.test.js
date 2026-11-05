@@ -304,7 +304,8 @@ test('end to end: without the tariff list, month_kwh is not silently dropped', a
   const s = await serve();
   try {
     const { structuredContent: d } = await s.call({ ...ARGS, radius_km: 0.3, month_kwh: { 'a-bt-x': 3 } });
-    assert.ok(d.results[0].assumptions.includes(translator('pt')('assume.monthKwhLost')));
+    // Every result has it, so it's said once, at the top (slim.js).
+    assert.ok([...(d.assumptions ?? []), ...d.results[0].assumptions].includes(translator('pt')('assume.monthKwhLost')));
   } finally { s.stop(); }
 });
 
