@@ -277,7 +277,9 @@ has no fees.
 
 Two summary fields:
 - **`headline`**: the first CEME option (the user's cheapest tariff, or the
-  cheapest popular one that needs no other contract);
+  cheapest popular one that needs no other contract). The answer leaves it out
+  when it's `best`, and otherwise names it by `headlineTariffId`
+  (`src/slim.js`);
 - **`best`**: the cheapest option the user can use right now, meaning no
   subscription and no other contract. With `tariff_ids`, a tariff the user
   listed counts even with conditions (`listed`: they have it), and a cheaper

@@ -155,7 +155,8 @@ test('http: with tariff_ids, a tariff the user lacks is a tip in both cost tools
     const ranked = asked[1];
     const q = ranked.structuredContent.results.find(x => x.options.some(o => o.notYours));
     const line = ranked.content[0].text.split('\n').find(l => l.includes(`[${q.pointId}]`));
-    assert.ok(line.includes(`(+${q.options.length - 2} more ways to pay)`), line);
+    // `options` lists the ways to pay besides `best` (slim.js); the tip is one of them.
+    assert.ok(line.includes(`(+${q.options.length - 1} more ways to pay)`), line);
     const open = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...args, tariff_ids: undefined, battery_kwh: 62 });
     const options = open.structuredContent.results.flatMap(q => q.options);
     assert.ok(options.some(o => o.cheaperElsewhere), 'the tip is there');
@@ -543,7 +544,7 @@ test('http: a private charger (DPC) is priced from ceme-v2 alone: no site, no li
 test('http: a driver in the view reads no note written for the assistant', async () => {
   const none = await call('estimate_charging_cost', { site: 'GLP-LRA-00156', ...car, tariff_ids: ['nope-bt-z'], lang: 'en' });
   assert.match(none.structuredContent.results[0].note, /the user's tariffs/);
-  const [theirs] = renderView(none.structuredContent);
+  const [theirs] = renderView(none.structuredContent, none._meta);
   assert.match(theirs, /None of your tariffs/);
   assert.doesNotMatch(theirs, /the user/);
 });
@@ -559,7 +560,7 @@ test('http: with ceme-v2 down, the other ways to pay still come back, flagged', 
     // The view still marks the cheapest row, with the server's labels, and
     // tells the driver to retry in its own words, not the assistant's orders.
     assert.ok(r.structuredContent.results[0].best, 'the fixture has a best here');
-    const rows = renderView(r.structuredContent);
+    const rows = renderView(r.structuredContent, r._meta);
     assert.match(rows[0], /^ best"/);
     assert.match(rows.above, /class="banner"/);
     const adhoc = r.structuredContent.results.flatMap(q => q.options).find(o => o.kind === 'adhoc');
@@ -567,7 +568,7 @@ test('http: with ceme-v2 down, the other ways to pay still come back, flagged', 
     assert.match(rows.join(''), /Try again in a few minutes/);
     assert.doesNotMatch(rows.join(''), /Say so/);
     const pt = await call('find_cheapest_charging', { place: 'Leiria', ...car, lang: 'pt', at: new Date(Date.now() + 3600_000).toISOString() });
-    const ptRows = renderView(pt.structuredContent).join('');
+    const ptRows = renderView(pt.structuredContent, pt._meta).join('');
     assert.match(ptRows, /Tenta daqui a uns minutos/);
     assert.doesNotMatch(ptRows, /Diz isso ao utilizador/);
   } finally { cemeDown = false; }

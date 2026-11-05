@@ -466,3 +466,12 @@ describe('with tariff_ids, best is what the user can pay with', () => {
     assert.deepEqual(ranked.map(q => q.regime), ['sem_ceme', 'mobie']);
   });
 });
+
+test('opening hours that disagree say whose is whose', async () => {
+  // 07:00 in Lisbon: open by the NAP (24/7), closed by OpenStreetMap.
+  const shop = { ...site('CNT'), hours: '24/7', osm: { openingHours: 'Mo-Su 09:00-21:00' } };
+  const q = await quotePoint({ site: shop, point }, car, { at: new Date('2026-11-10T07:00:00Z'), lang: 'en' });
+  assert.ok(q.assumptions.some(a => a.includes('(NAP: 24/7; OpenStreetMap: Mo-Su 09:00-21:00)')), q.assumptions.join('\n'));
+  const one = await quotePoint({ site: { ...shop, hours: null }, point }, car, { at: new Date('2026-11-10T07:00:00Z'), lang: 'en' });
+  assert.ok(one.assumptions.some(a => a.includes('(Mo-Su 09:00-21:00)')), one.assumptions.join('\n'));
+});

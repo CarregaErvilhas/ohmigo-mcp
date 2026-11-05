@@ -55,7 +55,7 @@ import { translator } from './i18n.js';
 import { limiter } from './limit.js';
 import { napEurPerKwh, napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
-import { forAudiences, isStale, napNote, offersAt, ownWalkUp, SOURCE } from './offers.js';
+import { forAudiences, isStale, napNote, offersAt, ownWalkUp } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, unpricedHere, withPromos } from './promos.js';
 import { forCarFields, gridOf, plugLabel } from './socket.js';
 
@@ -303,14 +303,21 @@ function directOptions(direct, session, t, region, mine = new Set()) {
     ...(offer.cemeTariffs?.some(k => mine.has(k)) && { listed: true, viaTariff: true }),
     total: r2(eurPerKwh * session.kwh + (offer.sessionEur || 0)), eurPerKwh, ...(offer.sessionEur && { sessionEur: offer.sessionEur }), walkUp: !!offer.walkUp,
     subscription: offer.subscription ? { ...(offer.fee || {}), text: offer.fee ? t('option.fee', offer.fee) : t('option.feeUnknown') } : null,
-    note: t('option.direct.note', { source: offer.origin === 'custofinal' ? `${SOURCE.name} (${SOURCE.author}), ${SOURCE.blog}` : offer.source, checked: offer.checkedAt })
-      + (offer.walkUp ? ` ${t('option.walkUp')}` : '')
-      + (offer.sessionEur ? ` ${t('option.sessionFee', { eur: offer.sessionEur })}` : '')
-      + (isStale(offer) ? ` ${t('option.stale')}` : '')
-      + (island ? ` ${t('option.islandVat')}` : ''),
+    // What holds for every direct price (outside the CEME system, final with
+    // VAT) is one note per answer (directNote), and the blog's name one entry
+    // in `sources` (slim.js): here only the key, or the URL of a hand-checked
+    // offer, and the date.
+    source: offer.origin === 'custofinal' ? 'custofinal' : offer.source, checked: offer.checkedAt,
+    ...optionNote([
+      offer.walkUp && t('option.walkUp'),
+      offer.sessionEur && t('option.sessionFee', { eur: offer.sessionEur }),
+      isStale(offer) && t('option.stale'),
+      island && t('option.islandVat'),
+    ]),
     stale: isStale(offer), vatUnverified: island || undefined,
   })).sort((a, b) => a.total - b.total);
 }
+const optionNote = parts => { const note = parts.filter(Boolean).join(' '); return note ? { note } : {}; };
 
 // A tariff the user put in tariff_ids: they have it (see eligible()), so its
 // conditions stay on the option but don't keep it from `best`.
@@ -425,7 +432,9 @@ export async function quotePoint(hit, car, opts = {}) {
   if (point.napKw !== undefined) base.assumptions.push(t('assume.osmKw', { kw: point.kw, nap: point.napKw }));
   if (site.operatorInferred) base.assumptions.push(t('assume.operatorInferred', { operator: site.operator }));
   const hours = siteOpen(site, start);
-  const hoursText = [hours.nap, hours.osm].filter(Boolean).join(' / ');
+  // With two different hours, say whose is whose: "24/7 / 09:00-21:00" read
+  // as one schedule. The site counts as closed when either says so (hours.js).
+  const hoursText = hours.nap && hours.osm && hours.nap !== hours.osm ? t('hours.both', hours) : hours.nap ?? hours.osm;
   if (hours.open === false) base.assumptions.push(t('assume.closedAt', { hours: hoursText }));
   const closes = hours.open ? closesDuring(site, start, out) : null;
   if (closes) base.assumptions.push(t('assume.closesDuring', { hours: hoursText, at: localTime(closes, site.region), days: daysLater(start, closes, site.region), end: base.session.unplugLocal ?? base.session.endLocal }));
