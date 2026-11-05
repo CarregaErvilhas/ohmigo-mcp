@@ -23,8 +23,10 @@
 //   headline     left out when it's `best`; otherwise it's one of the
 //                options, named by `headlineTariffId`.
 //   options      a CEME option's label is already "CEME · tariff", so `ceme`
-//                and `name` go; flags that are false (requiresOtherContract,
-//                walkUp, stale, no subscription) go too: absent means no.
+//                and `name` go; flags that are false (walkUp, stale, no
+//                subscription) go too: absent means no. requiresOtherContract
+//                stays either way: whether the driver can use a CEME price at
+//                all isn't left for the assistant to infer from a gap.
 //   driverNote   written for the driver, not for the assistant (quote.js,
 //                promos.js). It goes in the result's `_meta`, which the
 //                results page (ui/results.html) receives and the assistant
@@ -53,7 +55,7 @@ function oneCopy(q) {
 }
 
 // What an option says twice, or says as "no".
-const FALSE = { requiresOtherContract: false, walkUp: false, stale: false, subscription: null };
+const FALSE = { walkUp: false, stale: false, subscription: null };
 function trim(o) {
   if (!o) return;
   if (o.kind === 'ceme' && o.label === `${o.ceme} · ${o.name}`) { delete o.ceme; delete o.name; }

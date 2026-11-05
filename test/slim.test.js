@@ -64,7 +64,7 @@ test('slim: best leaves options, a headline that isn\'t best is named by its tar
   const q = { pointId: 'A/1', assumptions: [], options: [head, { ...direct }], best: { ...direct }, headline: { ...head } };
   const { data: { results: [r] } } = slim({ results: [q] });
   assert.deepEqual(r.best, { kind: 'direct', label: 'App', total: 4, source: 'custofinal' });
-  assert.deepEqual(r.options, [{ kind: 'ceme', tariffId: 'b-bt-y', label: 'B · Y', total: 6 }], 'no copy of best; ceme, name and false flags gone');
+  assert.deepEqual(r.options, [{ kind: 'ceme', tariffId: 'b-bt-y', label: 'B · Y', total: 6, requiresOtherContract: false }], 'no copy of best; ceme, name and false flags gone, but not requiresOtherContract');
   assert.equal(r.headline, undefined);
   assert.equal(r.headlineTariffId, 'b-bt-y');
 });

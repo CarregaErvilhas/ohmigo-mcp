@@ -108,7 +108,8 @@ id. The blog's name goes once into `sources` (each direct option says
 `options`, which then lists the other ways to pay, and a `headline` that isn't
 `best` is named by `headlineTariffId`. A CEME option keeps its `label`
 ("CEME · tariff") without `ceme` and `name`, and flags that are false are
-left out. The `driverNote`s go into the result's `_meta`
+left out, except `requiresOtherContract`, which always says whether the driver
+can use that price. The `driverNote`s go into the result's `_meta`
 (`driverNotes`, by point), which the page receives and the assistant doesn't
 read. With one result, its assumptions stay where they are. The page puts the
 pieces back together, so the driver sees each charger whole.
