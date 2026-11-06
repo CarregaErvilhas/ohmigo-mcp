@@ -9,6 +9,16 @@ const SAFE = /^[a-z0-9][a-z0-9-]*$/;
 
 export const VOLTARIA_AVAILABLE = existsSync(new URL('skills/', ROOT));
 
+// The skill's own "when to use me" line, from its frontmatter: what the
+// assistant needs to pick a topic. Values are JSON-quoted strings.
+export function descriptionOf(md) {
+  const m = /^---\n([\s\S]*?)\n---/.exec(md);
+  const line = m && /^description:\s*(.+)$/m.exec(m[1]);
+  if (!line) return '';
+  const v = line[1].trim();
+  try { return v.startsWith('"') ? JSON.parse(v) : v; } catch { return v; }
+}
+
 let cache = null;
 function load() {
   if (cache) return cache;
@@ -31,7 +41,10 @@ function load() {
 
 export const topics = () => {
   const { guides, facts } = load();
-  return { guides: [...guides.keys()].sort(), facts: [...facts.keys()].sort() };
+  return {
+    guides: [...guides].sort(([a], [b]) => a.localeCompare(b)).map(([topic, md]) => ({ topic, description: descriptionOf(md) })),
+    facts: [...facts.keys()].sort(),
+  };
 };
 
 export const getGuide = topic => {
