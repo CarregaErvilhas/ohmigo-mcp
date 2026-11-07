@@ -2,6 +2,7 @@
 // checked out these tests skip; CI checks it out.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { descriptionOf, getFacts, getGuide, topics, VOLTARIA_AVAILABLE } from '../src/voltaria.js';
 
 const skip = !VOLTARIA_AVAILABLE && 'voltaria/ submodule not checked out';
@@ -42,4 +43,22 @@ test('voltaria: descriptionOf reads quoted and plain frontmatter, and nothing el
   assert.equal(descriptionOf('---\nname: x\ndescription: "a \\"b\\" c"\n---\nbody'), 'a "b" c');
   assert.equal(descriptionOf('---\ndescription: plain\n---\n'), 'plain');
   assert.equal(descriptionOf('no frontmatter\ndescription: x'), '');
+});
+
+// The guides are written in the voltaria repo and name ohmigo's tools in
+// asides like "(no ohmigo: `ev_rules_portugal` com `topic: \"incentives\"`)".
+// A rename here doesn't reach them: they once named get_facts, which never
+// existed, with a facts topic that didn't either. Tool names come from the
+// registrations in src/mcp.js; topics from what is on disk.
+test('voltaria: the tools and topics the guides name in "no ohmigo" asides exist', { skip }, () => {
+  const src = readFileSync(new URL('../src/mcp.js', import.meta.url), 'utf8');
+  const tools = new Set([...src.matchAll(/(?:registerTool\(|registerAppTool\(server, )'([a-z_]+)'/g)].map(m => m[1]));
+  const { guides, facts } = topics();
+  const known = new Set([...facts, ...guides.map(g => g.topic)]);
+  for (const { topic } of guides) {
+    for (const [aside] of getGuide(topic).content.matchAll(/no ohmigo:[^)]*\)/g)) {
+      for (const [, name] of aside.matchAll(/`([a-z]+(?:_[a-z]+)+)`/g)) assert.ok(tools.has(name), `${topic}: "${name}" is not an ohmigo tool`);
+      for (const [, t] of aside.matchAll(/topic: "([^"]+)"/g)) assert.ok(known.has(t), `${topic}: topic "${t}" doesn't exist`);
+    }
+  }
 });
