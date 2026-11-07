@@ -1364,6 +1364,27 @@
       }
     },
     {
+      "id": "voltaria-condo-refuse",
+      "why": "\"What can my condo refuse?\" is about the law, not a price: the answer is DL 93/2025 art. 23.º in voltaria, and memory or the web still give the revoked DL 39/2010 rules (60 days, two thirds, architectural line).",
+      "message": "quais as condiçoes em q o condominio me pode negar a instalaçao de um ponto de carregamento na garagem ?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "voltaria",
+            "args": {
+              "topic": "carregar-em-casa|regime-2010"
+            },
+            "ok": true
+          }
+        ],
+        "noCalls": [
+          {
+            "tool": "estimate_charging_cost|find_cheapest_charging|find_chargers|lookup_charger"
+          }
+        ]
+      }
+    },
+    {
       "id": "price-not-voltaria",
       "why": "The price of one charge comes from the pricing tools; voltaria is for guides and rules, not prices.",
       "message": "Quanto me custa carregar no Continente Bom Dia de Leiria, na Rua Vale de Lobos? Tenho um Renault Zoe ZE50, estou com 30% e quero ir até aos 80%.",
