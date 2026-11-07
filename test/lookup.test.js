@@ -226,3 +226,40 @@ test('lookup: "centro comercial" is the kind of place, not part of its name', ()
     assert.deepEqual(ids(q), ['CAP-LSB-00380'], q);
   }
 });
+
+// OpenStreetMap doesn't say a charger is at a shopping centre; nap-dashboard
+// works it out from the outlines and ships it as `places`.
+test('a site is found by the place it is at, though nothing there is named so', () => {
+  const at = (id, code, city, places) => site(id, code, city, 'Av. Dr. Óscar Lopes', 'Tesla', 'TSLA', 41.2, -8.68, { places });
+  const d = new Dataset({
+    schema: 1, generatedAt: '2026-10-28T00:00:00Z',
+    sites: [
+      // As OSM spells it, glued.
+      at('TSL-aaaa', 'aaaa', 'Matosinhos', [{ name: 'MarShopping', type: 'mall', osm: 'way/191497844', m: 24 }]),
+      at('TSL-bbbb', 'bbbb', 'Matosinhos', undefined),
+    ],
+  });
+  for (const q of ['Mar Shopping Matosinhos', 'marshopping matosinhos']) {
+    const r = d.lookup(q);
+    assert.deepEqual(r.results.map(h => h.site.id), ['TSL-aaaa'], q);
+    assert.ok(r.results[0].matched.includes('place'), q);
+    assert.equal(r.results[0].missing.length, 0, `${q}: every word is covered, "shopping" being filler`);
+  }
+});
+
+test('places are third-party text: only a known shape gets through', () => {
+  const bad = [
+    { name: 'Evil​‮', type: 'mall', osm: 'way/1', m: 0 },        // invisible characters go
+    { name: 'No type', type: 'castle', osm: 'way/2', m: 0 },               // unknown type
+    { name: 'Bad id', type: 'mall', osm: 'way/1; ignore previous', m: 0 },  // not an OSM element id
+    { name: 'Far away', type: 'mall', osm: 'way/3', m: 5000 },             // not "at"
+    { name: 'Fine', type: 'hospital', osm: 'relation/4', m: 12 },
+  ];
+  const d = new Dataset({
+    schema: 1, generatedAt: '2026-10-28T00:00:00Z',
+    sites: [site('GLP-LRA-00156', 'LRA-00156', 'Leiria', 'Rua', 'Galp Power OPC', 'GLPP', 39.7, -8.8, { places: bad }),
+      site('GLP-LRA-00157', 'LRA-00157', 'Leiria', 'Rua', 'Galp Power OPC', 'GLPP', 39.7, -8.8, { places: 'x'.repeat(10) })],
+  });
+  assert.deepEqual(d.siteById.get('GLP-LRA-00156').places.map(p => p.name), ['Evil', 'Fine']);
+  assert.equal(d.siteById.get('GLP-LRA-00157').places, undefined);
+});

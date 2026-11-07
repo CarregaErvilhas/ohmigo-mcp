@@ -133,12 +133,23 @@ Monday.
   `lookup_charger` searches it and shows it ([01](01-how-it-works.md)).
   `src/clean.js` keeps only the fields the code or a driver uses: `manufacturer`,
   `model` and `payment` stay in the file but never reach an answer.
+- `places`: the named places from OpenStreetMap the site is in or right
+  beside, most important first: `[{ "name": "MarShopping", "type": "mall",
+  "osm": "way/191497844", "m": 24 }]`. `m` is metres to the place's outline
+  (0 = inside). OSM never says which mall a charger belongs to, so
+  nap-dashboard works it out (`scripts/osm_places.py` there: point in polygon,
+  a small radius that depends on the type). That's why a charger can be "at"
+  a mall and actually be in the street beside it, and why the assistant is
+  told to say "at or beside". Optional; `src/clean.js` lists the types and
+  limits it accepts. `lookup_charger` searches the names, so "Mar Shopping"
+  finds the chargers there though none is named so.
 - `schema`: bumped by nap-dashboard when the format changes incompatibly.
   ohmigo refuses a schema it doesn't know, rather than misreading it.
 
 ## Third-party text
 
-Anyone with an OpenStreetMap account can edit what ends up in `osm`, and
+Anyone with an OpenStreetMap account can edit what ends up in `osm` and
+`places`, and
 operators type the NAP's text by hand, so neither is trusted as it stands.
 When a file loads, `cleanSite` (`src/clean.js`) runs before anything reads it:
 free text loses control and format characters and gets a length cap, phones,
