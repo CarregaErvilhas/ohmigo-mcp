@@ -7,6 +7,7 @@
 <meta name="description" content="">
 <!-- seo: canonical, hreflang and Open Graph, filled in by src/site.js -->
 <meta name="theme-color" content="#16a34a">
+<!-- theme: the landing page's theme script (THEME_SCRIPT), put here by src/site.js -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='14' width='44' height='40' rx='14' fill='%2322c55e'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -20,6 +21,11 @@
       --bg: #0d1412; --card: #16221e; --fg: #ecf3ef; --muted: #9fb0a8; --line: #24332d;
       --green: #4ade80; --green-soft: #173726; --green-ink: #bbf7d0; color-scheme: dark;
     }
+  }
+  /* Dark picked with the landing page's theme button, whatever the system says. */
+  :root[data-theme="dark"] {
+    --bg: #0d1412; --card: #16221e; --fg: #ecf3ef; --muted: #9fb0a8; --line: #24332d;
+    --green: #4ade80; --green-soft: #173726; --green-ink: #bbf7d0; color-scheme: dark;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.6 var(--font); overflow-x: hidden; }
@@ -46,6 +52,7 @@
     text-decoration: none; background: var(--green); color: #fff; }
   .cta a.sec { background: var(--card); color: var(--fg); border: 1px solid var(--line); }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cta a:not(.sec) { color: #052e16; } }
+  :root[data-theme="dark"] .cta a:not(.sec) { color: #052e16; }
   footer { padding: 28px 0 48px; font-size: 15px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 32px; }
   footer a { margin-right: 14px; }
 </style>

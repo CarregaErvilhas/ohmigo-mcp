@@ -11,10 +11,11 @@
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <script>
-// Runs before the first paint. A theme picked with the header button wins
-// over the system's; with none saved, the CSS follows prefers-color-scheme.
-// The `js` class shows the parts only a script can run (the theme button,
-// the topic buttons) and hides what the script fades in.
+// Runs before the first paint, here and, copied by src/site.js, on the
+// privacy, support and terms pages. A theme picked with this page's header
+// button wins over the system's; with none saved, the CSS follows
+// prefers-color-scheme. The `js` class shows the parts only a script can run
+// (the theme button, the topic buttons) and hides what the script fades in.
 document.documentElement.classList.add('js');
 try {
   const t = localStorage.getItem('ohmigo.theme');
@@ -1057,8 +1058,8 @@ try {
   // The server renders each language at its own URL (/ and /en, see
   // src/site.js), so search engines index both. A visitor who picked English
   // before is sent there from /; nobody else is redirected (a crawler must
-  // see the page it asked for). The privacy and support pages send no script,
-  // so their home links carry the language being read (?lang=) and it is
+  // see the page it asked for). The privacy, support and terms pages run no
+  // script but the theme one, so their home links carry the language being read (?lang=) and it is
   // saved here: a choice made on those pages isn't undone by an older one.
   const store = {
     get() { try { return localStorage.getItem('ohmigo.lang'); } catch { return null; } },

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { CTA, LEGAL, LEGAL_PAGES, PAGES, SITEMAP } from '../src/site.js';
+import { CTA, LEGAL, LEGAL_PAGES, PAGES, SITEMAP, THEME_SCRIPT } from '../src/site.js';
 
 const html = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
 const S = JSON.parse(html.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
@@ -157,7 +157,9 @@ for (const { path, twin, page, lang, html, locale } of URLS) {
       assert.ok(text.includes(plain(t[k])), `${k} in place`);
       if (t[k] !== other[k]) assert.ok(!text.includes(plain(other[k])), `${k} of the other language`);
     }
-    assert.doesNotMatch(h, /<script/, 'nothing left for a script to do');
+    // The theme script and nothing else: the text is already in place.
+    assert.deepEqual(h.match(/<script\b[^>]*>[\s\S]*?<\/script>/g), [THEME_SCRIPT], 'only the theme script');
+    assert.ok(h.indexOf(THEME_SCRIPT) < h.indexOf('<style>'), 'the theme script runs before the page is styled');
     assert.doesNotMatch(h, /data-i="[^"]+"><\//, 'no element left empty');
     assert.doesNotMatch(h, /<!-- /, 'no source comment sent');
   });

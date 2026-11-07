@@ -36,8 +36,8 @@ tips and guide topics restate what the Voltaria skills say, so check them when
 a skill changes. The theme button in the header saves `ohmigo.theme` in
 `localStorage`; a small script in `<head>` applies it before the first paint,
 and with nothing saved the page follows the system's light or dark setting.
-The privacy, support and terms pages have no script, so they always follow the
-system. A browser that opens `/mcp` is sent to
+The privacy, support and terms pages get the same `<head>` script, so the
+choice holds there too. A browser that opens `/mcp` is sent to
 `/#instalar`, since people paste the address there by mistake; MCP clients
 never ask for HTML, so they're unaffected.
 
@@ -46,8 +46,9 @@ terms pages that the assistants' directories ask for, in Portuguese;
 `GET /privacy`, `GET /support` and `GET /terms` are their English copies. They work the same way: one source,
 `site/legal.html`, with the same two-language strings block and parity test, and
 `src/site.js` renders one copy per URL at boot (`LEGAL` lists each page's
-sections). These pages send no script, and their CSP says so: the language
-buttons are plain links, an old `?lang=` link redirects too, and the links home
+sections). Their only script is the landing page's theme script
+(`THEME_SCRIPT` in `src/site.js`), and their CSP allows that one by its hash:
+the language buttons are plain links, an old `?lang=` link redirects too, and the links home
 carry `?lang=` so the landing page's script saves the language being read. If
 the server starts keeping or sending
 anything new about the user, update the privacy page first.

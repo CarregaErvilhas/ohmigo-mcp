@@ -14,7 +14,9 @@
 //
 // site/legal.html works the same way for the privacy, support and terms pages, one
 // source for six URLs. There the strings block stays behind: with the text in
-// place a browser has nothing left to do, so those pages send no script.
+// place a browser has nothing left to do. The one script those pages send is
+// the landing page's <head> script (THEME_SCRIPT), so a theme picked there
+// applies here too.
 
 import { readFileSync } from 'node:fs';
 import { REPO_URL } from './version.js';
@@ -26,6 +28,10 @@ const HTML_LANG = { pt: 'pt-PT', en: 'en' };
 
 const source = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
 const S = JSON.parse(source.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
+// The first script in the landing page's <head>: it applies the saved theme
+// before the first paint. Copied as is into the legal pages, so the two can't
+// drift; the server allows it there by its hash, as on the landing page.
+export const THEME_SCRIPT = source.match(/<head>[\s\S]*?(<script>[\s\S]*?<\/script>)/)[1];
 
 // Each legal page's sections, in order: [heading key, then paragraph keys].
 // An array of keys is a bulleted list; 'CTA' is the row of contact buttons.
@@ -170,6 +176,7 @@ export function renderLegal(page, lang) {
   const title = text(t[`${page}.title`]), desc = text(t[`${page}.desc`]);
   const html = legalSource
     .replace(/<!-- strings:[\s\S]*?<\/script>\n/, '')
+    .replace(/<!-- theme:[^>]*-->/, () => THEME_SCRIPT)
     .replace(/<html lang="[^"]*">/, `<html lang="${HTML_LANG[lang]}">`)
     .replace(/<title>[^<]*<\/title>/, () => `<title>${attr(title)}</title>`)
     .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${attr(desc)}">`)
@@ -179,7 +186,7 @@ export function renderLegal(page, lang) {
     .replace('<div id="body"></div>', () => `<div id="body">${sections.map(s => section(s, t)).join('')}</div>`)
     .replace(/(<(\w+)\b[^>]*\bdata-i="([^"]+)"[^>]*>)(<\/\2>)/g, (m, open, tag, key, close) => open + (t[key] ?? '') + close);
   const linked = lang === 'en' ? englishLegalLinks(html) : html;
-  // These pages have no script to save a language choice, so the way home
+  // These pages have no script that saves a language choice, so the way home
   // carries it and the landing page's script saves it (site/index.html).
   const home = `${PATHS[lang]}?lang=${lang}`;
   // Plain links, one per language: the page itself and its twin.

@@ -128,13 +128,6 @@ const SITE_HEADERS = {
   'cross-origin-resource-policy': 'same-origin',
   'content-security-policy': csp("'unsafe-inline'"),
 };
-// Privacy and support, also rendered at boot, one copy per URL (src/site.js).
-// Directories and assistants' review forms want a stable URL for each. These
-// pages send no script, so their policy doesn't allow one.
-const LEGAL_HEADERS = {
-  ...SITE_HEADERS,
-  'content-security-policy': SITE_HEADERS['content-security-policy'].replace("script-src 'unsafe-inline'", "script-src 'none'"),
-};
 
 const send = (res, status, body, type = 'application/json') => {
   res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' });
@@ -172,6 +165,11 @@ function csp(scriptSrc) {
 const inlineScripts = html => [...new Set([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .map(m => `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`))].join(' ');
 const LANDING_HEADERS = { ...SITE_HEADERS, 'content-security-policy': csp(inlineScripts(Object.values(PAGES).join(''))) };
+// Privacy, support and terms, also rendered at boot, one copy per URL
+// (src/site.js). Directories and assistants' review forms want a stable URL
+// for each. Their only script is the landing page's theme script, allowed by
+// its hash.
+const LEGAL_HEADERS = { ...SITE_HEADERS, 'content-security-policy': csp(inlineScripts(Object.values(LEGAL_PAGES).join(''))) };
 const DADOS_PAGE_HEADERS = { ...SITE_HEADERS, ...DADOS_CACHE, 'content-security-policy': csp(inlineScripts(DADOS.toString())) };
 
 // RFC 9116. Expires is required and a fixed date would rot, so each answer

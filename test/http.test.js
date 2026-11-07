@@ -641,7 +641,7 @@ test('http: privacy, support and terms, one rendered copy per URL', async () => 
     assert.ok(html.includes(`<html lang="${lang}">`), path);
     assert.ok(html.includes(`>${h1}</h1>`), path);
     assert.ok(html.includes(`<link rel="canonical" href="https://ohmigo.ocarroeletrico.com${path}">`), path);
-    assert.match(r.headers.get('content-security-policy'), /script-src 'none'/, path);
+    assert.match(r.headers.get('content-security-policy'), /script-src 'sha256-[^' ]+'(;|$)/, path);
   }
   // The landing page still runs its own script.
   assert.match((await fetch(`${base}/`)).headers.get('content-security-policy'), /script-src 'sha256-/);
