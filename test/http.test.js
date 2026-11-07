@@ -104,8 +104,9 @@ const get = target => rawRequest(`GET ${target} HTTP/1.1\r\nHost: x\r\nConnectio
 
 test('http: every tool is read-only and talks to the outside world', async () => {
   const { tools } = await call('tools/list');
-  assert.equal(tools.length, 6);
-  for (const t of tools) assert.deepEqual(t.annotations, { readOnlyHint: true, openWorldHint: true }, t.name);
+  assert.equal(tools.length, 7);
+  // voltaria reads files shipped with the server: nothing open-world about it.
+  for (const t of tools) assert.deepEqual(t.annotations, { readOnlyHint: true, openWorldHint: t.name !== 'voltaria' }, t.name);
 });
 
 // The tool list is in the assistant's context in every conversation, used or
@@ -116,7 +117,7 @@ test('http: every tool is read-only and talks to the outside world', async () =>
 // (a DPC's charger, priced with no site, instead of a seventh tool) from 21 300;
 // the presentation rules, moved out of INSTRUCTIONS (cut at 2048 by Claude
 // Code) onto both pricing tools, from 21 900.
-const TOOLS_MAX_CHARS = 25_000;
+const TOOLS_MAX_CHARS = 26_000;
 
 test('http: the tool list stays small, and every tool says what it is for so tool search finds it', async () => {
   const { tools } = await call('tools/list');

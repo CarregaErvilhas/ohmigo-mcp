@@ -38,6 +38,7 @@ import { SITE_URL } from './site.js';
 import { slim } from './slim.js';
 import { REPO_URL, VERSION } from './version.js';
 import { viewHtml } from './view.js';
+import { getFacts, getGuide, topics, VOLTARIA_AVAILABLE } from './voltaria.js';
 
 const VIEW_URI = 'ui://ohmigo/results.html';
 
@@ -972,6 +973,28 @@ export function createServer(getDataset, live) {
   }, async () => ({
     contents: [{ uri: VIEW_URI, mimeType: RESOURCE_MIME_TYPE, text: await viewHtml(), _meta: { ui: { prefersBorder: true } } }],
   }));
+
+  // Voltaria: pt-PT EV guides and dated facts from the `voltaria/` submodule.
+  // One tool with an argument, not two, to stay inside TOOLS_MAX.
+  if (VOLTARIA_AVAILABLE) server.registerTool('voltaria', {
+    title: 'EV knowledge base (Portugal)',
+    description: 'EV guides and dated facts for Portugal, pt-PT (home charging, incentives, tariffs, batteries, fleets). No topic: list topics. Topic: its guide. Topic + query: matching dated facts with source and whether they ended. Not for prices of a charge.',
+    inputSchema: z.object({
+      topic: z.string().max(60).optional(),
+      query: z.string().max(100).optional().describe('Words all present in a fact'),
+      ...Lang,
+    }),
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async (a, ctx) => {
+    const lang = langOf(a, ctx);
+    try {
+      if (!a.topic) return ok(topics(), 'Voltaria topics.');
+      if (a.query) { const facts = getFacts(a.topic, a.query, lang); return ok({ facts }, `${facts.length} facts for ${a.topic}.`); }
+      return ok(getGuide(a.topic), `Guide ${a.topic}.`);
+    } catch (e) {
+      return err(e.message, 'voltaria', topics());
+    }
+  });
 
   return server;
 }

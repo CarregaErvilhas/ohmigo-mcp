@@ -1295,6 +1295,72 @@
           "If the reply quotes a price of kind \"direct\" whose source is the blog (source \"custofinal\"), does it credit the blog (Alexandre Moleiro, or Preços (finais) kWh Portugal)? Answer n/a if it quotes none."
         ]
       }
+    },
+    {
+      "id": "voltaria-incentives",
+      "why": "Rules and incentives come from the voltaria tool (topic, then its dated facts), not from the model's memory.",
+      "message": "Que apoios existem em Portugal para comprar um carro elétrico novo?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "voltaria",
+            "args": {
+              "topic": "incentivos",
+              "lang": "^pt"
+            },
+            "ok": true
+          }
+        ],
+        "noCalls": [
+          {
+            "tool": "estimate_charging_cost|find_cheapest_charging"
+          }
+        ],
+        "judge": [
+          "Does the answer say where its incentive figures come from, or when they were checked, or that they may have ended?"
+        ]
+      }
+    },
+    {
+      "id": "voltaria-wallbox",
+      "why": "A how-to about home charging goes to voltaria with a topic about home charging or the electrical installation.",
+      "message": "Moro num prédio com garagem e quero pôr um wallbox. O que preciso de tratar com o condomínio e com a instalação?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "voltaria",
+            "args": {
+              "topic": "carregar-em-casa|instalacao-eletrica"
+            },
+            "ok": true
+          }
+        ],
+        "noCalls": [
+          {
+            "tool": "estimate_charging_cost|find_cheapest_charging"
+          }
+        ]
+      }
+    },
+    {
+      "id": "price-not-voltaria",
+      "why": "The price of one charge comes from the pricing tools; voltaria is for guides and rules, not prices.",
+      "message": "Quanto me custa carregar no Continente Bom Dia de Leiria, na Rua Vale de Lobos? Tenho um Renault Zoe ZE50, estou com 30% e quero ir até aos 80%.",
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "site": "continente|cnt-|9648|vale de lobos"
+            }
+          }
+        ],
+        "noCalls": [
+          {
+            "tool": "voltaria"
+          }
+        ]
+      }
     }
   ]
 }

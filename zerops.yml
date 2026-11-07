@@ -16,6 +16,7 @@ zerops:
         - ui
         - site
         - offers
+        - voltaria
         - node_modules
         - package.json
     deploy:

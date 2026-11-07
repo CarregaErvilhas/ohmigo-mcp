@@ -16,7 +16,7 @@ const CUT = 2048;
 const HEAD = 512;
 // Adding a tool is a decision, not a fix: first try an argument on one that
 // exists (see "private" on estimate_charging_cost).
-const TOOLS_MAX = 6;
+const TOOLS_MAX = 7;
 
 // tools/list straight from createServer, over an in-memory pair: no HTTP, no
 // ceme-v2, nothing priced.
