@@ -140,6 +140,8 @@ function cleanPoint(p, report) {
     if (saneOsmNumber(k, p.osm[k], p[k])) osm[k] = p.osm[k];
     else count(report, `ignored point.osm.${k}`);
   }
+  // cable: booleano (o OSM distingue type2 com cabo de type2 sem cabo).
+  if (typeof p.osm.cable === 'boolean') osm.cable = p.osm.cable;
   if (Object.keys(osm).length) p.osm = osm;
   else delete p.osm;
 }

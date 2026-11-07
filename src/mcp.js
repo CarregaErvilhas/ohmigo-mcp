@@ -268,7 +268,8 @@ const socketFields = (p, carVolts) => ({
   ...forCarFields(p, carVolts),
   volts: p.v ?? undefined, ...(p.napV !== undefined && { napVolts: p.napV }),
   amps: p.a ?? undefined, ...(p.napA !== undefined && { napAmps: p.napA }),
-  cable: p.cable ?? undefined,
+  cable: p.cable ?? undefined, ...(p.napCable !== undefined && { napCable: p.napCable }),
+  ...(p.cableSource && { cableSource: p.cableSource }),
 });
 // Said once per answer when a socket shown has kwForCar or kwAt400V.
 const kwForCarNote = (points, a, t) => points.some(p => kwForCar(p, a.car_voltage ?? COMMON_CAR_VOLTS)?.limited)
@@ -289,6 +290,10 @@ function siteFacts(site, t, at = new Date()) {
   const notes = [];
   if (hours.disagree) notes.push(t('note.hoursDisagree', { site: site.id, nap: hours.nap, osm: hours.osm }));
   if (card.disagree) notes.push(t('note.cardDisagree', { site: site.id, napYes: card.nap }));
+  if (site.points?.some(p => p.napCable !== undefined)) notes.push(t('note.cableDisagree', { site: site.id }));
+  const normPhone = x => String(x).replace(/\D/g, '').replace(/^351/, '').slice(-9);
+  if (site.phone && site.osm?.phone && normPhone(site.phone) !== normPhone(site.osm.phone)) notes.push(t('note.phoneDisagree', { site: site.id, nap: site.phone, osm: site.osm.phone }));
+  if (site.osm?.capacity != null && site.points?.length && site.osm.capacity !== site.points.length) notes.push(t('note.capacityDisagree', { site: site.id, nap: site.points.length, osm: site.osm.capacity }));
   if (site.operatorInferred) notes.push(t('assume.operatorInferred', { operator: site.operator }));
   const phone = site.phone ?? site.osm?.phone;
   return {

@@ -191,6 +191,9 @@ export const MESSAGES = {
     'note.cardDisagree': ({ site, napYes }) => napYes
       ? `${site}: the NAP lists bank card payment, but OpenStreetMap says there's no card terminal; tell the user to check on site.`
       : `${site}: OpenStreetMap says a bank card works here, but the NAP doesn't list it; tell the user to check on site.`,
+    'note.cableDisagree': ({ site }) => `${site}: the NAP and OpenStreetMap disagree on whether the Type 2 socket has a fixed cable or you bring your own; tell the user to check on site before relying on it.`,
+    'note.phoneDisagree': ({ site, nap, osm }) => `${site}: the support phone differs (NAP: ${nap}; OpenStreetMap: ${osm}); tell the user to try both if the charger won't start.`,
+    'note.capacityDisagree': ({ site, nap, osm }) => `${site}: OpenStreetMap says ${osm} simultaneous charging spots, but the NAP lists ${nap} sockets; the count may be off, tell the user not to count on availability.`,
     'assume.osmKw': ({ kw, nap }) => `charger power ${fmt('en', kw, 1)} kW as mapped on OpenStreetMap (the NAP declares ${nap == null ? 'none' : `${fmt('en', nap, 1)} kW`})`,
     'assume.operatorInferred': ({ operator }) => `where the NAP names no operator (operatorInferred), ${operator} is inferred from the charger's id prefix, shared with that operator's named chargers; its prices, notes and promotions are assumed to apply there`,
     'note.operatorsInferred': ({ operator, n }) => `${n} of ${operator}'s sites (inferredSites) ${n === 1 ? 'has' : 'have'} no operator on the NAP and ${n === 1 ? 'is' : 'are'} attributed by id prefix`,
@@ -388,6 +391,9 @@ export const MESSAGES = {
     'note.cardDisagree': ({ site, napYes }) => napYes
       ? `${site}: o PAN indica pagamento com cartão bancário, mas o OpenStreetMap diz que não há terminal; diz ao utilizador para confirmar no local.`
       : `${site}: o OpenStreetMap diz que dá para pagar com cartão bancário, mas o PAN não o indica; diz ao utilizador para confirmar no local.`,
+    'note.cableDisagree': ({ site }) => `${site}: o PAN e o OpenStreetMap não batem certo sobre se a tomada Tipo 2 tem cabo preso ou se é preciso levar o teu; diz ao utilizador para confirmar no local antes de contar com isso.`,
+    'note.phoneDisagree': ({ site, nap, osm }) => `${site}: o telefone de apoio difere (PAN: ${nap}; OpenStreetMap: ${osm}); diz ao utilizador para tentar os dois se o posto não arrancar.`,
+    'note.capacityDisagree': ({ site, nap, osm }) => `${site}: o OpenStreetMap diz ${osm} lugares a carregar em simultâneo, mas o PAN lista ${nap} tomadas; a contagem pode estar errada, diz ao utilizador para não contar com a disponibilidade.`,
     'assume.osmKw': ({ kw, nap }) => `potência do posto ${fmt('pt', kw, 1)} kW, como está no OpenStreetMap (o PAN declara ${nap == null ? 'nenhuma' : `${fmt('pt', nap, 1)} kW`})`,
     'assume.operatorInferred': ({ operator }) => `onde o PAN não diz o operador (operatorInferred), ${operator} é deduzido do prefixo do id do posto, igual ao dos postos com esse operador; assume-se que os seus preços, notas e promoções se aplicam lá`,
     'note.operatorsInferred': ({ operator, n }) => `${n} dos locais de ${operator} (inferredSites) ${n === 1 ? 'não tem operador no PAN e foi atribuído' : 'não têm operador no PAN e foram atribuídos'} pelo prefixo do id`,
