@@ -1343,6 +1343,27 @@
       }
     },
     {
+      "id": "voltaria-office-plug",
+      "why": "A plain-language question about CEE blue/red sockets at the office has no price and no charger to look up, but the rules are in voltaria; the assistant must not answer from memory.",
+      "message": "devo usar uma ficha vermelha ou azul para carregar o meu carro no escritorio?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "voltaria",
+            "args": {
+              "topic": "carregar-em-casa|instalacao-eletrica|carregamento-publico"
+            },
+            "ok": true
+          }
+        ],
+        "noCalls": [
+          {
+            "tool": "estimate_charging_cost|find_cheapest_charging"
+          }
+        ]
+      }
+    },
+    {
       "id": "price-not-voltaria",
       "why": "The price of one charge comes from the pricing tools; voltaria is for guides and rules, not prices.",
       "message": "Quanto me custa carregar no Continente Bom Dia de Leiria, na Rua Vale de Lobos? Tenho um Renault Zoe ZE50, estou com 30% e quero ir até aos 80%.",

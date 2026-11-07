@@ -978,7 +978,7 @@ export function createServer(getDataset, live) {
   // One tool with an argument, not two, to stay inside TOOLS_MAX.
   if (VOLTARIA_AVAILABLE) server.registerTool('voltaria', {
     title: 'EV knowledge base (Portugal)',
-    description: 'EV guides and dated facts for Portugal, pt-PT (home charging, incentives, tariffs, batteries, fleets). No topic: list topics. Topic: its guide. Topic + query: matching dated facts with source and whether they ended. Not for prices of a charge.',
+    description: 'Portugal EV rules and know-how (pt-PT), not prices. Use it, not memory, for: plugs and sockets (CEE, Schuko, Type 2), wallbox vs socket, charging at home, condo or office, electrical installation (breaker, RCD, cable), what a condo can refuse, grants and tax, company cars, battery care, range, public charging and payment, MOBI.E, DL 93/2025, sub-CPE, AFIR/NAP. No topic: list topics. Topic: its guide. Topic + query: dated facts. For the cost of a charge use estimate_charging_cost.',
     inputSchema: z.object({
       topic: z.string().max(60).optional(),
       query: z.string().max(100).optional().describe('Words all present in a fact'),
