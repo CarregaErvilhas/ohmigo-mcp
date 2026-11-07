@@ -105,8 +105,8 @@ const get = target => rawRequest(`GET ${target} HTTP/1.1\r\nHost: x\r\nConnectio
 test('http: every tool is read-only and talks to the outside world', async () => {
   const { tools } = await call('tools/list');
   assert.equal(tools.length, 7);
-  // voltaria reads files shipped with the server: nothing open-world about it.
-  for (const t of tools) assert.deepEqual(t.annotations, { readOnlyHint: true, openWorldHint: t.name !== 'voltaria' }, t.name);
+  // ev_rules_portugal reads Voltaria's files shipped with the server: nothing open-world about it.
+  for (const t of tools) assert.deepEqual(t.annotations, { readOnlyHint: true, openWorldHint: t.name !== 'ev_rules_portugal' }, t.name);
 });
 
 // The tool list is in the assistant's context in every conversation, used or

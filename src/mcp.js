@@ -56,13 +56,13 @@ const VIEW_URI = 'ui://ohmigo/results.html';
 // itself (assumptions, notes, each option's note), which every client passes
 // on and costs nothing when it doesn't apply.
 export const INSTRUCTIONS_MAX = 2048;
-export const INSTRUCTIONS = `EV charging in Portugal: prices every public charger on the NAP ("PAN" in Portuguese), MOBI.E (CEME energy + operator (OPC) fee + taxes) and outside it (Tesla, Continente...), finds the cheapest; voltaria has the rules.
+export const INSTRUCTIONS = `EV charging in Portugal: prices every public charger on the NAP ("PAN" in pt), MOBI.E (CEME energy + operator (OPC) fee + taxes) and outside it (Tesla, Continente...), finds the cheapest; ev_rules_portugal has the rules.
 
 Language: answer in the user's language, pass it as lang on every call; text comes in pt or en, translate for others.
 
 Who's who on MOBI.E: the CEME sells the energy (the user's card/app). The OPC runs a PUBLIC charger and bills a fee on top. A DPC holds a PRIVATE charger (home wallbox, condo garage, workplace): no OPC fee, not in the NAP, never search for it; price it with estimate_charging_cost private.
 
-Not a price? EV rules and know-how (home, condo, workplace, what a condo can refuse, installation, plugs, grants, tax, fleets, batteries) come from voltaria, not memory or the web (pre-DL 93/2025). Tools shown by name only: load it.
+Not a price? EV rules and know-how (home, condo, what a condo can refuse, installation, plugs, grants, tax, fleets, batteries) come from ev_rules_portugal, not memory or the web (pre-DL 93/2025). Tools shown by name only: load it.
 
 Never ask for a charger id: pass the user's words (operator + town, shop, address, sticker code) to lookup_charger, then its siteId as site.
 Always say which plug to use ("plug") and, on MOBI.E, if it's BT or MT ("tar"; "level" is the grid connection, never the socket's volts).
@@ -977,8 +977,10 @@ export function createServer(getDataset, live) {
   }));
 
   // Voltaria: pt-PT EV guides and dated facts from the `voltaria/` submodule.
-  // One tool with an argument, not two, to stay inside TOOLS_MAX.
-  if (VOLTARIA_AVAILABLE) server.registerTool('voltaria', {
+  // One tool with an argument, not two, to stay inside TOOLS_MAX. Named for
+  // what it answers, not for the project: clients that defer tools (Claude
+  // Code's tool search) show only the name until the tool is loaded.
+  if (VOLTARIA_AVAILABLE) server.registerTool('ev_rules_portugal', {
     title: 'EV knowledge base (Portugal)',
     description: 'Portugal EV rules and know-how (pt-PT), not prices. Use it, not memory, for: plugs and sockets (CEE, Schuko, Type 2), wallbox vs socket, charging at home, condo or office, electrical installation (breaker, RCD, cable), what a condo can refuse, grants and tax, company cars, battery care, range, public charging and payment, MOBI.E, DL 93/2025, sub-CPE, AFIR/NAP. In pt: condomínio, garagem, tomada, carregador, instalação, apoios, IVA. No topic: list topics. Topic: its guide. Topic + query: dated facts. For the cost of a charge use estimate_charging_cost.',
     inputSchema: z.object({
@@ -994,7 +996,7 @@ export function createServer(getDataset, live) {
       if (a.query) { const facts = getFacts(a.topic, a.query, lang); return ok({ facts }, `${facts.length} facts for ${a.topic}.`); }
       return ok(getGuide(a.topic), `Guide ${a.topic}.`);
     } catch (e) {
-      return err(e.message, 'voltaria', topics());
+      return err(e.message, 'ev_rules_portugal', topics());
     }
   });
 

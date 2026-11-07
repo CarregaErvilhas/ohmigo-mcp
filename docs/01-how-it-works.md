@@ -78,7 +78,7 @@ it applies:
 
 - **`INSTRUCTIONS`**: only what holds across tools (who's who on MOBI.E, never
   ask for a charger id, what to look up yourself), plus which questions go to
-  `voltaria`. That routing has to live here: clients that load tools on demand
+  `ev_rules_portugal` (the Voltaria guides). That routing has to live here: clients that load tools on demand
   (Claude Code's tool search) show only tool names until one is loaded, and
   the instructions are the one text they always show. `INSTRUCTIONS_MAX` is its
   budget, with the essentials in the first 512 characters; `test/budget.test.js`
