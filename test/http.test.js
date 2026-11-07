@@ -608,7 +608,7 @@ test('http: with ceme-v2 down, the other ways to pay still come back, flagged', 
 test('http: the landing page is rendered in each language at its own URL, for crawlers', async () => {
   const pt = await (await fetch(`${base}/`)).text();
   assert.match(pt, /<html lang="pt-PT">/);
-  assert.match(pt, /<h1 [^>]*data-i="hero.title">Pergunta ao teu assistente/);
+  assert.match(pt, /<h1 [^>]*data-i="hero.title">Do preço do carregamento/);
   assert.match(pt, /<link rel="canonical" href="https:\/\/ohmigo\.ocarroeletrico\.com\/">/);
   assert.match(pt, /hreflang="en" href="https:\/\/ohmigo\.ocarroeletrico\.com\/en"/);
   assert.match(pt, /og:image" content="https:\/\/ohmigo\.ocarroeletrico\.com\/og\.png"/);

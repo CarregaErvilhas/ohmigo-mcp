@@ -55,6 +55,36 @@ test('site: llms.txt follows SITE_URL, as the sitemap does', () => {
   assert.doesNotMatch(txt, /ohmigo\.ocarroeletrico\.com/);
 });
 
+test('site: every hero topic button has its question, answer and source in both languages', () => {
+  const topics = [...html.matchAll(/data-topic="([^"]+)"/g)].map(m => m[1]);
+  assert.ok(topics.length >= 2);
+  for (const t of topics) for (const part of ['label', 'q', 'a', 'src']) for (const l of ['pt', 'en']) {
+    assert.ok(S[l][`topic.${t}.${part}`], `missing ${l} topic.${t}.${part}`);
+  }
+});
+
+// The script in <head>, run against a fake browser: what it does to <html>
+// before the first paint, for what is saved.
+function headScript(saved, { throws = false } = {}) {
+  const code = html.match(/<head>[\s\S]*?<script>([\s\S]*?)<\/script>/)[1];
+  const root = { dataset: {}, classes: new Set(), classList: { add: c => root.classes.add(c) } };
+  runInNewContext(code, {
+    document: { documentElement: root },
+    localStorage: { getItem: () => { if (throws) throw new Error('blocked'); return saved; } },
+  });
+  return { theme: root.dataset.theme ?? null, js: root.classes.has('js') };
+}
+
+test('site: a theme picked before applies before the first paint, and nothing else does', () => {
+  assert.deepEqual(headScript('dark'), { theme: 'dark', js: true });
+  assert.deepEqual(headScript('light'), { theme: 'light', js: true });
+  // Nothing saved, or something we never wrote: the system decides (the CSS).
+  assert.deepEqual(headScript(null), { theme: null, js: true });
+  assert.deepEqual(headScript('sepia'), { theme: null, js: true });
+  // Storage blocked (private mode, cookies off): the page still loads.
+  assert.deepEqual(headScript('dark', { throws: true }), { theme: null, js: true });
+});
+
 test('site: every data-i key has a string', () => {
   const used = new Set([...html.matchAll(/data-i="([^"]+)"/g)].map(m => m[1]));
   for (const k of used) assert.ok(k in S.pt, `missing ${k}`);

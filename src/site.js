@@ -207,7 +207,7 @@ ${[PATHS, ...Object.values(LEGAL).map(p => p.paths)].flatMap(paths => Object.val
 // read by models, not by the people the two-language pages are for.
 export const LLMS_TXT = `# ohmigo
 
-> ohmigo is a free MCP server that gives AI assistants the prices at every public EV charger in Portugal published on the National Access Point (NAP), MOBI.E and the networks outside it. It estimates what a charging session costs for each way to pay and whether the charger is available now. No account, no sign-up, no authentication. All prices are estimates.
+> ohmigo is a free MCP server that gives AI assistants the prices at every public EV charger in Portugal published on the National Access Point (NAP), MOBI.E and the networks outside it. It estimates what a charging session costs for each way to pay and whether the charger is available now. It also answers EV rules and know-how for Portugal (charging at home and in a condominium, the electrical installation, grants and tax, company cars, batteries, public charging, AFIR and Decree-Law 93/2025) from the Voltaria guides (https://github.com/CarregaErvilhas/voltaria, CC BY 4.0), which cite their sources. No account, no sign-up, no authentication. All prices are estimates.
 
 MCP server (Streamable HTTP): ${SITE_URL}/mcp
 

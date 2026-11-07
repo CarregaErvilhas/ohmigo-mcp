@@ -30,7 +30,14 @@ comes from the URL, not from the browser, and an old `?lang=` link redirects to
 the right URL. The flag links go to the other URL; on `/` a browser that picked
 English before is sent to `/en` (the page's script, `localStorage`). The
 sentences live in the `#strings` block at the bottom, both languages with the
-same keys (`test/site.test.js` checks). A browser that opens `/mcp` is sent to
+same keys (`test/site.test.js` checks). The hero's topic buttons swap the
+card's question, answer and source with the `topic.<name>.*` strings. The
+tips and guide topics restate what the Voltaria skills say, so check them when
+a skill changes. The theme button in the header saves `ohmigo.theme` in
+`localStorage`; a small script in `<head>` applies it before the first paint,
+and with nothing saved the page follows the system's light or dark setting.
+The privacy, support and terms pages have no script, so they always follow the
+system. A browser that opens `/mcp` is sent to
 `/#instalar`, since people paste the address there by mistake; MCP clients
 never ask for HTML, so they're unaffected.
 
