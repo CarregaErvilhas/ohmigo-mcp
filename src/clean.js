@@ -168,7 +168,30 @@ export function cleanSite(s, report = {}) {
     if (Object.keys(osm).length) s.osm = osm;
     else delete s.osm;
   }
+  cleanPlaces(s, report);
   for (const p of s.points) cleanPoint(p, report);
+}
+
+// The places a site is at (a shopping centre, a hospital...): OpenStreetMap
+// names, so as open to edits as `osm`. A known set of types, an OSM element id,
+// a distance in metres and a name that fits; anything else is dropped, and
+// a site with no valid place has no `places`.
+const PLACE_TYPES = new Set(['mall', 'hospital', 'university', 'airport', 'stadium', 'retail', 'supermarket', 'parking', 'hotel']);
+const PLACES_MAX = 3;
+const PLACE_DISTANCE_MAX = 1000;
+function cleanPlaces(s, report) {
+  if (s.places == null) return;
+  const out = [];
+  for (const x of Array.isArray(s.places) ? s.places.slice(0, 20) : []) {
+    if (out.length >= PLACES_MAX) break;
+    const name = cleanText(x?.name, NAME_MAX, () => count(report, 'cut places.name'));
+    const ok = name && PLACE_TYPES.has(x.type) && /^(node|way|relation)\/\d{1,12}$/.test(x.osm)
+      && Number.isInteger(x.m) && x.m >= 0 && x.m <= PLACE_DISTANCE_MAX;
+    if (ok) out.push({ name, type: x.type, osm: x.osm, m: x.m });
+    else count(report, 'dropped places');
+  }
+  if (out.length) s.places = out;
+  else delete s.places;
 }
 
 // One line for the log: which limits the data hit, most hit first.

@@ -16,7 +16,10 @@
 // to the charger (false: bring your own). A point's `osm` holds the kW/V/A
 // OpenStreetMap has for that socket where they differ from the NAP's.
 // `osm` is what OpenStreetMap adds about the site (its name, brand, opening
-// hours...), when the community mapped it with the MOBI.E code.
+// hours...), when the community mapped it with the MOBI.E code. `places`:
+// the shopping centres, hospitals, car parks... whose outline holds the site or
+// lies a few metres from it ({ name, type, osm, m }: m = metres to its edge, 0
+// = inside), worked out by nap-dashboard; OSM doesn't say which a charger is at.
 // All of this is third-party text and numbers: see clean.js for what's kept.
 //
 // The sites fit in memory easily, and the linear scan that filters them per

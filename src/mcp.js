@@ -418,6 +418,7 @@ function siteCard(h, live, t, audiences = [], notes = [], carVolts) {
     ...facts,
     payment: site.payment?.length ? site.payment : undefined,
     osm: site.osm,
+    places: site.places,
     sockets: [...groups.values()].sort((a, b) => (b.named ? 1 : 0) - (a.named ? 1 : 0) || (b.kw ?? 0) - (a.kw ?? 0)),
   };
 }
@@ -775,6 +776,7 @@ export function createServer(getDataset, live) {
     }
     if (directionNeeded) notes.push(t('note.direction'));
     notes.push(...voltageNotes(ds, a, t));
+    if (results.some(h => h.matched.includes('place'))) notes.push(t('note.nearPlace'));
     if (results[0].missing?.length) {
       notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
       // Only the town or street matched: the missing words name a place the
@@ -841,7 +843,8 @@ export function createServer(getDataset, live) {
       credit: results.some(r => r.site.osm) ? t('credit.osm') : undefined,
       sites: results.map((r, i) => ({
         siteId: r.site.id, code: r.site.code, operator: r.site.operator, address: r.site.address, city: r.site.city, region: r.site.region,
-        place: r.site.osm?.name ?? r.site.osm?.brand,
+        place: r.site.osm?.name ?? r.site.osm?.brand ?? r.site.places?.[0]?.name,
+        places: r.site.places,
         lat: r.site.lat, lon: r.site.lon, km: rnd(r.km), offRouteKm: rnd(r.offRouteKm), alongKm: rnd(r.alongKm),
         direction: r.direction, otherSide: r.otherSide,
         ...facts[i].facts,

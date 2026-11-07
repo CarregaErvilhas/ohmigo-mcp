@@ -14,7 +14,9 @@
 //   - words: every word of the query has to appear in what we know about the
 //     site: operator, the brand names in offers/networks.json, the site's
 //     name on the NAP ("Auchan Cascais"), OpenStreetMap's
-//     name/brand/operator (the `osm` block nap-dashboard adds), town and
+//     name/brand/operator (the `osm` block nap-dashboard adds), the places it
+//     is at (`places`: the shopping centre or hospital whose polygon holds it,
+//     which nap-dashboard works out because OSM doesn't say), town and
 //     address. "Continente Leiria" = a site whose words include "continente"
 //     AND "leiria". A word matches the start of a site word ("galp" finds
 //     "Galpgeste"), and words of 5+ letters forgive one typo.
@@ -27,6 +29,15 @@ import { NETWORKS } from './promos.js';
 import { fold } from './text.js';
 
 const words = s => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
+
+// Many shopping centres write their name glued ("MarShopping",
+// "NorteShopping", "GaiaShopping") and people type it apart, or the other way
+// round. Keep the glued word and add its parts, split where a capital follows
+// a small letter, so "mar shopping" and "marshopping" both find it.
+const glued = s => {
+  const parts = String(s ?? '').replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2');
+  return parts === s ? s : `${s} ${parts}`;
+};
 
 // Words that say nothing about which charger, in both languages: articles
 // and prepositions, "charger", and the kind of place ("the Galp service area
@@ -133,7 +144,9 @@ export class Index {
         operator: words([site.operator, site.operatorId, ...(brands.get(site.operatorId) || [])].join(' ')),
         // The NAP's own name for the site ("Auchan Cascais").
         name: words(site.name),
-        osm: words([site.osm?.name, site.osm?.brand, site.osm?.operator].join(' ')),
+        osm: words(glued([site.osm?.name, site.osm?.brand, site.osm?.operator].join(' '))),
+        // "Mar Shopping" finds the chargers inside it, though none is named so.
+        place: words(glued((site.places ?? []).map(p => p.name).join(' '))),
         city: words(site.city),
         address: words(site.address),
       };
