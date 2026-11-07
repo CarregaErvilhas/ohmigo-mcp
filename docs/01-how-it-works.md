@@ -77,7 +77,10 @@ instructions short. So you put each piece of guidance in the narrowest place
 it applies:
 
 - **`INSTRUCTIONS`**: only what holds across tools (who's who on MOBI.E, never
-  ask for a charger id, what to look up yourself). `INSTRUCTIONS_MAX` is its
+  ask for a charger id, what to look up yourself), plus which questions go to
+  `ev_rules_portugal` (the Voltaria guides). That routing has to live here: clients that load tools on demand
+  (Claude Code's tool search) show only tool names until one is loaded, and
+  the instructions are the one text they always show. `INSTRUCTIONS_MAX` is its
   budget, with the essentials in the first 512 characters; `test/budget.test.js`
   enforces it and each tool description's 2048. How to present a price lives
   in the two pricing tools' descriptions.

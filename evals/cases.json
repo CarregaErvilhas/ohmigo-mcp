@@ -1298,12 +1298,12 @@
     },
     {
       "id": "voltaria-incentives",
-      "why": "Rules and incentives come from the voltaria tool (topic, then its dated facts), not from the model's memory.",
+      "why": "Rules and incentives come from the ev_rules_portugal tool (Voltaria) (topic, then its dated facts), not from the model's memory.",
       "message": "Que apoios existem em Portugal para comprar um carro elétrico novo?",
       "expect": {
         "calls": [
           {
-            "tool": "voltaria",
+            "tool": "ev_rules_portugal",
             "args": {
               "topic": "incentivos",
               "lang": "^pt"
@@ -1323,12 +1323,12 @@
     },
     {
       "id": "voltaria-wallbox",
-      "why": "A how-to about home charging goes to voltaria with a topic about home charging or the electrical installation.",
+      "why": "A how-to about home charging goes to ev_rules_portugal with a topic about home charging or the electrical installation.",
       "message": "Moro num prédio com garagem e quero pôr um wallbox. O que preciso de tratar com o condomínio e com a instalação?",
       "expect": {
         "calls": [
           {
-            "tool": "voltaria",
+            "tool": "ev_rules_portugal",
             "args": {
               "topic": "carregar-em-casa|instalacao-eletrica"
             },
@@ -1344,12 +1344,12 @@
     },
     {
       "id": "voltaria-office-plug",
-      "why": "A plain-language question about CEE blue/red sockets at the office has no price and no charger to look up, but the rules are in voltaria; the assistant must not answer from memory.",
+      "why": "A plain-language question about CEE blue/red sockets at the office has no price and no charger to look up, but the rules are in ev_rules_portugal; the assistant must not answer from memory.",
       "message": "devo usar uma ficha vermelha ou azul para carregar o meu carro no escritorio?",
       "expect": {
         "calls": [
           {
-            "tool": "voltaria",
+            "tool": "ev_rules_portugal",
             "args": {
               "topic": "carregar-em-casa|instalacao-eletrica|carregamento-publico"
             },
@@ -1364,8 +1364,29 @@
       }
     },
     {
+      "id": "voltaria-condo-refuse",
+      "why": "\"What can my condo refuse?\" is about the law, not a price: the answer is DL 93/2025 art. 23.º in ev_rules_portugal, and memory or the web still give the revoked DL 39/2010 rules (60 days, two thirds, architectural line).",
+      "message": "quais as condiçoes em q o condominio me pode negar a instalaçao de um ponto de carregamento na garagem ?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "ev_rules_portugal",
+            "args": {
+              "topic": "carregar-em-casa|regime-2010"
+            },
+            "ok": true
+          }
+        ],
+        "noCalls": [
+          {
+            "tool": "estimate_charging_cost|find_cheapest_charging|find_chargers|lookup_charger"
+          }
+        ]
+      }
+    },
+    {
       "id": "price-not-voltaria",
-      "why": "The price of one charge comes from the pricing tools; voltaria is for guides and rules, not prices.",
+      "why": "The price of one charge comes from the pricing tools; ev_rules_portugal is for guides and rules, not prices.",
       "message": "Quanto me custa carregar no Continente Bom Dia de Leiria, na Rua Vale de Lobos? Tenho um Renault Zoe ZE50, estou com 30% e quero ir até aos 80%.",
       "expect": {
         "calls": [
@@ -1378,7 +1399,7 @@
         ],
         "noCalls": [
           {
-            "tool": "voltaria"
+            "tool": "ev_rules_portugal"
           }
         ]
       }

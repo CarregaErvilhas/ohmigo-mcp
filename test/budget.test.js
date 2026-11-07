@@ -41,9 +41,9 @@ test('budget: the instructions, QA note included, fit before Claude Code cuts th
   assert.ok(n <= CUT, `${n} > ${CUT} characters: move what one tool needs to its description, and what one result needs to the result`);
 });
 
-test('budget: the first 512 characters say what ohmigo covers, the language rule and who is who', () => {
+test('budget: the first 512 characters say what ohmigo covers (ev_rules_portugal too), the language rule and who is who', () => {
   const head = INSTRUCTIONS.slice(0, HEAD);
-  for (const must of [/Portugal/, /NAP/, /\blang\b/, /user's language/, /\bCEME\b/, /\bOPC\b/, /\bDPC\b/]) assert.match(head, must);
+  for (const must of [/Portugal/, /NAP/, /\blang\b/, /user's language/, /\bCEME\b/, /\bOPC\b/, /\bDPC\b/, /ev_rules_portugal/]) assert.match(head, must);
 });
 
 test('budget: the plug rule stays in the instructions: every tool returns sockets, and users look for a plug', () => {
@@ -62,4 +62,13 @@ test('budget: the presentation rules ride on the pricing tools, where every clie
     const d = tools.find(t => t.name === name).description;
     for (const must of [/"best"/, /adhoc/, /newCustomersOnly/, /audience/, /peak/, /OpenStreetMap/, /live\.fresh/]) assert.match(d, must, `${name} lacks ${must}`);
   }
+});
+
+// Clients that load tools on demand (Claude Code's tool search) show the
+// assistant only tool names until it loads one, which is why the tool is
+// ev_rules_portugal, not "voltaria". The instructions are always shown, so they also carry
+// the routing: a question that isn't a price goes to ev_rules_portugal, not to memory or a web search, which
+// still give the rules of the revoked DL 39/2010.
+test('budget: the instructions send non-price EV questions to ev_rules_portugal, even when tools are deferred', () => {
+  for (const must of [/Not a price\?/, /what a condo can refuse/, /not memory or the web/, /DL 93\/2025/, /by name only: load it/]) assert.match(INSTRUCTIONS, must);
 });

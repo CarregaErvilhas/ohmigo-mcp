@@ -14,7 +14,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { CACHE, ROOT, RUNS, callMatches, checkCase, checkJudge, dated, linkModules, matchValue } from '../evals/lib.mjs';
 
 const { cases } = JSON.parse(readFileSync(new URL('../evals/cases.json', import.meta.url), 'utf8'));
-const TOOLS = ['list_ceme_tariffs', 'lookup_charger', 'find_chargers', 'list_operators', 'find_cheapest_charging', 'estimate_charging_cost', 'voltaria'];
+const TOOLS = ['list_ceme_tariffs', 'lookup_charger', 'find_chargers', 'list_operators', 'find_cheapest_charging', 'estimate_charging_cost', 'ev_rules_portugal'];
 
 test('evals: matchers', () => {
   assert.equal(matchValue(undefined, false), true);
