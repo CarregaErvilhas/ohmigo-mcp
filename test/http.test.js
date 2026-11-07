@@ -296,6 +296,36 @@ test('http: lookup_charger finds a site by its NAP name and tells the driver wha
   assert.ok(d.notes.some(n => /OpenStreetMap/.test(n)));
 });
 
+test('http: find_chargers groups identical sockets and puts free sockets and the NAP price on the site', async () => {
+  const found = (await call('find_chargers', { place: 'Leiria', lang: 'en' })).structuredContent;
+  const fixtureSite = id => JSON.parse(readFileSync(new URL('./fixtures/chargers.json', import.meta.url), 'utf8')).sites.find(s => s.id === id);
+  for (const s of found.sites) {
+    // Grouping loses no socket, and a group of one still names its point.
+    assert.equal(s.points.reduce((n, g) => n + g.count, 0), fixtureSite(s.siteId).points.filter(p => p.connector !== 'CHADEMO').length, s.siteId);
+    for (const g of s.points) {
+      assert.equal(Object.values(g.status).reduce((a, b) => a + b, 0), g.count);
+      assert.equal(g.pointId !== undefined, g.count === 1);
+    }
+  }
+  // Outside MOBI.E the NAP's price is the price: it rides on the site (this
+  // fixture's NAP publishes it without VAT). A MOBI.E site has none: it
+  // depends on the driver's CEME.
+  const cnt = found.sites.find(s => s.siteId === 'CNT-9648PL0001');
+  assert.equal(cnt.napPriceExVat, 0.37);
+  assert.equal(cnt.napPriceWithVat, undefined);
+  assert.equal(found.sites.find(s => s.siteId === 'GLP-LRA-00156').napPriceExVat, undefined);
+});
+
+test('http: lookup_charger says when only the town matched, so a shopping centre is not read as having no charger', async () => {
+  const r = (await call('lookup_charger', { query: 'Atlantico Shopping Matosinhos', lang: 'en' })).structuredContent;
+  assert.ok(r.sites.length > 0);
+  assert.ok(r.sites.every(s => s.missing?.includes('atlantico')));
+  assert.match(r.notes.join('\n'), /Nothing is named "atlantico".*lat\/lon and radius_km 0\.5/s);
+  // A named operator is a real match: no such note.
+  const ok = (await call('lookup_charger', { query: 'Galp Leiria', lang: 'en' })).structuredContent;
+  assert.ok(!(ok.notes ?? []).some(n => /Nothing is named/.test(n)));
+});
+
 test('http: find_chargers filters by bank card, fixed cable and opening hours', async () => {
   const card = (await call('find_chargers', { place: 'Leiria', card_payment: true })).structuredContent;
   assert.deepEqual(card.sites.map(s => s.siteId).sort(), ['CNT-9648PR0002', 'GLP-LRA-00156']);

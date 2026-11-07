@@ -190,6 +190,17 @@ Mealhada", "the Lidl in Coimbra", or read the code off the sticker
   Mealhada" lists the IONITY sites nearest Mealhada when there's none in it.
   When no site has every word, each result says which words it lacks
   (`missing`), and the assistant is told not to pass it off as the one.
+  When the sites that came back matched only the town or street, the missing
+  words name a place the data doesn't know (a shopping centre, a car park),
+  and the assistant is told so, and to search by lat/lon or ask for the
+  address instead of saying the place has no charger. A place is findable
+  by name only when OpenStreetMap carries its name on the charger.
+
+`find_chargers` lists many sites, so it groups a site's identical sockets
+(one entry with a `count` and a live `status` count) and puts at a glance on
+each site the sockets free now (`available`, `total`) and, for networks
+outside MOBI.E (Tesla...), the NAP price (`napPriceWithVat` / `napPriceExVat`).
+MOBI.E sites carry no price there: it depends on the driver's CEME.
 
 `estimate_charging_cost` takes the same text as `site`. Several NAP sites in
 one spot (a motorway service area often has one per charger) are one place to

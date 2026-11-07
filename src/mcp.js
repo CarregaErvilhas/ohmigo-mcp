@@ -422,6 +422,56 @@ function siteCard(h, live, t, audiences = [], notes = [], carVolts) {
   };
 }
 
+// find_chargers lists many sites, so a site's sockets are grouped like
+// lookup_charger does: identical sockets (power, plug, fee class, payment) are
+// one entry with a `count` and a live `status` count per state, instead of one
+// entry per socket (a Tesla hub with 20 sockets was 20 near-identical rows, each
+// with a UUID). A group of one keeps its `pointId`, so a socket the user picks
+// can still be priced; for bigger groups the siteId is enough.
+function groupPoints(r, live, carVolts, t) {
+  const groups = new Map();
+  for (const p of r.points) {
+    const row = { ...socketFields(p, carVolts), ...plugFields(p, t), regime: p.regime, adHocPayment: !!p.opc?.AD_HOC_PAYMENT };
+    const key = JSON.stringify(row);
+    if (!groups.has(key)) groups.set(key, { row, count: 0, status: {}, ids: [] });
+    const g = groups.get(key);
+    const st = live.get(r.site.id, p.id)?.status ?? 'unknown';
+    g.count++;
+    g.status[st] = (g.status[st] || 0) + 1;
+    g.ids.push(`${r.site.id}/${p.id}`);
+  }
+  return [...groups.values()].map(({ row, count, status, ids }) => ({ ...row, count, status, ...(count === 1 && { pointId: ids[0] }) }));
+}
+
+// What the assistant needs to answer "how much, and is one free?" without a
+// second call: the sockets free now, and, where the price is the operator's
+// alone (a network outside MOBI.E: Tesla...), the NAP's price per kWh. A
+// MOBI.E price needs the driver's CEME, so those sites carry no price here;
+// find_cheapest_charging prices them. The price is the cheapest socket's, and
+// `napPriceIsPeak` says it is the day's highest when the operator varies it by
+// the hour (the NAP publishes one number).
+function siteGlance(r, live) {
+  const total = r.points.length;
+  const free = r.points.filter(p => live.get(r.site.id, p.id)?.status === 'available').length;
+  const known = r.points.some(p => live.get(r.site.id, p.id));
+  const vatIn = !!napNote(r.site)?.vatIncluded;
+  const prices = r.points.filter(p => p.regime === 'sem_ceme')
+    .map(p => napEurPerKwh(live.get(r.site.id, p.id), p.napPrice)).filter(x => x != null);
+  const price = prices.length ? Math.min(...prices) : undefined;
+  return {
+    ...(known && { available: free, total }),
+    ...(price != null && { [vatIn ? 'napPriceWithVat' : 'napPriceExVat']: price }),
+    ...(price != null && napNote(r.site)?.timeOfUse && { napPriceIsPeak: true }),
+  };
+}
+
+// The summary line's tail for a site: " · 2/20 free · 0.77 €/kWh".
+function glanceText(g, lang, t) {
+  const price = g.napPriceWithVat ?? g.napPriceExVat;
+  const eur = price == null ? '' : ` · ${(lang === 'pt' ? String(price).replace('.', ',') : price)} €/kWh${g.napPriceWithVat != null ? '' : ` ${t('summary.exVat')}`}${g.napPriceIsPeak ? ` ${t('summary.peak')}` : ''}`;
+  return `${g.available != null ? ` · ${g.available}/${g.total} ${t('summary.free')}` : ''}${eur}`;
+}
+
 // A socket in a summary line, with the TAR (BT/MT) on MOBI.E. The NAP leaves
 // power and plug blank on some sockets: kw arrives as null and connector as
 // the text "nan".
@@ -725,7 +775,13 @@ export function createServer(getDataset, live) {
     }
     if (directionNeeded) notes.push(t('note.direction'));
     notes.push(...voltageNotes(ds, a, t));
-    if (results[0].missing?.length) notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
+    if (results[0].missing?.length) {
+      notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
+      // Only the town or street matched: the missing words name a place the
+      // data doesn't know (a mall, a car park), and the sites shown are just
+      // the town's, however far from it.
+      if (results.every(h => h.matched.every(f => f === 'city' || f === 'address'))) notes.unshift(t('note.placeUnknown', { words: results[0].missing.join(', ') }));
+    }
     const status = await withLive(live, ctx, t);
     notes.push(...liveNotes(status, t));
     const cards = results.slice(0, a.limit).map(h => siteCard(h, status, t, a.audiences, notes, a.car_voltage));
@@ -746,7 +802,7 @@ export function createServer(getDataset, live) {
 
   server.registerTool('find_chargers', {
     title: 'Find chargers',
-    description: 'Lists public EV chargers in Portugal near a place, along a route, or in the whole country when a filter is given (every 800 V charger, every IONITY site, card_payment), with power, voltage, plug, fixed cable, opening hours, bank card payment and live status per socket. No prices: for costs use find_cheapest_charging; for one charger the user names, lookup_charger.',
+    description: 'Lists public EV chargers in Portugal near a place, along a route, or in the whole country when a filter is given (every 800 V charger, every IONITY site, card_payment), with power, voltage, plug, fixed cable, opening hours, bank card payment and live status per socket and the sockets free now per site. Networks outside MOBI.E (Tesla...) show their NAP price per kWh; a MOBI.E price depends on the driver\'s CEME, so use find_cheapest_charging for it. For one charger the user names, lookup_charger.',
     inputSchema: z.object({ ...Where, ...Filter, ...Region, ...Lang, limit: z.number().int().positive().max(100).default(15) }),
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, async (a, ctx) => {
@@ -778,7 +834,7 @@ export function createServer(getDataset, live) {
     const maxOf = (r, k) => Math.max(...r.points.map(p => p[k] ?? 0)) || '?';
     const forCar = r => Math.max(...r.points.map(p => kwForCar(p, a.car_voltage ?? COMMON_CAR_VOLTS)?.kw ?? p.kw ?? 0));
     const forCarText = r => t(a.car_voltage ? 'summary.kwForCar' : 'summary.kwAt400V', { kw: forCar(r) });
-    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.direction ? ` [${r.direction}]` : ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${t('summary.sockets', { n: r.points.length, kw: maxOf(r, 'kw') })}${forCar(r) < maxOf(r, 'kw') ? ` ${forCarText(r)}` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}`).join('\n');
+    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.direction ? ` [${r.direction}]` : ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${t('summary.sockets', { n: r.points.length, kw: maxOf(r, 'kw') })}${forCar(r) < maxOf(r, 'kw') ? ` ${forCarText(r)}` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}${glanceText(siteGlance(r, status), lang, t)}`).join('\n');
     return ok({
       ...meta(ds, status, lang), resolvedPlace: w.resolvedPlace, wholeCountry: everywhere || undefined, total,
       ...(notes.length && { notes: [...new Set(notes)] }),
@@ -790,10 +846,8 @@ export function createServer(getDataset, live) {
         direction: r.direction, otherSide: r.otherSide,
         ...facts[i].facts,
         access: r.site.osm?.access, parkingFee: r.site.osm?.parkingFee,
-        points: r.points.map(p => ({
-          pointId: `${r.site.id}/${p.id}`, ...socketFields(p, a.car_voltage), ...plugFields(p, t), regime: p.regime,
-          status: status.get(r.site.id, p.id)?.status ?? null, adHocPayment: !!p.opc?.AD_HOC_PAYMENT,
-        })),
+        ...siteGlance(r, status),
+        points: groupPoints(r, status, a.car_voltage, t),
       })),
     }, [...new Set(notes), t('summary.sites', { n: total }), text].join('\n'));
   });
