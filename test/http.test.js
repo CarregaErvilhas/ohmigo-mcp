@@ -608,7 +608,7 @@ test('http: with ceme-v2 down, the other ways to pay still come back, flagged', 
 test('http: the landing page is rendered in each language at its own URL, for crawlers', async () => {
   const pt = await (await fetch(`${base}/`)).text();
   assert.match(pt, /<html lang="pt-PT">/);
-  assert.match(pt, /<h1 [^>]*data-i="hero.title">Pergunta ao teu assistente/);
+  assert.match(pt, /<h1 [^>]*data-i="hero.title">Do preço do carregamento/);
   assert.match(pt, /<link rel="canonical" href="https:\/\/ohmigo\.ocarroeletrico\.com\/">/);
   assert.match(pt, /hreflang="en" href="https:\/\/ohmigo\.ocarroeletrico\.com\/en"/);
   assert.match(pt, /og:image" content="https:\/\/ohmigo\.ocarroeletrico\.com\/og\.png"/);
@@ -641,7 +641,7 @@ test('http: privacy, support and terms, one rendered copy per URL', async () => 
     assert.ok(html.includes(`<html lang="${lang}">`), path);
     assert.ok(html.includes(`>${h1}</h1>`), path);
     assert.ok(html.includes(`<link rel="canonical" href="https://ohmigo.ocarroeletrico.com${path}">`), path);
-    assert.match(r.headers.get('content-security-policy'), /script-src 'none'/, path);
+    assert.match(r.headers.get('content-security-policy'), /script-src 'sha256-[^' ]+'(;|$)/, path);
   }
   // The landing page still runs its own script.
   assert.match((await fetch(`${base}/`)).headers.get('content-security-policy'), /script-src 'sha256-/);

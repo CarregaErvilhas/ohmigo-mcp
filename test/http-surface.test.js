@@ -172,8 +172,8 @@ test('headers: images stay loadable from an assistant\'s app', async () => {
   }
 });
 
-test('headers: the landing page and /dados allow exactly their own inline script', async () => {
-  for (const path of ['/', '/en', '/dados']) {
+test('headers: the landing page, the legal pages and /dados allow exactly their own inline scripts', async () => {
+  for (const path of ['/', '/en', '/dados', '/privacidade', '/privacy', '/suporte', '/support', '/termos', '/terms']) {
     const r = await fetch(`${noToken.base}${path}`);
     const page = await r.text();
     const scriptSrc = r.headers.get('content-security-policy').match(/script-src ([^;]*)/)[1];
