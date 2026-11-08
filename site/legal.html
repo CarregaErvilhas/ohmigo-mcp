@@ -12,21 +12,52 @@
 <style>
   :root {
     --bg: #fbfaf5; --card: #ffffff; --fg: #0f172a; --muted: #556070; --line: #e4e7e1;
-    --green: #16a34a; --green-soft: #dcfce7; --green-ink: #14532d;
+    --green: #15803d;
+    --on-green: #fff; --green-soft: #dcfce7; --green-ink: #14532d;
     --font: ui-rounded, "SF Pro Rounded", "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #0d1412; --card: #16221e; --fg: #ecf3ef; --muted: #9fb0a8; --line: #24332d;
-      --green: #4ade80; --green-soft: #173726; --green-ink: #bbf7d0; color-scheme: dark;
+      --green: #4ade80; --green-soft: #173726; --green-ink: #bbf7d0; --on-green: #052e16; color-scheme: dark;
     }
   }
   /* Dark picked with the landing page's theme button, whatever the system says. */
   :root[data-theme="dark"] {
     --bg: #0d1412; --card: #16221e; --fg: #ecf3ef; --muted: #9fb0a8; --line: #24332d;
-    --green: #4ade80; --green-soft: #173726; --green-ink: #bbf7d0; color-scheme: dark;
+    --green: #4ade80; --green-soft: #173726; --green-ink: #bbf7d0; --on-green: #052e16; color-scheme: dark;
   }
+  /* vision: start (identical in site/index.html and site/legal.html; test/site.test.js checks).
+     Two modes the vision button cycles through, on top of light/dark:
+     cb = colour-blind safe (Okabe-Ito blue and orange instead of green and yellow),
+     hc = high contrast (pure black and white, strong borders, underlined links). */
+  :root[data-vision="cb"] { --green: #0072b2; --green-soft: #dcecf8; --green-ink: #00314f; --green-deep: #004a73; --body: #0072b2;
+    --band: #00314f; --band-tag: #0072b2; --band-tag-fg: #fff; --yellow: #e69f00; --pink: #cc79a7; --blue: #56b4e9; }
+  :root[data-vision="cb"][data-theme="dark"] { --green: #56b4e9; --green-soft: #0f2f45; --green-ink: #cfe9fa; --green-deep: #2f7fae;
+    --on-green: #04202f; --band: #0f2f45; --band-tag: #1c5a82; --band-tag-fg: #e0f2fe; }
+  @media (prefers-color-scheme: dark) {
+    :root[data-vision="cb"]:not([data-theme="light"]) { --green: #56b4e9; --green-soft: #0f2f45; --green-ink: #cfe9fa; --green-deep: #2f7fae;
+      --on-green: #04202f; --band: #0f2f45; --band-tag: #1c5a82; --band-tag-fg: #e0f2fe; }
+  }
+  :root[data-vision="hc"] { --bg: #fff; --bg-alt: #fff; --card: #fff; --fg: #000; --muted: #1f2933; --line: #000; --shadow: none;
+    --green: #005a1f; --green-soft: #e6f4ea; --green-ink: #00330f; --green-deep: #00330f;
+    --band: #00260b; --band-fg: #fff; --band-tag: #fff; --band-tag-fg: #00260b; }
+  :root[data-vision="hc"][data-theme="dark"] { --bg: #000; --bg-alt: #000; --card: #000; --fg: #fff; --muted: #e8e8e8; --line: #fff;
+    --green: #7dffa6; --green-soft: #00260b; --green-ink: #d6ffe4; --green-deep: #3ccf72; --on-green: #00200a;
+    --band: #000; --band-fg: #fff; --band-tag: #7dffa6; --band-tag-fg: #00200a; }
+  @media (prefers-color-scheme: dark) {
+    :root[data-vision="hc"]:not([data-theme="light"]) { --bg: #000; --bg-alt: #000; --card: #000; --fg: #fff; --muted: #e8e8e8; --line: #fff;
+      --green: #7dffa6; --green-soft: #00260b; --green-ink: #d6ffe4; --green-deep: #3ccf72; --on-green: #00200a;
+      --band: #000; --band-fg: #fff; --band-tag: #7dffa6; --band-tag-fg: #00200a; }
+  }
+  :root[data-vision="hc"] :is(p, li, summary, footer, .lead) a { text-decoration: underline; }
+  :root[data-vision="hc"] :focus-visible { outline-width: 4px; }
+  @media (forced-colors: active) {
+    .btn, .links .go, .cta a, .theme, .vision { border: 2px solid ButtonText; }
+  }
+  /* vision: end */
+
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.6 var(--font); overflow-x: hidden; }
   a { color: var(--green); }
@@ -49,10 +80,8 @@
   small { color: var(--muted); }
   .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
   .cta a { display: inline-flex; align-items: center; min-height: 48px; padding: 10px 20px; border-radius: 999px; font-weight: 800;
-    text-decoration: none; background: var(--green); color: #fff; }
+    text-decoration: none; background: var(--green); color: var(--on-green); }
   .cta a.sec { background: var(--card); color: var(--fg); border: 1px solid var(--line); }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cta a:not(.sec) { color: #052e16; } }
-  :root[data-theme="dark"] .cta a:not(.sec) { color: #052e16; }
   footer { padding: 28px 0 48px; font-size: 15px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 32px; }
   footer a { margin-right: 14px; }
 </style>
@@ -113,7 +142,7 @@
 
     "p4.h": "Registos e cookies",
     "p4.p1": "O ohmigo não regista os dados das perguntas nem os IP. Por cada chamada a uma ferramenta escreve uma linha técnica: a hora, a ferramenta, quanto demorou, se deu erro, o código do erro e o tamanho da resposta. Escreve também mensagens de arranque, de atualização dos dados e erros técnicos, e soma contadores por ferramenta, públicos em <a href=\"/healthz\">/healthz</a>. Existe um modo de teste que regista os dados das perguntas; está desligado no serviço público.",
-    "p4.p2": "Não usamos cookies nem analytics. A página inicial só grava no teu browser uma língua (<code>localStorage</code>, chave <code>ohmigo.lang</code>), para a lembrar. Podes apagá-la nas definições do browser.",
+    "p4.p2": "Não usamos cookies nem analytics. A página inicial só grava no teu browser uma língua (<code>localStorage</code>, chave <code>ohmigo.lang</code>), para a lembrar; se usares os botões do tema ou da visão, grava também a escolha (chaves <code>ohmigo.theme</code> e <code>ohmigo.vision</code>: claro/escuro e modo daltonismo/alto contraste). Nada disto sai do teu browser. Podes apagá-la nas definições do browser.",
     "p4.p3": "A base legal é o interesse legítimo em manter o serviço seguro e a funcionar (art. 6.º, n.º 1, alínea f) do RGPD).",
 
     "p5.h": "Os teus direitos",
@@ -204,7 +233,7 @@
 
     "p4.h": "Logs and cookies",
     "p4.p1": "ohmigo doesn't log the details of your questions or IP addresses. For each tool call it writes one technical line: the time, the tool, how long it took, whether it failed, the error code and the size of the answer. It also writes start-up messages, data refresh messages and technical errors, and adds up per-tool counters, public at <a href=\"/healthz\">/healthz</a>. A test mode that logs the details of questions exists; it is off on the public service.",
-    "p4.p2": "We use no cookies and no analytics. The home page only saves a language in your browser (<code>localStorage</code>, key <code>ohmigo.lang</code>), to remember it. You can clear it in your browser settings.",
+    "p4.p2": "We use no cookies and no analytics. The home page only saves your choices in your browser (<code>localStorage</code>): the language (key <code>ohmigo.lang</code>) and, if you use the theme and vision buttons, light or dark and the colour-blind or high-contrast mode (keys <code>ohmigo.theme</code> and <code>ohmigo.vision</code>). None of it leaves your browser. You can clear it in your browser settings.",
     "p4.p3": "The legal basis is our legitimate interest in keeping the service safe and working (GDPR art. 6(1)(f)).",
 
     "p5.h": "Your rights",

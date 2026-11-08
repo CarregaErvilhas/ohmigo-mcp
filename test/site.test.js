@@ -65,24 +65,39 @@ test('site: every hero topic button has its question, answer and source in both 
 
 // The script in <head>, run against a fake browser: what it does to <html>
 // before the first paint, for what is saved.
-function headScript(saved, { throws = false } = {}) {
+function headScript(saved, { throws = false, vision = null } = {}) {
   const code = html.match(/<head>[\s\S]*?<script>([\s\S]*?)<\/script>/)[1];
   const root = { dataset: {}, classes: new Set(), classList: { add: c => root.classes.add(c) } };
   runInNewContext(code, {
     document: { documentElement: root },
-    localStorage: { getItem: () => { if (throws) throw new Error('blocked'); return saved; } },
+    localStorage: { getItem: k => { if (throws) throw new Error('blocked'); return k === 'ohmigo.vision' ? vision : saved; } },
   });
-  return { theme: root.dataset.theme ?? null, js: root.classes.has('js') };
+  return { theme: root.dataset.theme ?? null, js: root.classes.has('js'), vision: root.dataset.vision ?? null };
 }
 
 test('site: a theme picked before applies before the first paint, and nothing else does', () => {
-  assert.deepEqual(headScript('dark'), { theme: 'dark', js: true });
-  assert.deepEqual(headScript('light'), { theme: 'light', js: true });
+  assert.deepEqual(headScript('dark'), { theme: 'dark', js: true, vision: null });
+  assert.deepEqual(headScript('light'), { theme: 'light', js: true, vision: null });
   // Nothing saved, or something we never wrote: the system decides (the CSS).
-  assert.deepEqual(headScript(null), { theme: null, js: true });
-  assert.deepEqual(headScript('sepia'), { theme: null, js: true });
+  assert.deepEqual(headScript(null), { theme: null, js: true, vision: null });
+  assert.deepEqual(headScript('sepia'), { theme: null, js: true, vision: null });
   // Storage blocked (private mode, cookies off): the page still loads.
-  assert.deepEqual(headScript('dark', { throws: true }), { theme: null, js: true });
+  assert.deepEqual(headScript('dark', { throws: true }), { theme: null, js: true, vision: null });
+});
+
+test('site: a saved vision mode applies before the first paint; anything else is ignored', () => {
+  assert.equal(headScript(null, { vision: 'cb' }).vision, 'cb');
+  assert.equal(headScript('dark', { vision: 'hc' }).vision, 'hc');
+  assert.equal(headScript(null, { vision: 'rainbow' }).vision, null);
+});
+
+test('site: the vision palettes are the same block on the landing and legal pages, with strings for every mode', () => {
+  const block = h => h.match(/\/\* vision: start[\s\S]*?\/\* vision: end \*\//)?.[0];
+  assert.ok(block(html), 'landing page has the vision block');
+  assert.equal(block(html), block(readFileSync(new URL('../site/legal.html', import.meta.url), 'utf8')));
+  for (const l of ['pt', 'en']) for (const m of ['off', 'cb', 'hc']) {
+    assert.ok(S[l][`vision.${m}`] && S[l][`vision.toast.${m}`], `missing ${l} vision.${m}`);
+  }
 });
 
 test('site: every data-i key has a string', () => {
