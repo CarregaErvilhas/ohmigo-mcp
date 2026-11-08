@@ -328,3 +328,97 @@ test('http: when an old copy leaves no charger, the error says how old it is', l
   assert.doesNotMatch(r.structuredContent.message, /min ago/, 'the view prints message to the driver');
   await idle();
 });
+
+// ---- AmpereArchive source ---------------------------------------------------
+import { gzipSync } from 'node:zlib';
+import { parseArchive } from '../src/live.js';
+
+const ARCHIVE = 'https://archive.test/v1/PT/status.json.gz';
+const archiveBody = ({ publishedAt = new Date().toISOString(), n = 1000, extra = {} } = {}) => {
+  const points = {};
+  for (let i = 0; i < n; i++) points[`S${i}/1`] = { s: 'available', f: [] };
+  Object.assign(points, extra);
+  return gzipSync(JSON.stringify({ country: 'PT', publishedAt, points }));
+};
+// Routes by URL: the archive file and the NAP feed each behave as set.
+function routed({ archive, nap = () => ({ status: 200, ok: true, headers: new Headers({ etag: 'n1' }), body: [new TextEncoder().encode(feed())] }) }) {
+  const calls = { archive: 0, nap: 0 };
+  const impl = async url => {
+    const k = url === ARCHIVE ? 'archive' : 'nap';
+    calls[k]++;
+    return (k === 'archive' ? archive : nap)();
+  };
+  return { impl, calls };
+}
+const ok = body => () => ({ status: 200, ok: true, headers: new Headers({ etag: 'a1' }), body: [body] });
+
+test('archive: reads status and fees from the archive file, no NAP call', limit, async () => {
+  const body = archiveBody({ extra: { 'X/9': { s: 'charging', f: [{ policy: 'pricePerDeliveryUnit', eur: 0.35 }] } } });
+  const r = routed({ archive: ok(body) });
+  const live = new LiveStatus({ fetchImpl: r.impl, archiveUrl: ARCHIVE });
+  await live.ensure();
+  assert.deepEqual(r.calls, { archive: 1, nap: 0 });
+  assert.equal(live.get('X', '9').status, 'charging');
+  assert.deepEqual(live.get('X', '9').fees, [{ policy: 'pricePerDeliveryUnit', eur: 0.35 }]);
+  assert.equal(live.info().source, 'archive');
+  assert.equal(live.info().outdated, false);
+});
+
+test('archive: an unknown status becomes other, never usable', () => {
+  const { points, otherStatuses } = parseArchive(archiveBody({ extra: { 'X/1': { s: 'weird', f: [] } } }));
+  assert.equal(points.get('X/1').status, 'other');
+  assert.equal(otherStatuses, 1);
+});
+
+test('archive: plain (not gzipped) JSON parses too', () => {
+  const { points } = parseArchive(Buffer.from(JSON.stringify({ publishedAt: 'x', points: { 'A/1': { s: 'available' } } })));
+  assert.equal(points.get('A/1').status, 'available');
+});
+
+test('archive: falls back to the NAP on HTTP error, bad shape, or too few points', limit, async () => {
+  for (const archive of [
+    () => ({ status: 503, ok: false, headers: new Headers() }),
+    ok(Buffer.from('not json')),
+    ok(Buffer.from(JSON.stringify({ nothing: true }))),
+    ok(archiveBody({ n: 10 })),
+  ]) {
+    const r = routed({ archive });
+    const live = new LiveStatus({ fetchImpl: r.impl, archiveUrl: ARCHIVE });
+    await live.ensure();
+    assert.equal(r.calls.nap, 1);
+    assert.equal(live.info().source, 'nap');
+    assert.ok(live.info().archiveError);
+    assert.equal(live.points.size, 1000);
+  }
+});
+
+test('archive: a stalled collector (file too old) falls back to the NAP', limit, async () => {
+  const r = routed({ archive: ok(archiveBody({ publishedAt: new Date(Date.now() - 3600_000).toISOString() })) });
+  const live = new LiveStatus({ fetchImpl: r.impl, archiveUrl: ARCHIVE, archiveMaxAgeMs: 900_000 });
+  await live.ensure();
+  assert.equal(live.info().source, 'nap');
+  assert.match(live.info().archiveError, /too old/);
+});
+
+test('archive: a 304 keeps the copy while it is young enough', limit, async () => {
+  let n = 0;
+  const archive = () => n++ === 0
+    ? { status: 200, ok: true, headers: new Headers({ etag: 'a1' }), body: [archiveBody()] }
+    : { status: 304, ok: false, headers: new Headers() };
+  const r = routed({ archive });
+  const live = new LiveStatus({ fetchImpl: r.impl, archiveUrl: ARCHIVE });
+  await live.refresh();
+  await live.refresh();
+  assert.equal(r.calls.archive, 2);
+  assert.equal(r.calls.nap, 0);
+  assert.equal(live.info().source, 'archive');
+  assert.equal(live.points.size, 1000);
+});
+
+test('archive: unset, only the NAP is used', limit, async () => {
+  const r = routed({ archive: () => { throw new Error('must not be called'); } });
+  const live = new LiveStatus({ fetchImpl: r.impl, archiveUrl: '' });
+  await live.ensure();
+  assert.deepEqual(r.calls, { archive: 0, nap: 1 });
+  assert.equal(live.info().source, 'nap');
+});

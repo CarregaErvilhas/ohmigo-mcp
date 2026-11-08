@@ -19,12 +19,22 @@
 // happen while someone is asking (at most ~288 a day per instance). Results
 // carry publishedAt, so the assistant can say how old the status is.
 //
+// Optionally the status comes from the AmpereArchive instead (ARCHIVE_STATUS_URL,
+// the v1/<cc>/status.json.gz file its collector rewrites every minute): 1-2 MB
+// of gzip instead of the 40 MB feed. The NAP stays the fallback: when the
+// archive is down, malformed, or older than ARCHIVE_MAX_AGE_SECONDS (a stalled
+// collector), the same refresh goes to the NAP. Unset, nothing changes.
+//
 // When the feed is down, failed refreshes back off (30 s, 1, 2, 5 min) instead
 // of starting another full download on every request.
 
 import { SaxesParser } from 'saxes';
+import { gunzipSync } from 'node:zlib';
 
 const URL_ = process.env.NAP_STATUS_URL || 'https://pgm.mobie.pt/integration/nap/evActualStatus';
+const ARCHIVE_URL = process.env.ARCHIVE_STATUS_URL || '';
+const ARCHIVE_MAX_AGE_MS = Number(process.env.ARCHIVE_MAX_AGE_SECONDS || 900) * 1000;
+const ARCHIVE_MAX_BYTES = 32 * 1024 * 1024;
 const TTL_MS = Number(process.env.LIVE_TTL_SECONDS || 300) * 1000;
 const WAIT_MS = Number(process.env.LIVE_WAIT_SECONDS || 25) * 1000;
 const MAX_STALE_MS = Number(process.env.LIVE_MAX_STALE_SECONDS || 3600) * 1000;
@@ -98,6 +108,28 @@ export async function parseStatus(chunks) {
   return { publicationTime, points, otherStatuses };
 }
 
+// Parses the archive's status file (gzip or plain JSON, bytes in a Buffer):
+// { publishedAt, points: { 'SITE/POINT': { s: status, f: [{ policy, eur }] } } }.
+// Same output as parseStatus. Statuses go through the same allow-list, so a
+// word we don't know is `other`, never read as usable.
+export function parseArchive(buf) {
+  const raw = buf[0] === 0x1f && buf[1] === 0x8b ? gunzipSync(buf, { maxOutputLength: 4 * ARCHIVE_MAX_BYTES }) : buf;
+  const obj = JSON.parse(raw.toString('utf8'));
+  if (!obj || typeof obj.points !== 'object' || obj.points === null || typeof obj.publishedAt !== 'string') {
+    throw new Error('archive status: unexpected shape');
+  }
+  const points = new Map();
+  let otherStatuses = 0;
+  for (const [k, v] of Object.entries(obj.points)) {
+    if (!v || typeof v !== 'object') continue;
+    let status = typeof v.s === 'string' ? v.s : null;
+    if (status && !STATUSES.has(status)) { status = 'other'; otherStatuses++; }
+    const fees = (Array.isArray(v.f) ? v.f : []).filter(f => f && typeof f.policy === 'string' && Number.isFinite(f.eur));
+    points.set(k, { status, fees: fees.map(f => ({ policy: f.policy, eur: f.eur })) });
+  }
+  return { publicationTime: obj.publishedAt, points, otherStatuses };
+}
+
 // NAP fees -> the same plan shape as the MOBI.E tariff file (see opc.js).
 // pricePerChargingTime is €/min, like MOBI.E's TIME (checked against the
 // MOBI.E file: 79 % match to the cent, the rest are tiered there). NAP rounds
@@ -133,7 +165,12 @@ const BACKOFF_MS = [30_000, 60_000, 120_000, 300_000];
 const retryable = e => /unclosed|unexpected end|ECONNRESET|terminated|socket/i.test(`${e.message} ${e.cause?.code ?? ''}`);
 
 export class LiveStatus {
-  constructor({ ttlMs = TTL_MS, waitMs = WAIT_MS, maxStaleMs = MAX_STALE_MS, fetchImpl = fetch } = {}) {
+  constructor({ ttlMs = TTL_MS, waitMs = WAIT_MS, maxStaleMs = MAX_STALE_MS, fetchImpl = fetch, archiveUrl = ARCHIVE_URL, archiveMaxAgeMs = ARCHIVE_MAX_AGE_MS } = {}) {
+    this.archiveUrl = archiveUrl;
+    this.archiveMaxAgeMs = archiveMaxAgeMs;
+    this.source = null;
+    this.archiveEtag = null;
+    this.archiveError = null;
     this.ttlMs = ttlMs;
     this.waitMs = waitMs;
     this.maxStaleMs = maxStaleMs;
@@ -183,7 +220,7 @@ export class LiveStatus {
           this.lastError = null;
           this.failures = 0;
           this.retryAt = 0;
-          console.log(`[ohmigo] live: ${this.points.size} points, published ${this.publicationTime}, ${this.bytesLast ?? '?'} bytes, ${this.otherStatuses} unrecognised statuses, ${Date.now() - t0} ms`);
+          console.log(`[ohmigo] live (${this.source}): ${this.points.size} points, published ${this.publicationTime}, ${this.bytesLast ?? '?'} bytes, ${this.otherStatuses} unrecognised statuses, ${Date.now() - t0} ms`);
           break;
         } catch (e) {
           this.lastError = e.message;
@@ -201,12 +238,61 @@ export class LiveStatus {
     return this.running;
   }
 
+  // The archive first when configured, the NAP when that doesn't work out.
   async fetchOnce() {
+    if (this.archiveUrl) {
+      try {
+        await this.fetchArchive();
+        this.archiveError = null;
+        return;
+      } catch (e) {
+        this.archiveError = e.message;
+        console.warn('[ohmigo] live: archive status failed, falling back to the NAP:', e.message);
+      }
+    }
+    await this.fetchNap();
+  }
+
+  async fetchArchive() {
+    const res = await this.fetch(this.archiveUrl, {
+      headers: this.source === 'archive' && this.archiveEtag ? { 'if-none-match': this.archiveEtag } : {},
+      signal: AbortSignal.timeout(30_000),
+    });
+    let publicationTime = this.publicationTime, points = this.points, otherStatuses = this.otherStatuses, bytes = this.bytesLast;
+    if (res.status === 304 && this.source === 'archive') {
+      // Nothing new in the file; its age is checked below like any other.
+    } else {
+      if (!res.ok) throw new Error(`archive HTTP ${res.status}`);
+      const chunks = [];
+      let size = 0;
+      for await (const c of res.body) {
+        size += c.length;
+        if (size > ARCHIVE_MAX_BYTES) throw new Error('archive status too large');
+        chunks.push(c);
+      }
+      bytes = size;
+      ({ publicationTime, points, otherStatuses } = parseArchive(Buffer.concat(chunks)));
+      if (points.size < 1000) throw new Error(`archive: only ${points.size} points`);
+    }
+    // A collector that stopped leaves a file that only gets older: that's
+    // what the NAP fallback is for.
+    const age = Date.now() - Date.parse(publicationTime);
+    if (!(age < this.archiveMaxAgeMs)) throw new Error(`archive status published ${publicationTime}, too old`);
+    this.points = points;
+    this.otherStatuses = otherStatuses;
+    this.publicationTime = publicationTime;
+    this.archiveEtag = res.status === 304 ? this.archiveEtag : res.headers.get('etag');
+    this.bytesLast = bytes;
+    this.source = 'archive';
+    this.markFetched();
+  }
+
+  async fetchNap() {
     const res = await this.fetch(URL_, {
-      headers: this.etag ? { 'if-none-match': this.etag } : {},
+      headers: this.source === 'nap' && this.etag ? { 'if-none-match': this.etag } : {},
       signal: AbortSignal.timeout(120_000),
     });
-    if (res.status === 304) { this.markFetched(); return; }
+    if (res.status === 304 && this.source === 'nap') { this.markFetched(); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const { publicationTime, points, otherStatuses } = await parseStatus(res.body);
     if (points.size < 1000) throw new Error(`only ${points.size} points parsed`);
@@ -215,6 +301,7 @@ export class LiveStatus {
     this.publicationTime = publicationTime;
     this.etag = res.headers.get('etag');
     this.bytesLast = Number(res.headers.get('content-length')) || null;
+    this.source = 'nap';
     this.markFetched();
   }
 
@@ -259,6 +346,8 @@ export class LiveStatus {
       failures: this.failures,
       retryAt: this.retryAt > Date.now() ? new Date(this.retryAt).toISOString() : null,
       bytesLast: this.bytesLast,
+      source: this.source,
+      archiveError: this.archiveError,
     };
   }
 }

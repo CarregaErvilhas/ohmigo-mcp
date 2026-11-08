@@ -115,6 +115,8 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `GIT_SHA` | none | the commit this build came from; `/healthz` shows it as `commit`, with `source` linking to that tree, so anyone can check what runs matches the public repo (AGPL section 13). Set it at deploy time; anything that isn't a 7-40 character hex SHA is ignored |
 | `OHMIGO_QA` | off | `1` turns on QA mode: every result carries the quarter-hour `timeline` and a `debug` block, and the assistant is told to show them. Never in production |
 | `NAP_STATUS_URL` | MOBI.E's `evActualStatus` | the live feed |
+| `ARCHIVE_STATUS_URL` | unset | AmpereArchive's `v1/PT/status.json.gz`: read first, the NAP stays the fallback ([03](03-live-status.md)) |
+| `ARCHIVE_MAX_AGE_SECONDS` | `900` | an archive status published longer ago than this counts as stalled and the NAP is used |
 
 Secrets (`CEME_API_KEY`, `HEALTHZ_TOKEN`) go in the hosting platform's secret variables, never
 in the repo.
