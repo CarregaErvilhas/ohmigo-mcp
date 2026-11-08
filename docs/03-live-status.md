@@ -85,6 +85,18 @@ refreshes for the next user.
 If traffic grows, add a poller back (a `setInterval(() => live.refresh(), ...)`
 in `server.js`). Nothing else needs to change.
 
+## Reading the AmpereArchive instead
+
+With `ARCHIVE_STATUS_URL` set, a refresh asks the AmpereArchive first: one
+small gzip JSON file (`v1/PT/status.json.gz`, rewritten by its collector about
+every minute) instead of the whole NAP feed. It carries the same `SITE/POINT`
+keys, statuses and fees, and goes through the same status allow-list
+(`parseArchive` in `src/live.js`). If the archive fails, has the wrong shape,
+has too few points, or was published more than `ARCHIVE_MAX_AGE_SECONDS` ago
+(a stalled collector), the same refresh goes on to the NAP. `/healthz` and
+`live.source` say which one answered (`archive` or `nap`). Unset, the NAP is
+the only source.
+
 ## Gotcha: point ids aren't unique
 
 Some operators publish bare numbers as charger ids ("19", "160"), and the same

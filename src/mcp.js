@@ -503,7 +503,7 @@ export const unlistedNote = (results, t) => results.some(q => q.unlistedCheaper)
 // What a support question needs to reproduce an answer: which server, which
 // data, which live copy.
 const meta = (ds, live, lang) => ({ version: VERSION, lang, dataAsOf: ds.generatedAt, live: liveMeta(live), ...(QA && { qa: true }) });
-const liveMeta = live => { const { publishedAt, checkedAt, fresh, outdated, refreshing, points, error } = live.info(); return { publishedAt, checkedAt, fresh, outdated, refreshing, points, error }; };
+const liveMeta = live => { const { publishedAt, checkedAt, fresh, outdated, refreshing, points, error, source } = live.info(); return { publishedAt, checkedAt, fresh, outdated, refreshing, points, error, source }; };
 
 // Gets the live status to answer with, which is all a tool should read from
 // then on (see LiveStatus.snapshot). If that means waiting for the feed, tell
