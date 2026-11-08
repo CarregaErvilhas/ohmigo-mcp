@@ -34,6 +34,7 @@ import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
 import { Index, lendOperators, operatorKey } from './lookup.js';
+import { revalidate } from './live.js';
 import { usableKw } from './socket.js';
 import { fold } from './text.js';
 
@@ -128,7 +129,7 @@ export class Dataset {
     const path = process.env.DATASET_PATH || (process.env.DATASET_URL ? null : localFile());
     if (path) return Dataset.check(JSON.parse(await readFile(path, 'utf8')));
     const url = process.env.DATASET_URL || DEFAULT_URL;
-    const res = await fetch(url, { headers: etag ? { 'if-none-match': etag } : {}, signal: AbortSignal.timeout(timeoutMs) });
+    const res = await fetch(url, { headers: etag ? revalidate(etag) : {}, signal: AbortSignal.timeout(timeoutMs) });
     if (res.status === 304) return null;
     if (!res.ok) throw new Error(`dataset ${url}: HTTP ${res.status}`);
     const ds = Dataset.check(await res.json());

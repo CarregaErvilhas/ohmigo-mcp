@@ -41,6 +41,11 @@ const MAX_STALE_MS = Number(process.env.LIVE_MAX_STALE_SECONDS || 3600) * 1000;
 // The NAP regenerates the feed about every 5 minutes.
 const PUBLISH_MS = 6 * 60_000;
 
+// Node's fetch adds "cache-control: no-cache" to any request carrying
+// If-None-Match, and the NAP obeys it: a full 40 MB 200, never a 304. An
+// explicit max-age=0 replaces that header and the 304 comes back.
+export const revalidate = etag => ({ 'if-none-match': etag, 'cache-control': 'max-age=0' });
+
 // Point ids are only unique within a site (some operators publish bare
 // numbers that repeat), so entries are keyed "SITE/POINT".
 export const pointKey = (siteId, pointId) => `${siteId}/${pointId}`;
@@ -255,7 +260,7 @@ export class LiveStatus {
 
   async fetchArchive() {
     const res = await this.fetch(this.archiveUrl, {
-      headers: this.source === 'archive' && this.archiveEtag ? { 'if-none-match': this.archiveEtag } : {},
+      headers: this.source === 'archive' && this.archiveEtag ? revalidate(this.archiveEtag) : {},
       signal: AbortSignal.timeout(30_000),
     });
     let publicationTime = this.publicationTime, points = this.points, otherStatuses = this.otherStatuses, bytes = this.bytesLast;
@@ -289,7 +294,7 @@ export class LiveStatus {
 
   async fetchNap() {
     const res = await this.fetch(URL_, {
-      headers: this.source === 'nap' && this.etag ? { 'if-none-match': this.etag } : {},
+      headers: this.source === 'nap' && this.etag ? revalidate(this.etag) : {},
       signal: AbortSignal.timeout(120_000),
     });
     if (res.status === 304 && this.source === 'nap') { this.markFetched(); return; }

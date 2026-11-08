@@ -238,7 +238,8 @@ function fakeFetch({ delayMs = 0 } = {}) {
   const impl = async (url, init) => {
     calls.push(init.headers);
     await new Promise(r => setTimeout(r, delayMs));
-    if (init.headers['if-none-match'] === 'v1') return { status: 304, ok: false, headers: new Headers() };
+    // Like the NAP: Node's default "cache-control: no-cache" would beat the ETag.
+    if (init.headers['if-none-match'] === 'v1' && init.headers['cache-control'] === 'max-age=0') return { status: 304, ok: false, headers: new Headers() };
     return { status: 200, ok: true, headers: new Headers({ etag: 'v1' }), body: [new TextEncoder().encode(FEED)] };
   };
   return { impl, calls };
