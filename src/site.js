@@ -218,6 +218,14 @@ export const LLMS_TXT = `# ohmigo
 
 MCP server (Streamable HTTP): ${SITE_URL}/mcp
 
+## Tools
+
+- find_chargers, find_cheapest_charging: chargers near a place, ranked by what the session costs
+- lookup_charger: turn an operator and town, a shop, an address or a sticker code into a charger
+- estimate_charging_cost: price one session at one charger, or at home (private)
+- list_ceme_tariffs, list_operators: the energy tariffs (CEME) and charging operators (OPC) that exist
+- ev_rules_portugal: EV rules and know-how for Portugal, from the Voltaria guides
+
 ## Pages
 
 - [Home, in Portuguese](${SITE_URL + PATHS.pt}): what ohmigo is and how to add it to an assistant
@@ -226,4 +234,10 @@ MCP server (Streamable HTTP): ${SITE_URL}/mcp
 - [Support](${SITE_URL}/support)
 - [Terms of service](${SITE_URL}/terms)
 - [Source code](${REPO_URL})
+
+## Optional
+
+- [How it works](${REPO_URL}/blob/main/docs/01-how-it-works.md): the files and the tools, for developers
+- [Cost math](${REPO_URL}/blob/main/docs/02-cost-math.md): how a session price is built
+- [Glossary](${REPO_URL}/blob/main/docs/00-glossary.md): CEME, OPC, DPC, NAP, TAR
 `;
