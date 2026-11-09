@@ -288,6 +288,9 @@ CHAdeMO out unless the assistant lists `CHADEMO` in `connectors` (`filterOf` in
 `mcp.js`): the car has the port, or the user asked. If the words name a charger
 that only has CHAdeMO, the answer says that instead of "no such charger".
 `list_operators` counts every socket: it describes the network, not one car.
+Where it counts sockets on MOBI.E with no operator fee in MOBI.E's file
+(regime `mobie_sem_tarifa`), it also names those sites in `noOpcTariffSites`,
+so the assistant can look one up instead of only reporting a number.
 
 **Why does every socket carry `plug` and `tar`?** The driver has to know which
 plug to grab (and whether to bring a cable), and at a MOBI.E charger whether it

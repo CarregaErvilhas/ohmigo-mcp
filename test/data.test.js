@@ -39,6 +39,28 @@ test('data: operators group by operatorId and keep the most common name', () => 
   assert.equal(o.dcPoints, 1);
 });
 
+test('data: operators name the sites whose MOBI.E operator fee is missing, so the count leads somewhere', () => {
+  const ds = new Dataset({ sites: [
+    site('B', [{ id: '1', kw: 22, regime: 'mobie_sem_tarifa' }, { id: '2', kw: 22, regime: 'mobie_sem_tarifa' }]),
+    site('A', [{ id: '1', kw: 50, regime: 'mobie_sem_tarifa' }, { id: '2', kw: 22, regime: 'mobie' }]),
+    site('C', [{ id: '1', kw: 22, regime: 'mobie' }]),
+  ] });
+  const [o] = ds.operators();
+  assert.deepEqual(o.regimes, { mobie_sem_tarifa: 3, mobie: 2 });
+  assert.deepEqual(o.noOpcTariffSites, ['A', 'B']);
+  // A filter that leaves out those sockets leaves out the site too.
+  assert.deepEqual(ds.operators({ minKw: 50 })[0].noOpcTariffSites, ['A']);
+  const many = new Dataset({ sites: Array.from({ length: 25 }, (_, i) => site(`S${String(i).padStart(2, '0')}`, [{ id: '1', kw: 22, regime: 'mobie_sem_tarifa' }])) });
+  assert.equal(many.operators()[0].noOpcTariffSites.length, 20);
+  assert.equal(new Dataset({ sites: [site('C', [{ id: '1', kw: 22, regime: 'mobie' }])] }).operators()[0].noOpcTariffSites, undefined);
+});
+
+test('data: a plug the NAP left blank ("nan") is null, and no plug filter matches it', () => {
+  const ds = new Dataset({ sites: [site('A', [{ id: '1', kw: null, connector: 'nan' }, { id: '2', kw: 22, connector: 'T2' }])] });
+  assert.deepEqual(ds.sites[0].points.map(p => p.connector), [null, 'T2']);
+  assert.deepEqual(ds.search({ connectors: ['T2'] }).results[0].points.map(p => p.id), ['2']);
+});
+
 test('data: OpenStreetMap\'s kW/V/A replace the NAP\'s, which stay in napKw/napV/napA', () => {
   const ds = new Dataset({ sites: [site('A', [{ id: '1', kw: 187.5, v: 750, a: 250, dc: true, osm: { kw: 150, v: 1000 } }])] });
   const [p] = ds.sites[0].points;

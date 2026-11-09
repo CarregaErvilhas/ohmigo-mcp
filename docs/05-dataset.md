@@ -77,6 +77,8 @@ Monday.
 ```
 
 - `region`: `CONT`, `MAD` or `AZO`; it decides VAT and off-peak hours in ceme-v2.
+- `connector`: the plug (`CCS`, `T2`...). The NAP leaves some blank, which
+  arrives as the text `"nan"`; `src/clean.js` turns it into `null`.
 - `v`, `a`: the connector's voltage (V) and max current (A), as the operator
   declares them on the NAP. Optional: datasets built before nap-dashboard
   published them have neither, and then ohmigo ignores `min_voltage` and says

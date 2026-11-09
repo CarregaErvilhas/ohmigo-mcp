@@ -479,9 +479,8 @@ function glanceText(g, lang, t) {
 }
 
 // A socket in a summary line, with the TAR (BT/MT) on MOBI.E. The NAP leaves
-// power and plug blank on some sockets: kw arrives as null and connector as
-// the text "nan".
-const socketLine = (q, t) => `${q.kw ?? '?'} kW${q.kwForCar != null ? ` ${t('summary.kwForCar', { kw: q.kwForCar })}` : q.kwAt400V != null ? ` ${t('summary.kwAt400V', { kw: q.kwAt400V })}` : ''} ${q.connector === 'nan' ? '?' : q.connector ?? '?'}${q.tar ? `, ${q.tar}` : ''}`;
+// power and plug blank on some sockets: both arrive as null (clean.js).
+const socketLine = (q, t) => `${q.kw ?? '?'} kW${q.kwForCar != null ? ` ${t('summary.kwForCar', { kw: q.kwForCar })}` : q.kwAt400V != null ? ` ${t('summary.kwAt400V', { kw: q.kwAt400V })}` : ''} ${q.connector ?? '?'}${q.tar ? `, ${q.tar}` : ''}`;
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
@@ -884,7 +883,7 @@ export function createServer(getDataset, live) {
       const direct = [...new Set(OFFERS.filter(x => o.operatorId && x.scope?.operatorIds?.includes(o.operatorId)).map(x => x.label))];
       return { ...o, directOffers: direct.length ? direct : undefined };
     });
-    const notes = [t('note.operators'), ...voltageNotes(ds, a, t),
+    const notes = [t('note.operators'), ...(shown.some(o => o.noOpcTariffSites) ? [t('note.noOpcTariff')] : []), ...voltageNotes(ds, a, t),
       ...shown.filter(o => o.inferredSites).map(o => t('note.operatorsInferred', { operator: o.name, n: o.inferredSites }))];
     return ok({ ...meta(ds, live, lang), total: ops.length, notes, operators: shown },
       [...notes, t('summary.operators', { n: ops.length }), ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${t('summary.operatorSize', { sites: o.sites, points: o.points, dc: o.dcPoints, kw: o.maxKw ?? '?' })}`)].join('\n'));

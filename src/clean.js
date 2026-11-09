@@ -133,6 +133,10 @@ function cleanPoint(p, report) {
   // A blank level is how the NAP's blanks already arrive; the quote says so.
   if (p.level != null) p.level = checked(gridLevel, p.level, 'point.level', report) ?? null;
   if (p.regime != null) p.regime = checked(code(TAG_MAX), p.regime, 'point.regime', report);
+  // A plug the NAP left blank arrives as the text "nan" (pandas' blank,
+  // written as a string upstream). It is no plug: null, like a blank level,
+  // so the answers and filters never show or match the word.
+  if (typeof p.connector === 'string' && /^(nan|none|null)?$/i.test(p.connector.trim())) p.connector = null;
   if (p.osm == null) return;
   const osm = {};
   for (const k of Object.keys(OSM_NUMBERS)) {

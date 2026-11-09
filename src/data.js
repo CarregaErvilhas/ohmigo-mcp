@@ -30,6 +30,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { cleanSite, reportLine } from './clean.js';
+
 import { clusterPlaces, serviceAreas, sideFor } from './direction.js';
 import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
@@ -37,6 +38,9 @@ import { Index, lendOperators, operatorKey } from './lookup.js';
 import { revalidate } from './live.js';
 import { usableKw } from './socket.js';
 import { fold } from './text.js';
+
+// How many site ids list_operators names per operator with no OPC fee on file.
+const NO_OPC_TARIFF_MAX = 20;
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
 // The dataset format this code understands. nap-dashboard bumps SCHEMA in
@@ -320,6 +324,10 @@ export class Dataset {
   // its most common spelling and the others in `otherNames`. Sites without
   // an operatorId group by name. `inferredSites`: how many of its sites the
   // NAP left nameless and the id prefix attributes to it (lookup.js).
+  // `noOpcTariffSites`: the sites with a socket on MOBI.E whose operator fee
+  // is missing from MOBI.E's file (regime mobie_sem_tarifa, priced with the
+  // NAP's fee), so a count in `regimes` leads somewhere: lookup_charger takes
+  // the id. Only the first few: a long list would be noise, the count stays.
   operators({ region, ...filter } = {}) {
     const ok = this.pointFilter(filter);
     const by = new Map();
@@ -329,7 +337,7 @@ export class Dataset {
       if (!points.length) continue;
       const key = operatorKey(s);
       let o = by.get(key);
-      if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, inferredSites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {} });
+      if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, inferredSites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {}, noOpcTariff: [] });
       // A lent name isn't a spelling the NAP published, so it doesn't vote; it
       // only names an operator whose sites here are all inferred (a region
       // or filter can leave just those).
@@ -346,6 +354,7 @@ export class Dataset {
         o.maxV = Math.max(o.maxV, p.v ?? 0);
         o.regimes[p.regime] = (o.regimes[p.regime] || 0) + 1;
       }
+      if (points.some(p => p.regime === 'mobie_sem_tarifa')) o.noOpcTariff.push(s.id);
     }
     return [...by.values()].map(o => {
       const names = [...o.names].sort((x, y) => y[1] - x[1]).map(([n]) => n);
@@ -353,6 +362,7 @@ export class Dataset {
         operatorId: o.operatorId, name: names[0] ?? o.lentName ?? '?', otherNames: names.length > 1 ? names.slice(1) : undefined,
         website: [...o.websites][0], sites: o.sites, inferredSites: o.inferredSites || undefined, points: o.points, dcPoints: o.dcPoints,
         maxKw: o.maxKw || undefined, maxVoltage: o.maxV || undefined, regions: o.regions, regimes: o.regimes,
+        noOpcTariffSites: o.noOpcTariff.length ? o.noOpcTariff.sort().slice(0, NO_OPC_TARIFF_MAX) : undefined,
       };
     }).sort((x, y) => y.sites - x.sites || x.name.localeCompare(y.name));
   }
