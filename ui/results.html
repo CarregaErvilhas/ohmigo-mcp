@@ -129,12 +129,12 @@
   // A peak price is a ceiling, the most it can cost. Signed as in the text
   // summary (mcp.js), which writes "<=".
   const optEur = o => (o.peakPrice ? '≤ ' : '') + eur(o.total);
-  // Sockets with no published power or plug: kw is null, connector the text
-  // "nan". Reads like socketLine in mcp.js. With no plug known, dc says nothing
+  // Sockets with no published power or plug: kw and connector are null.
+  // Reads like socketLine in mcp.js. With no plug known, dc says nothing
   // either, so neither AC nor DC is claimed. On MOBI.E, the grid the charger
   // hangs from (BT or MT), as the text summary writes it.
   const socket = q => {
-    const plug = q.connector === 'nan' ? null : q.connector;
+    const plug = q.connector ?? null;
     return `${esc(q.kw ?? '?')} kW ${esc(plug ?? '?')}${plug == null ? '' : q.dc ? ' DC' : ' AC'}${q.tar ? ` · ${esc(q.tar)}` : ''}`;
   };
 

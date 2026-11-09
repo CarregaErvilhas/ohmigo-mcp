@@ -541,8 +541,8 @@ test('http: a socket with no published power or plug reads "?" in the summary li
   assert.match(single.content[0].text.split('\n\n')[0], unknown);
   const found = await call('lookup_charger', { query: 'EDP-FAR-00001' });
   assert.match(found.content[0].text.split('\n\n')[0], /1× \? kW \?(, BT)?$/m);
-  // Only the text: the data keeps what the dataset says.
-  assert.equal(single.structuredContent.results[0].connector, 'nan');
+  // The dataset's "nan" is no plug: the data says null, not the word.
+  assert.equal(single.structuredContent.results[0].connector, null);
   // The view, which reads the data, says "?" too.
   const [view] = renderView(single.structuredContent);
   assert.match(view, /\? kW \?/);

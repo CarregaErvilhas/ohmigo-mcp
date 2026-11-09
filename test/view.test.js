@@ -53,12 +53,12 @@ test('view: the first row is highlighted by best, not by the CEME total', () => 
 });
 
 test('view: a socket with no published power or plug reads "?"', () => {
-  const [unknown] = renderView({ lang: 'en', results: [row({ kw: null, connector: 'nan' })] });
+  const [unknown] = renderView({ lang: 'en', results: [row({ kw: null, connector: null })] });
   assert.match(unknown, /\? kW \? · /);
   assert.doesNotMatch(unknown, /nan/);
   // No plug known: neither AC nor DC is claimed, whatever dc says.
   assert.match(renderView({ lang: 'en', results: [row({ connector: null })] })[0], /50 kW \? · /);
-  assert.match(renderView({ lang: 'en', results: [row({ connector: 'nan', dc: false })] })[0], /50 kW \? · /);
+  assert.match(renderView({ lang: 'en', results: [row({ connector: null, dc: false })] })[0], /50 kW \? · /);
   assert.match(renderView({ lang: 'en', results: [row({})] })[0], /50 kW CCS2 DC · /);
   assert.match(renderView({ lang: 'en', results: [row({ dc: false })] })[0], /50 kW CCS2 AC · /);
 });

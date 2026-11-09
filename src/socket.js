@@ -18,8 +18,8 @@
 
 import { tariffVoltage } from './ceme.js';
 
-// Plug codes the dataset uses that the sentences know. Anything else (the NAP
-// leaves some blank, which arrives as "nan") reads as unknown.
+// Plug codes the dataset uses that the sentences know. Anything else, or none
+// (the NAP leaves some blank), reads as unknown.
 const PLUGS = new Set(['CCS', 'CCS1', 'T2', 'T1', 'CHADEMO', 'SCHUKO', 'CEE']);
 // The NAP's own name for the blue CEE socket, kept as is by the dataset.
 const ALIAS = { iec60309x2single16: 'CEE' };
