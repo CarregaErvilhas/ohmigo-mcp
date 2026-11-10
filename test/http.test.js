@@ -443,7 +443,7 @@ test('socketKindKey: sockets at sites with different hours stay apart, so a clos
 });
 
 test('http: an inferred socket stays apart from its named sibling, so its assumption survives', async () => {
-  const { results } = (await call('estimate_charging_cost', { site: 'CNT-9648PL0003', battery_kwh: 58, start_pct: 20, lang: 'en', at: '2026-11-02T12:00:00Z' })).structuredContent;
+  const { results } = (await call('estimate_charging_cost', { site: 'CNT-9648PL0003', battery_kwh: 58, start_pct: 20, lang: 'en', at: new Date(Date.now() - 86_400_000).toISOString() })).structuredContent;
   const lent = results.filter(q => q.siteId === 'CNT-9648PL0003');
   assert.ok(lent.length >= 1);
   assert.ok(lent.every(q => q.assumptions.some(a => /inferred/.test(a))));
