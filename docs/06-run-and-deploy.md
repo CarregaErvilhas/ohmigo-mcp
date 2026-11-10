@@ -61,13 +61,14 @@ reporting a security problem. It's generated per request (`securityTxt` in
 
 `GET /healthz` shows how the server is doing: `status` is `ok`, or
 `degraded` with the reasons in `problems` (the last live feed refresh failed,
-ceme-v2 isn't answering, the dataset missed its weekly rebuild). It answers 200
+ceme-v2 isn't answering, the dataset missed its weekly rebuild, the last
+downloaded dataset was refused as broken: see [05](05-dataset.md)). It answers 200
 either way, so the platform doesn't restart a container over an outage
 elsewhere; point a monitor at `status`. Anyone can read that summary, plus
 `version`, `commit`, `source`, `dataAsOf` and `dataAgeHours`; `problems` names what's wrong, never
 the raw error. Send the `x-healthz-token` header with the value of
 `HEALTHZ_TOKEN` and the same answer adds the live feed (`publishedAt`, `fresh`,
-`failures`, `retryAt`, `bytesLast`, the last `error`), the ceme-v2 breaker,
+`failures`, `retryAt`, `bytesLast`, the last `error`), why the last dataset was refused (`datasetRefused`, when one was), the ceme-v2 breaker,
 per-tool counters (`calls`, `errors`, `avgMs`, `maxMs`, `maxChars`) and memory:
 
 ```bash
@@ -145,7 +146,8 @@ Production is `https://ohmigo.ocarroeletrico.com/mcp`, Zerops project
 
 The readiness check is `/healthz`, which only needs the 200 of the summary. Boot loads the dataset (a few seconds) and
 answers before the live feed finishes downloading. If the dataset download
-fails, boot retries for a while, inside the readiness timeout
+fails, or the file is refused as broken (too big, under `MIN_SITES` sites;
+[05](05-dataset.md)), boot retries for a while, inside the readiness timeout
 (`loadDataset` in `src/server.js`; keep the two in step), then exits, so the
 previous version keeps serving. On `SIGTERM` (a deploy), the server stops
 taking connections and lets the requests in flight finish, with a cap.
