@@ -122,6 +122,13 @@ Use `manual.json`:
 `"sessionEur"` (optional): a fixed amount per session, VAT included, added
 to the total (a connection fee). A subscription's `fee` is not added.
 
+`"until"` / `"from"` (optional, `YYYY-MM-DD`, both days included): when the
+offer applies, by the civil day the charge starts where the charger is. A
+launch promotion is two offers: the discounted price with `until`, the
+regular one with `from` the next day (Telpark's app). The option then says
+it's a promotion and until when (`until` on it), and a charge planned after
+that day gets the regular price.
+
 An offer can also carry `"audience"`: an id from `offers/audiences.json`
 (`uber-driver`, `powerdot-staff`...) for a price only that group gets. It is
 hidden unless the driver says they belong to it (the tools' `audiences`

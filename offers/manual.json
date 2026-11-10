@@ -1,7 +1,33 @@
 {
   "about": "Hand-maintained corrections and additions to offers/custofinal.json (the scraped blog). An entry whose id exists there overrides the fields it lists; {\"id\": ..., \"disable\": true} removes it; {\"add\": true} adds a new offer (all fields required); an override or disable whose id is not in the scrape fails the tests. Every entry needs source and checkedAt, and the source host must be in sourceHosts (also for offers/nap-notes.json). Guide: docs/04-operator-offers.md.",
-  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com", "atlante.energy"],
+  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com", "atlante.energy", "www.telpark.com"],
   "offers": [
+    {
+      "id": "telpark-app-telpark-lancamento-telpark",
+      "add": true,
+      "label": "Telpark - App Telpark (lançamento, -15 %)",
+      "provider": "Telpark", "plan": "App Telpark", "network": "Telpark",
+      "scope": { "operatorIds": ["EPKS"] },
+      "walkUp": false, "subscription": false, "fee": null,
+      "prices": { "ac22": 0.59, "dc50": 0.64, "dc100": 0.64, "dc120": 0.67, "dc150": 0.67, "dc180": 0.67 },
+      "until": "2026-12-31",
+      "source": "https://www.telpark.com/pt/particulares/promocoes/lancamento-carregamento-eletrico-portugal-26/",
+      "checkedAt": "2026-11-10",
+      "why": "Launch of Telpark's app charging in its Portuguese car parks: 15 % off every charge started from the app (the promo page), until 31 Dec 2026 (the app's announcement; the page gives no end date). Prices from the Telpark app (screenshots, 10 Nov 2026), the same at every site seen: 22 kW AC 0.59 (0.69 crossed out) at Luíz I, Campo de Ourique and Praça do Rossio; DC 0.64 (0.75) at 30 kW (Luíz I) and 60 kW (Praça do Rossio, Aveiro), 0.67 (0.79) at 120 kW (Campo de Ourique) and 172 kW (Maria Cristina). Not seen: the 100 kW sockets (the 60 kW price is assumed for the whole band) and the 150 kW band (no Telpark socket there in the NAP; between two equal prices). Telpark has nothing above 180 kW, so dcMax is left out. telpark-app-telpark takes over on 1 Jan."
+    },
+    {
+      "id": "telpark-app-telpark",
+      "add": true,
+      "label": "Telpark - App Telpark",
+      "provider": "Telpark", "plan": "App Telpark", "network": "Telpark",
+      "scope": { "operatorIds": ["EPKS"] },
+      "walkUp": false, "subscription": false, "fee": null,
+      "prices": { "ac22": 0.69, "dc50": 0.75, "dc100": 0.75, "dc120": 0.79, "dc150": 0.79, "dc180": 0.79 },
+      "from": "2027-01-01",
+      "source": "https://www.telpark.com/pt/particulares/promocoes/lancamento-carregamento-eletrico-portugal-26/",
+      "checkedAt": "2026-11-10",
+      "why": "Telpark's app price without the launch discount (the crossed-out prices in the app at Luíz I, Campo de Ourique, Praça do Rossio and Maria Cristina, 10 Nov 2026). Re-check it in January: it's what the app showed before the discount, not a published list."
+    },
     {
       "id": "atlante-app-myatlante-business-atlante",
       "add": true,

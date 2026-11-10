@@ -98,6 +98,7 @@ export const MESSAGES = {
     'option.fee': ({ eur, per }) => `+ ${fmt('en', eur, 2)} €/${per === 'year' ? 'year' : 'month'} subscription`,
     'option.feeUnknown': () => '+ subscription fee',
     'option.sessionFee': ({ eur }) => `Includes ${fmt('en', eur, 2, 2)} € per session (connection fee).`,
+    'option.until': ({ until }) => `Promotional price, for charges started up to ${until}; after that the regular price applies.`,
     'option.stale': () => '(checked a while ago: may be out of date)',
     'option.islandVat': () => '(listed with mainland VAT; island VAT is lower, so check the price on the app or at the charger)',
 
@@ -300,6 +301,7 @@ export const MESSAGES = {
     'option.fee': ({ eur, per }) => `+ ${fmt('pt', eur, 2)} €/${per === 'year' ? 'ano' : 'mês'} de subscrição`,
     'option.feeUnknown': () => '+ mensalidade',
     'option.sessionFee': ({ eur }) => `Inclui ${fmt('pt', eur, 2, 2)} € por sessão (taxa de ligação).`,
+    'option.until': ({ until }) => `Preço promocional, para carregamentos iniciados até ${until}; depois aplica-se o preço normal.`,
     'option.stale': () => '(verificado há algum tempo: pode estar desactualizado)',
     'option.islandVat': () => '(preço com IVA do continente; nas ilhas o IVA é mais baixo, confirme o preço na app ou no posto)',
 

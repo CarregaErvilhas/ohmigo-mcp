@@ -23,6 +23,7 @@
 
 import { readFileSync } from 'node:fs';
 import { bandFor } from './offers-parse.js';
+import { REGION_TZ } from './profile.js';
 
 export const STALE_DAYS = 90;
 
@@ -85,17 +86,31 @@ export function isStale(offer, now = new Date()) {
   return (now - new Date(offer.checkedAt)) / 86_400_000 > STALE_DAYS;
 }
 
-// The offers that apply at this charge point, each with its €/kWh for the
-// point's power band. MOBI.E-wide offers only apply to chargers on MOBI.E,
+// A launch promotion ends on a set day (Telpark's 15 % until 31 Dec), and
+// the regular price starts the day after: manual.json gives the two as two
+// offers, one with `until`, one with `from` (both YYYY-MM-DD, inclusive, the
+// charge's civil day where the charger is). Picked by the day the charge
+// starts, so a trip planned for January gets January's price.
+const dayFmt = new Map();
+export function civilDay(at, region) {
+  const tz = REGION_TZ[region] || REGION_TZ.CONT;
+  if (!dayFmt.has(tz)) dayFmt.set(tz, new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }));
+  return dayFmt.get(tz).format(at);
+}
+export const activeOn = (offer, day) => (!offer.from || day >= offer.from) && (!offer.until || day <= offer.until);
+
+// The offers that apply at this charge point on the day of `at`, each with
+// its €/kWh for the point's power band. MOBI.E-wide offers only apply to chargers on MOBI.E,
 // and a provider's row for this specific network replaces its MOBI.E-wide
 // row (the blog lists "Electroverse @ Rede Mobi.E" AND "Electroverse @ Ionity").
 // Offers for an audience the driver didn't claim are left out.
-export function offersAt(site, point, audiences = []) {
+export function offersAt(site, point, audiences = [], at = new Date()) {
   const band = bandFor(point);
   if (!band) return [];
-  const own = byOperator.get(site.operatorId) || [];
+  const day = civilDay(at, site.region);
+  const own = (byOperator.get(site.operatorId) || []).filter(o => activeOn(o, day));
   const ownLabels = new Set(own.map(o => o.label));
-  const wide = point.regime !== 'sem_ceme' ? mobieWide.filter(o => !ownLabels.has(o.label)) : [];
+  const wide = point.regime !== 'sem_ceme' ? mobieWide.filter(o => !ownLabels.has(o.label) && activeOn(o, day)) : [];
   return [...own, ...wide]
     .map(offer => ({ offer, eurPerKwh: offer.prices[band] ?? offer.prices.all ?? null }))
     .filter(x => x.eurPerKwh != null && forAudiences(x.offer, audiences));
