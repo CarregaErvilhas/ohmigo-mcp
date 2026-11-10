@@ -42,6 +42,24 @@ this changed?", sending the `ETag` of the copy it has:
   the old copy.
 - **Failed** (Pages down, bad file): the server keeps the copy it has and
   tries again 6 hours later.
+- **Refused** (a file that downloaded fine but looks broken): the server
+  keeps the copy it has, logs why, and `/healthz` lists
+  `dataset: last update refused` until a later file passes.
+
+### What counts as a broken file
+
+A downloaded file replaces a good one with nobody looking, so `Dataset.load`
+(`src/data.js`) holds it to more than "right schema, some sites":
+
+- at most `MAX_DATASET_BYTES`, so a runaway download can't fill memory;
+- at least `MIN_SITES` sites, even at boot, when there's nothing to compare
+  with: a near-empty file fails the boot instead of serving;
+- on a reload, at least `MIN_RATIO` of the sites and of the points of the copy
+  in memory, so a truncated file can't swap thousands of chargers for a
+  handful. The ratio matches AmpereArchive's collector.
+
+A local file (`DATASET_PATH`, `data/chargers.json`) skips the floor and the
+ratio: tests and development use small ones on purpose.
 
 So the new data shows up at most 6 hours after Monday's refresh, for almost no
 traffic. A shorter interval would be fine too. Longer would just mean a later

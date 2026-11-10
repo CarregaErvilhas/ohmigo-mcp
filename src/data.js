@@ -36,6 +36,38 @@ import { haversineKm, routeDistance } from './geo.js';
 import { siteOpen } from './hours.js';
 import { Index, lendOperators, operatorKey } from './lookup.js';
 import { revalidate } from './live.js';
+
+// Guards on a downloaded dataset (Dataset.load). The real file is ~10 MB with
+// ~9k sites; a truncated or tampered one must not replace it.
+export const MAX_DATASET_BYTES = 64 * 1024 * 1024;
+export const MIN_SITES = 1000;
+// Same ratio as AmpereArchive's collector (minRatio): a weekly rebuild never
+// loses half the network, a broken one does.
+export const MIN_RATIO = 0.5;
+
+// A download the guards turned down: the copy in memory stays, and /healthz says so.
+export class DatasetRefused extends Error {}
+
+function notShrunk(raw, previous) {
+  const sites = Array.isArray(raw.sites) ? raw.sites : [];
+  const count = list => list.reduce((n, s) => n + (Array.isArray(s?.points) ? s.points.length : 0), 0);
+  for (const [what, got, had] of [['sites', sites.length, previous.sites.length], ['points', count(sites), count(previous.sites)]]) {
+    if (had > 0 && got < had * MIN_RATIO) throw new DatasetRefused(`dataset has only ${got} ${what}, ${had} in memory (under ${Math.round(MIN_RATIO * 100)}%)`);
+  }
+}
+
+// Reads a response body up to `max` bytes, stopping the download past that.
+async function readCapped(res, max) {
+  if (Number(res.headers.get('content-length')) > max) throw new DatasetRefused(`dataset over ${max} bytes`);
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of res.body) {
+    size += chunk.length;
+    if (size > max) { await res.body.cancel?.().catch(() => {}); throw new DatasetRefused(`dataset over ${max} bytes`); }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
 import { usableKw } from './socket.js';
 import { fold } from './text.js';
 
@@ -129,23 +161,33 @@ export class Dataset {
   //   data/chargers.json, if present (development)
   // `etag` makes the request conditional: when the file didn't change, the
   // server answers 304 with no body and this returns null (keep what you have).
-  static async load({ etag, timeoutMs = 60_000 } = {}) {
+  //
+  // A downloaded file is held to more than a local one, because it replaces
+  // a good copy without anybody looking: at most MAX_DATASET_BYTES, at least
+  // MIN_SITES sites, and, against `previous` (the copy in memory), at least
+  // MIN_RATIO of its sites and points. Failing those throws a DatasetRefused.
+  // Local files skip the floor and the ratio: tests and development use tiny
+  // ones on purpose.
+  static async load({ etag, timeoutMs = 60_000, previous } = {}) {
     const path = process.env.DATASET_PATH || (process.env.DATASET_URL ? null : localFile());
     if (path) return Dataset.check(JSON.parse(await readFile(path, 'utf8')));
     const url = process.env.DATASET_URL || DEFAULT_URL;
     const res = await fetch(url, { headers: etag ? revalidate(etag) : {}, signal: AbortSignal.timeout(timeoutMs) });
     if (res.status === 304) return null;
     if (!res.ok) throw new Error(`dataset ${url}: HTTP ${res.status}`);
-    const ds = Dataset.check(await res.json());
+    const raw = JSON.parse(await readCapped(res, MAX_DATASET_BYTES));
+    if (previous) notShrunk(raw, previous);
+    const ds = Dataset.check(raw, { minSites: MIN_SITES });
     ds.etag = res.headers.get('etag');
     return ds;
   }
 
   // Refuses a file from a format we don't know, instead of misreading it.
-  static check(raw) {
+  static check(raw, { minSites = 1 } = {}) {
     const schema = raw.schema ?? 1;
     if (schema !== SCHEMA) throw new Error(`dataset schema ${schema}, this server reads ${SCHEMA}`);
     if (!Array.isArray(raw.sites) || !raw.sites.length) throw new Error('dataset has no sites');
+    if (raw.sites.length < minSites) throw new DatasetRefused(`dataset has only ${raw.sites.length} sites, under the floor of ${minSites}`);
     const ds = new Dataset(raw);
     console.log(reportLine(ds.cleaned));
     return ds;

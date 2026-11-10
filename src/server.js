@@ -21,7 +21,7 @@ import { createServer as createHttp } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { cemeHealth } from './ceme.js';
-import { Dataset } from './data.js';
+import { Dataset, DatasetRefused } from './data.js';
 import { LiveStatus } from './live.js';
 import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
@@ -49,6 +49,8 @@ async function loadDataset(tries = 4) {
   }
 }
 let ds = await loadDataset();
+// Why the last downloaded dataset was turned down (Dataset.load), until one passes.
+let datasetRefused = null;
 console.log(`[ohmigo] ${ds.sites.length} sites, data as of ${ds.generatedAt}`);
 
 const live = new LiveStatus();
@@ -66,9 +68,13 @@ if (process.env.LIVE_WARMUP !== '0') setTimeout(() => live.refresh(), Math.rando
 if (!process.env.DATASET_PATH && ds.etag !== undefined) {
   setInterval(async () => {
     try {
-      const next = await Dataset.load({ etag: ds.etag });
+      const next = await Dataset.load({ etag: ds.etag, previous: ds });
+      datasetRefused = null;
       if (next) { ds = next; forgetDump(); console.log(`[ohmigo] new dataset, data as of ${ds.generatedAt}`); }
-    } catch (e) { console.warn('[ohmigo] dataset check failed, keeping the current one:', e.message); }
+    } catch (e) {
+      if (e instanceof DatasetRefused) datasetRefused = e.message;
+      console.warn('[ohmigo] dataset check failed, keeping the current one:', e.message);
+    }
   }, DATASET_CHECK_MS).unref();
 }
 
@@ -205,11 +211,13 @@ function health(detail) {
   const ageH = (Date.now() - Date.parse(ds.generatedAt)) / 3600_000;
   // The dataset is rebuilt weekly; past ~9 days the pipeline has missed one.
   if (ageH > 9 * 24) problems.push('dataset: older than 9 days');
+  if (datasetRefused) problems.push('dataset: last update refused');
   const summary = {
     ok: true, status: problems.length ? 'degraded' : 'ok', problems, version: VERSION, commit: COMMIT, source: SOURCE_URL,
     dataAsOf: ds.generatedAt, dataAgeHours: Math.round(ageH * 10) / 10,
   };
   if (!detail) return summary;
+  if (datasetRefused) summary.datasetRefused = datasetRefused;
   const mem = process.memoryUsage();
   return {
     ...summary, live: lv, ceme, tools: statsSummary(),
