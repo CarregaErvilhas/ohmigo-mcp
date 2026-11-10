@@ -17,6 +17,7 @@
     "Powerdot": { "operatorIds": ["HORZ"] },
     "Prio": { "operatorIds": ["PRIO"] },
     "REMO": { "operatorIds": ["REMO"] },
+    "Telpark": { "operatorIds": ["EPKS"] },
     "Tesla Supercharger": { "operatorIds": ["TSLA"] }
   }
 }

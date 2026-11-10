@@ -301,7 +301,7 @@ function directOptions(direct, session, t, region, mine = new Set()) {
   return direct.map(({ offer, eurPerKwh }) => ({
     kind: 'direct', offerId: offer.id, label: offer.label, provider: offer.provider, ...(offer.audience && { audience: offer.audience }),
     ...(offer.cemeTariffs?.some(k => mine.has(k)) && { listed: true, viaTariff: true }),
-    total: r2(eurPerKwh * session.kwh + (offer.sessionEur || 0)), eurPerKwh, ...(offer.sessionEur && { sessionEur: offer.sessionEur }), walkUp: !!offer.walkUp,
+    total: r2(eurPerKwh * session.kwh + (offer.sessionEur || 0)), eurPerKwh, ...(offer.sessionEur && { sessionEur: offer.sessionEur }), walkUp: !!offer.walkUp, ...(offer.until && { until: offer.until }),
     subscription: offer.subscription ? { ...(offer.fee || {}), text: offer.fee ? t('option.fee', offer.fee) : t('option.feeUnknown') } : null,
     // What holds for every direct price (outside the CEME system, final with
     // VAT) is one note per answer (directNote), and the blog's name one entry
@@ -311,6 +311,7 @@ function directOptions(direct, session, t, region, mine = new Set()) {
     ...optionNote([
       offer.walkUp && t('option.walkUp'),
       offer.sessionEur && t('option.sessionFee', { eur: offer.sessionEur }),
+      offer.until && t('option.until', { until: offer.until }),
       isStale(offer) && t('option.stale'),
       island && t('option.islandVat'),
     ]),
@@ -443,7 +444,7 @@ export async function quotePoint(hit, car, opts = {}) {
   // An offer only a CEME tariff's holders get (manual.json `holdersOnly`, e.g.
   // myAtlante Business's DC price) is left out for everyone else.
   const mine = new Set((tariffIds || []).map(cardKey));
-  const direct = priv ? [] : offersAt(site, point, audiences)
+  const direct = priv ? [] : offersAt(site, point, audiences, start)
     .filter(x => !x.offer.holdersOnly || x.offer.cemeTariffs?.some(k => mine.has(k)));
 
   if (point.regime === 'sem_ceme') {

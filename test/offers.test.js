@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { bandFor, BLOG_HOST, MAX_EUR_PER_KWH, MAX_LABEL_LENGTH, MIN_EUR_PER_KWH, newestPost, offerProblems, parseTables, toOffers } from '../src/offers-parse.js';
-import { AUDIENCES, gaps, isStale, mergeOffers, NAP_NOTES, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
+import { activeOn, AUDIENCES, civilDay, gaps, isStale, mergeOffers, NAP_NOTES, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
 
 const HEAD = `<thead><tr><th rowspan="2">Operador - Plano</th><th rowspan="2">Postos</th><th colspan="2">AC</th><th colspan="6">DC</th></tr>
 <tr><th>&le;7.4</th><th>11..22</th><th>≤50</th><th>100</th><th>120</th><th>150</th><th>180</th><th>&gt;180</th></tr></thead>`;
@@ -196,6 +196,19 @@ test('offersAt: operator offers + MOBI.E-wide ones, priced for the band', () => 
   assert.ok(!offersAt(ionity, { kw: 22, dc: false, regime: 'mobie' }).some(x => x.offer.id === 'ionity-tpa-ionity'));
 });
 
+test('offersAt: a promotion ends on its `until` day and the regular price takes over', () => {
+  const telpark = { id: 'EPK-X', operatorId: 'EPKS', region: 'CONT' }, ac = { kw: 22, dc: false, regime: 'mobie_sem_tarifa' };
+  const own = at => offersAt(telpark, ac, [], new Date(at)).filter(x => x.offer.scope.operatorIds?.includes('EPKS'));
+  const ids = at => own(at).map(x => x.offer.id);
+  assert.deepEqual(ids('2026-12-31T23:30:00Z'), ['telpark-app-telpark-lancamento-telpark'], '23:30 UTC on 31 Dec is still 31 Dec in Lisbon');
+  assert.deepEqual(ids('2027-01-01T00:30:00Z'), ['telpark-app-telpark']);
+  assert.equal(own('2026-11-10T12:00:00Z')[0].eurPerKwh, 0.59);
+  assert.equal(own('2027-02-01T12:00:00Z')[0].eurPerKwh, 0.69);
+  // In winter the Azores are an hour behind UTC: still 31 Dec there.
+  assert.equal(civilDay(new Date('2027-01-01T00:30:00Z'), 'AZO'), '2026-12-31');
+  assert.equal(activeOn({ from: '2027-01-01' }, '2026-12-31'), false);
+});
+
 test('gaps: operators with direct-payment signals and no scoped offer', () => {
   const site = (operatorId, payment, adhoc) => ({ operatorId, operator: operatorId, payment, points: [{ opc: adhoc ? { AD_HOC_PAYMENT: {} } : {} }] });
   const g = gaps([site('IONY', ['creditCard'], true), site('AAA', ['apps', 'creditCard']), site('AAA', ['apps']), site('BBB', ['apps', 'rfid']), site('CCC', ['apps'], true)]);
@@ -220,6 +233,8 @@ test('offers files are well-formed', () => {
     assert.ok(new Date(o.checkedAt) <= new Date(), `${o.id}: checkedAt in the future`);
     const prices = Object.values(o.prices).filter(v => v != null);
     assert.ok(prices.length, `${o.id}: at least one price`);
+    for (const k of ['from', 'until']) if (k in o) assert.match(o[k], /^\d{4}-\d{2}-\d{2}$/, `${o.id}: ${k} YYYY-MM-DD`);
+    if (o.from && o.until) assert.ok(o.from <= o.until, `${o.id}: from after until`);
     if (o.subscription && o.fee) assert.ok(o.fee.eur > 0 && ['month', 'year'].includes(o.fee.per), `${o.id}: fee`);
   }
   const manual = JSON.parse(readFileSync(new URL('../offers/manual.json', import.meta.url), 'utf8')).offers;
