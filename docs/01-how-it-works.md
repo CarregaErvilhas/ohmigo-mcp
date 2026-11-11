@@ -180,10 +180,14 @@ Mealhada", "the Lidl in Coimbra", or read the code off the sticker
   operator prefix (`GLP-LRA-00156`), MOBI.E's (`MOBI-LRA-00156`), the leading
   zeros, or the socket number (`LRA-00156-02`). Ids that aren't MOBI.E codes
   (Tesla's UUIDs, Continente's `0001PL0002`) match whole.
+- An **old code** a site had before (OpenStreetMap's `old_ref`, the sticker
+  of a charger that changed operator) finds the site it is now, with a note
+  that the operator changed.
 - **Words** must all appear in what the site is known by: the NAP's operator,
   the network labels in `offers/networks.json` ("Powerdot" for `HORZ`), the
   `osm` block from nap-dashboard (OpenStreetMap's name, brand, operator:
-  often the chargers' owner or the shop they're at), town and address. A word matches the start of a
+  often the chargers' owner or the shop they're at, and the chargers' make
+  and model, without their bare numbers), town and address. A word matches the start of a
   site word, and longer words forgive one typo. Words like "posto", "area de
   servico" or "near" are ignored.
 - A **town** in the words orders the matches by distance to it, so "IONITY

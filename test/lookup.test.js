@@ -1,7 +1,7 @@
 // Finding a charger by what the user calls it (src/lookup.js, Dataset.lookup).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Dataset } from '../src/data.js';
+import { Dataset, wheelchair } from '../src/data.js';
 import { codesIn } from '../src/lookup.js';
 
 const pt = (id, extra = {}) => ({ id, kw: 22, connector: 'T2', dc: false, regime: 'mobie', ...extra });
@@ -25,6 +25,9 @@ const ds = new Dataset({
     site('LDL-CBR-00001', 'CBR-00001', 'Coimbra', 'Rua do Brasil', 'Helexia II Energy Services, Lda.', 'HELX', 40.2, -8.42, { osm: { brand: 'Lidl' } }),
     site('SMF-VFR-00001', 'VFR-00001', 'Santa Maria da Feira', 'Rua Central', 'EDP Comercial', 'EDPC', 40.92, -8.54),
     site('CAP-LSB-00380', 'LSB-00380', 'Lisboa', 'CC Colombo - Piso -3 Zona Laranja', 'Capwatt Services, S.A.', 'CAPW', 38.75, -9.19),
+    site('EDP-PRT-00089', 'PRT-00089', 'Porto', 'Rua do Campo Alegre', 'EDP Comercial', 'EDPC', 41.17, -8.67,
+      { osm: { hardware: ['Alpitronic HYC_300', 'Efacec QC45'], oldRefs: ['PRT-00012'], oldOperator: 'KLC', wheelchair: 'yes' } }),
+    site('MOT-FAR-00108', 'FAR-00108', 'Faro', 'Rua A', 'Mota', 'MOTA', 37.02, -7.93, { accessibility: 'disabilityAccessible' }),
   ],
 });
 const ids = (q, opts) => ds.lookup(q, opts).results.map(h => h.site.id);
@@ -262,4 +265,26 @@ test('places are third-party text: only a known shape gets through', () => {
   });
   assert.deepEqual(d.siteById.get('GLP-LRA-00156').places.map(p => p.name), ['Evil', 'Fine']);
   assert.equal(d.siteById.get('GLP-LRA-00157').places, undefined);
+});
+
+test('lookup: by the make or model of a charger at the site, not by its bare numbers', () => {
+  assert.deepEqual(ids('Alpitronic Porto'), ['EDP-PRT-00089']);
+  assert.deepEqual(ids('efacec'), ['EDP-PRT-00089']);
+  assert.ok(!ids('300 Porto').length || ds.lookup('300 Porto').results.every(h => !h.matched.includes('hardware')));
+});
+
+test('lookup: an old code on the sticker finds the site it belongs to now', () => {
+  const r = ds.lookup('PRT-00012');
+  assert.deepEqual(r.results.map(h => h.site.id), ['EDP-PRT-00089']);
+  assert.deepEqual(r.results[0].matched, ['oldCode']);
+});
+
+test('wheelchair: the operator\'s word (NAP) or OpenStreetMap, null when neither says', () => {
+  const by = id => ds.sites.find(s => s.id === id);
+  assert.equal(wheelchair(by('MOT-FAR-00108')), 'yes');
+  assert.equal(wheelchair(by('EDP-PRT-00089')), 'yes');
+  assert.equal(wheelchair(by('GLP-LRA-00156')), null);
+  const keep = ds.pointFilter({ wheelchair: true });
+  const ids = new Set(ds.sites.filter(s => s.points.some(p => keep(p, s))).map(s => s.id));
+  assert.deepEqual([...ids].sort(), ['EDP-PRT-00089', 'MOT-FAR-00108']);
 });

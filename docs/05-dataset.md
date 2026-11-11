@@ -144,15 +144,35 @@ Monday.
   coordinates). Optional, and so is every field in it: `name`, `brand`,
   `operator`, `openingHours`, `location` (`underground`...), `access`,
   `parkingFee`, `maxstay`, `level` (floor), `covered`, `indoor`, `phone`,
-  `email`, `manufacturer`, `model`, `capacity` (cars at once), `payment` (the
+  `email`, `manufacturer`, `model`, `hardware`, `capacity` (cars at once), `payment` (the
   `payment:*`/`authentication:*` methods tagged yes) and `cards` (true/false
   when OSM says whether a bank card works at the charger; `cardPayment` in
   `src/data.js` combines it with the NAP's `payment`). Its `brand`/`operator` are often the chargers' owner
   or the shop they're at (Lidl owns its chargers, Galp operates them), not
   the OPC that bills the fee (that's the site's `operator`).
   `lookup_charger` searches it and shows it ([01](01-how-it-works.md)).
-  `src/clean.js` keeps only the fields the code or a driver uses: `manufacturer`,
-  `model` and `payment` stay in the file but never reach an answer.
+  `hardware` lists every charger mapped at the site ("Alpitronic HYC_150",
+  "Efacec QC45"), most common first; `manufacturer`/`model` are only the
+  commonest one, kept for older readers.
+  `src/clean.js` keeps only the fields the code or a driver uses: `payment`
+  stays in the file but never reaches an answer; `hardware` (or, from an
+  older file, `manufacturer` + `model`) reaches `lookup_charger`, which also
+  finds a site by it ("Alpitronic Porto").
+  `wheelchair` (yes / limited / no: can a wheelchair user reach the
+  charger), `sharedKw` (the total a charger gives when its sockets share it:
+  with another car plugged in, each gets less; `lookup_charger` says so) and
+  `oldRefs` + `oldOperator` (the codes and operator the site had before: the
+  old sticker may still be on the charger, so `lookup_charger` and
+  `estimate_charging_cost` find the site by them and say the operator
+  changed). `fixme` (the community's open questions, "Verificar se aceita
+  pagamento com cartão bancário") reaches `lookup_charger` short and few,
+  with a note to present them as things to check on site, never as facts,
+  and to send whoever checks to the mappers' Telegram group (`FIXME_FEEDBACK`
+  in `src/i18n.js`).
+- `accessibility`: the NAP's own DATEX II accessibility values, `|`-joined
+  ("disabilityAccessible"). `wheelchair()` in `src/data.js` reads it first,
+  then OpenStreetMap's `wheelchair`; the `wheelchair` filter keeps yes and
+  limited.
 - `places`: the named places from OpenStreetMap the site is in or right
   beside, most important first: `[{ "name": "MarShopping", "type": "mall",
   "osm": "way/191497844", "m": 24 }]`. `m` is metres to the place's outline

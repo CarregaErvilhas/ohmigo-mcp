@@ -285,6 +285,8 @@ test('http: lookup_charger finds a site by its NAP name and tells the driver wha
   assert.equal(c.openNow, true);
   assert.equal(c.cardPayment, true);
   assert.deepEqual(c.support, { phone: '800222222' });
+  // The charger's make and model, as mapped on OpenStreetMap.
+  assert.deepEqual(c.osm.hardware, ['Efacec']);
   assert.equal(c.osm.manufacturer, undefined);
   // The NAP lists no card, OSM says there's a terminal: the answer says so.
   assert.ok(d.notes.some(n => /GLP-LRA-00156.*bank card/.test(n)));

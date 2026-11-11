@@ -930,6 +930,42 @@
       }
     },
     {
+      "id": "wheelchair-near",
+      "why": "\"Accessible in a wheelchair\" is the wheelchair filter; few chargers say, and a charger without the information isn't inaccessible.",
+      "message": "Ando de cadeira de rodas. Há postos acessíveis perto do Porto?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "find_chargers|find_cheapest_charging",
+            "args": {
+              "wheelchair": true
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply say that most chargers have no accessibility information, rather than implying the others are inaccessible?"
+        ]
+      }
+    },
+    {
+      "id": "old-sticker-code",
+      "why": "An old code on the sticker goes to lookup_charger, which finds the site it belongs to now; say the operator may have changed.",
+      "message": "O posto onde estou tem um autocolante a dizer ABF-00049. Quanto custa carregar aqui?",
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger",
+            "args": {
+              "query": "abf-0*49"
+            }
+          }
+        ],
+        "judge": [
+          "Does the reply say the charger now has a different code or operator?"
+        ]
+      }
+    },
+    {
       "id": "uber-driver-powerdot",
       "why": "A direct offer only for one group (offers/manual.json, not a CEME tariff): pass the group the user named and say whom the price is for.",
       "message": "Sou motorista Uber, com conta Uber Driver. Quanto me custa carregar no Powerdot da Rua Virgílio Vieira da Cunha, em Leiria? Fiat 500e de 42 kWh, de 20% a 80%.",
