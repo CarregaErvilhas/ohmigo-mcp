@@ -299,6 +299,8 @@ export class Dataset {
   // "above 500 V".
   // Site-level filters ride along, so the function takes the site too:
   //   cardPayment  only sites where a bank card is known to work at the charger
+  //   wheelchair   only sites the operator or OpenStreetMap say a wheelchair
+  //                user can reach (yes or limited); few say anything
   //   cable        true: the cable is fixed to the charger; false: a socket
   //   openAt       a Date: only sites not known to be closed then (unknown
   //                hours pass: most sites have them, and a guess would hide
@@ -308,13 +310,13 @@ export class Dataset {
   // `carVolts`: the car's battery voltage. minKw then reads the power a DC
   // socket can give that car (amps × volts, socket.js), not its nameplate:
   // "150 kW for my 400 V car" must not keep a 200 A socket (80 kW).
-  pointFilter({ minKw, connectors, hide, dcOnly, minVoltage, cardPayment: card, cable, openAt, carVolts } = {}) {
+  pointFilter({ minKw, connectors, hide, dcOnly, minVoltage, cardPayment: card, cable, openAt, carVolts, wheelchair: wc } = {}) {
     const cs = connectors?.length ? new Set(connectors) : null;
     const hidden = !cs && hide?.length ? new Set(hide) : null;
     const minV = this.hasVoltage ? minVoltage : null;
     const siteOk = new Map();
     const siteFits = s => {
-      if (!siteOk.has(s)) siteOk.set(s, (!card || cardPayment(s).value === true) && (!openAt || siteOpen(s, openAt).open !== false));
+      if (!siteOk.has(s)) siteOk.set(s, (!card || cardPayment(s).value === true) && (!wc || ['yes', 'limited'].includes(wheelchair(s))) && (!openAt || siteOpen(s, openAt).open !== false));
       return siteOk.get(s);
     };
     return (p, s) => (minKw == null || (usableKw(p, carVolts) ?? 0) >= minKw)
@@ -432,6 +434,15 @@ export class Dataset {
 //     when the community tagged it, absent otherwise.
 // Yes when either says yes (a terminal one source missed is still there);
 // `disagree` when they contradict, so the answer can say "check on site".
+// Can a wheelchair user reach the charger? The NAP's DATEX II accessibility
+// (the operator's word, almost never published) says yes; otherwise
+// OpenStreetMap's wheelchair tag: yes, limited or no. null: nobody says.
+const NAP_ACCESSIBLE = ['wheelChairAccessible', 'disabilityAccessible', 'barrierFreeAccessible'];
+export function wheelchair(site) {
+  if (NAP_ACCESSIBLE.some(v => site.accessibility?.split('|').includes(v))) return 'yes';
+  return site.osm?.wheelchair ?? null;
+}
+
 const NAP_CARD = new Set(['creditCard', 'debitCard', 'pinpad', 'nfc']);
 export function cardPayment(site) {
   const nap = site.payment?.length ? site.payment.some(m => NAP_CARD.has(m)) : null;

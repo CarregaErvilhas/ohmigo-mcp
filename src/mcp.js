@@ -26,7 +26,7 @@ import { haversineKm } from './geo.js';
 import { pickLang, translator } from './i18n.js';
 import { napEurPerKwh, napPlan } from './live.js';
 import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt } from './offers.js';
-import { cardPayment } from './data.js';
+import { cardPayment, wheelchair } from './data.js';
 import { siteOpen } from './hours.js';
 import { COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
 import { describePlan } from './opc.js';
@@ -242,6 +242,9 @@ const Filter = {
     .describe("Car's battery voltage, V: 400 most, 800 for 800 V cars (look it up). Gives DC sockets' real power for it (kwForCar)")
 };
 
+// Only for the tools that search: a site the user named is what it is.
+const Access = { wheelchair: z.boolean().optional().describe('Wheelchair-accessible only') };
+
 // list_operators counts the network, not one driver's car: no car_voltage.
 const { car_voltage: _, ...networkFilter } = Filter;
 
@@ -253,7 +256,7 @@ const { car_voltage: _, ...networkFilter } = Filter;
 // asked). `allPlugs`: counts about the network, not a driver (list_operators).
 const filterOf = (a, { allPlugs = false } = {}) => ({
   minKw: a.min_kw, connectors: a.connectors, hide: allPlugs ? undefined : ['CHADEMO'], dcOnly: a.dc_only, minVoltage: a.min_voltage,
-  cardPayment: a.card_payment, cable: a.cable_attached, openAt: a.open_now ? (a.at ? new Date(a.at) : new Date()) : undefined,
+  cardPayment: a.card_payment, wheelchair: a.wheelchair, cable: a.cable_attached, openAt: a.open_now ? (a.at ? new Date(a.at) : new Date()) : undefined,
   carVolts: a.car_voltage,
 });
 
@@ -304,6 +307,10 @@ function siteFacts(site, t, at = new Date()) {
       openNow: hours.open ?? undefined,
       locationDescription: site.locationDescription ?? undefined,
       cardPayment: card.value ?? undefined,
+      // yes / limited / no: the operator (NAP) or OpenStreetMap; absent when neither says.
+      wheelchair: wheelchair(site) ?? undefined,
+      // kW a charger gives in total when its sockets share it (OpenStreetMap).
+      sharedKw: site.osm?.sharedKw,
       support: phone || site.osm?.email ? { phone, email: site.osm?.email } : undefined,
     },
     notes,
@@ -312,7 +319,10 @@ function siteFacts(site, t, at = new Date()) {
 
 // What a voltage filter needs said: the values are declared, not measured,
 // or (older dataset) the filter did nothing.
-const voltageNotes = (ds, a, t) => a.min_voltage == null ? [] : [t(ds.hasVoltage ? 'assume.voltage' : 'note.noVoltage')];
+const filterNotes = (ds, a, t) => [
+  ...(a.min_voltage == null ? [] : [t(ds.hasVoltage ? 'assume.voltage' : 'note.noVoltage')]),
+  ...(a.wheelchair ? [t('note.wheelchairFew')] : []),
+];
 
 const Region = {
   region: z.enum(['CONT', 'MAD', 'AZO']).optional().describe('Only this region: CONT (mainland), MAD (Madeira), AZO (Azores)'),
@@ -368,7 +378,7 @@ function resolveWhere(ds, a, t, { everywhere = false } = {}) {
   }
   if (!everywhere) return { error: t('err.where'), code: 'where' };
   const filtered = a.query || a.region || a.min_kw != null || a.min_voltage != null || a.connectors?.length || a.dc_only || a.car_voltage
-    || a.card_payment === true || a.cable_attached != null || a.open_now;
+    || a.card_payment === true || a.wheelchair === true || a.cable_attached != null || a.open_now;
   return filtered ? { only, everywhere: true } : { error: t('err.whereOrFilter'), code: 'where' };
 }
 
@@ -577,6 +587,9 @@ function targetsFor(ds, a, t) {
   }
   let [places] = areas;
   const assumptions = [];
+  // The old code on the sticker: the price is the current operator's.
+  const old = r.results.find(h => h.matched.includes('oldCode'));
+  if (old) assumptions.push(t('note.oldCode', { now: old.site.code, operator: old.site.operator ?? '?', old: old.site.osm?.oldOperator }));
   if (places.length > 1) {
     const towards = resolveTowards(ds, a.towards, t);
     if (towards?.error) return towards;
@@ -604,6 +617,9 @@ function targetsFor(ds, a, t) {
     }
   }
   if (sites.length > 1) assumptions.push(t('assume.sites', { n: sites.length }));
+  // The price assumes the socket's full power; where the sockets share less,
+  // the session can take longer (and cost more per minute) with another car on.
+  for (const { site } of sites) if (site.osm?.sharedKw) assumptions.push(t('assume.sharedKw', { site: site.id, kw: site.osm.sharedKw }));
   return { sites, assumptions };
 }
 
@@ -744,7 +760,7 @@ export function createServer(getDataset, live) {
 
   server.registerTool('lookup_charger', {
     title: 'Look up a charger',
-    description: 'Finds one public EV charger in Portugal the way the user names it: the code on its sticker ("LRA-00156"), operator or brand plus town ("Continente Leiria", "IONITY Mealhada"), the shop or place it is at, or its address. Returns what is published about it: each socket\'s power, plug, live status, operator fee, walk-up (ad hoc) price and direct offers, as published (mostly without VAT; estimate_charging_cost gives final prices), plus OpenStreetMap details in "osm". The NAP "operator" runs the charger and bills its fee; OSM\'s brand is often the owner or the shop (Lidl\'s chargers are run by Galp): say who operates it and credit OpenStreetMap. "missing" lists the user\'s words a site lacks: don\'t present it as their charger without saying so. If several fit, ask which (operator, address, town). For the cost, pass its siteId as site to estimate_charging_cost.',
+    description: 'Finds one public EV charger in Portugal the way the user names it: its sticker code ("LRA-00156"), operator or brand plus town ("Continente Leiria", "IONITY Mealhada"), the shop or place it is at, or its address. Returns what is published about it: each socket\'s power, plug, live status, operator fee, walk-up (ad hoc) price and direct offers (mostly without VAT; estimate_charging_cost gives final prices), plus OpenStreetMap details in "osm". The NAP "operator" runs it and bills its fee; OSM\'s brand is often the owner or shop (Lidl\'s are run by Galp): say who operates it. "missing" lists the user\'s words a site lacks: don\'t present it as their charger without saying so. If several fit, ask which (operator, address, town). For the cost, pass its siteId as site to estimate_charging_cost.',
     inputSchema: z.object({
       query: z.string().min(1).max(200).describe('The user\'s words for the charger: code, operator/brand, place, town, address'),
       lat: Where.lat, lon: Where.lon,
@@ -779,8 +795,17 @@ export function createServer(getDataset, live) {
       notes.push(sideAssumption(pick, towards.name, t));
     }
     if (directionNeeded) notes.push(t('note.direction'));
-    notes.push(...voltageNotes(ds, a, t));
+    notes.push(...filterNotes(ds, a, t));
     if (results.some(h => h.matched.includes('place'))) notes.push(t('note.nearPlace'));
+    for (const h of results.filter(x => x.matched.includes('oldCode')).slice(0, a.limit)) {
+      notes.push(t('note.oldCode', { now: h.site.code, operator: h.site.operator ?? '?', old: h.site.osm?.oldOperator }));
+    }
+    for (const h of results.slice(0, a.limit).filter(x => x.site.osm?.fixme)) {
+      notes.push(t('note.osmFixme', { site: h.site.id }));
+    }
+    for (const h of results.slice(0, a.limit).filter(x => x.site.osm?.sharedKw)) {
+      notes.push(t('note.sharedPower', { site: h.site.id, kw: h.site.osm.sharedKw }));
+    }
     if (results[0].missing?.length) {
       notes.unshift(t('note.partial', { words: results[0].missing.join(', ') }));
       // Only the town or street matched: the missing words name a place the
@@ -809,7 +834,7 @@ export function createServer(getDataset, live) {
   server.registerTool('find_chargers', {
     title: 'Find chargers',
     description: 'Lists public EV chargers in Portugal near a place, along a route, or in the whole country when a filter is given (every 800 V charger, every IONITY site, card_payment), with power, voltage, plug, fixed cable, opening hours, bank card payment and live status per socket and the sockets free now per site. Networks outside MOBI.E (Tesla...) show their NAP price per kWh; a MOBI.E price depends on the driver\'s CEME, so use find_cheapest_charging for it. For one charger the user names, lookup_charger.',
-    inputSchema: z.object({ ...Where, ...Filter, ...Region, ...Lang, limit: z.number().int().positive().max(100).default(15) }),
+    inputSchema: z.object({ ...Where, ...Filter, ...Access, ...Region, ...Lang, limit: z.number().int().positive().max(100).default(15) }),
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, async (a, ctx) => {
     const ds = getDataset();
@@ -830,7 +855,7 @@ export function createServer(getDataset, live) {
     const notes = [
       ...liveNotes(status, t),
       ...(everywhere ? [t('note.nationwide', { shown: results.length, total, forCar: a.car_voltage })] : []),
-      ...voltageNotes(ds, a, t),
+      ...filterNotes(ds, a, t),
       ...sides.notes,
     ];
     const facts = results.map(r => siteFacts(r.site, t));
@@ -883,7 +908,7 @@ export function createServer(getDataset, live) {
       const direct = [...new Set(OFFERS.filter(x => o.operatorId && x.scope?.operatorIds?.includes(o.operatorId)).map(x => x.label))];
       return { ...o, directOffers: direct.length ? direct : undefined };
     });
-    const notes = [t('note.operators'), ...(shown.some(o => o.noOpcTariffSites) ? [t('note.noOpcTariff')] : []), ...voltageNotes(ds, a, t),
+    const notes = [t('note.operators'), ...(shown.some(o => o.noOpcTariffSites) ? [t('note.noOpcTariff')] : []), ...filterNotes(ds, a, t),
       ...shown.filter(o => o.inferredSites).map(o => t('note.operatorsInferred', { operator: o.name, n: o.inferredSites }))];
     return ok({ ...meta(ds, live, lang), total: ops.length, notes, operators: shown },
       [...notes, t('summary.operators', { n: ops.length }), ...shown.map(o => `${o.operatorId ?? '-'}: ${o.name} · ${t('summary.operatorSize', { sites: o.sites, points: o.points, dc: o.dcPoints, kw: o.maxKw ?? '?' })}`)].join('\n'));
@@ -957,7 +982,7 @@ export function createServer(getDataset, live) {
         const notes = [
           ...liveNotes(status, t),
           ...(cemeDown ? [noCemeNote(ranked, t)] : []),
-          ...voltageNotes(ds, a, t),
+          ...filterNotes(ds, a, t),
           ...sides.notes,
           ...(truncated ? [t('note.truncated', { n: ranked.sitesPriced, total, sockets: ranked.socketsLeftOut })] : []),
           ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
@@ -1010,7 +1035,7 @@ export function createServer(getDataset, live) {
     if (where.error) return err(where.error, where.code);
     const status = await withLive(live, ctx, t);
     const targets = socketsFor(where, status);
-    const assumptions = [...(where.assumptions ?? []), ...voltageNotes(ds, a, t)];
+    const assumptions = [...(where.assumptions ?? []), ...filterNotes(ds, a, t)];
     const signal = ctx?.mcpReq?.signal;
     const opts = { at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live: status, lang, audiences: a.audiences, detail: !!a.detail, qa: QA, simCache: new Map(),
       signal, unplugAt: unplugOf(a), ...await monthKwh(a, signal) };

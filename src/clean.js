@@ -85,21 +85,68 @@ const NAP_FIELDS = {
   name: text(NAME_MAX), operator: text(NAME_MAX), city: text(NAME_MAX),
   address: text(PLACE_MAX), locationDescription: text(PLACE_MAX),
   hours: text(HOURS_MAX), phone, website, operatorId: code(OPERATOR_ID_MAX),
+  // DATEX II accessibility values, '|'-joined: words only (data.js reads them).
+  accessibility: v => typeof v === 'string' && /^\w{1,40}(\|\w{1,40}){0,5}$/.test(v) ? v : undefined,
 };
 
 // What the code reads or a driver acts on. Anything else OSM has (a `note`, a
 // `description`, a key added next year) doesn't reach the answers until
-// someone adds it here. Left out, though nap-dashboard sends them:
-// manufacturer and model (free text nothing reads) and payment (raw OSM tag
-// names; `cards` and the NAP's `payment` already say how to pay).
+// someone adds it here. Left out, though nap-dashboard sends them: payment
+// (raw OSM tag names; `cards` and the NAP's `payment` already say how to pay),
+// and manufacturer and model, which reach the answers as `hardware` (below).
 const OSM_FIELDS = {
   name: text(NAME_MAX), brand: text(NAME_MAX), operator: text(NAME_MAX),
   openingHours: text(HOURS_MAX), phone, email,
   access: text(TAG_MAX), parkingFee: text(TAG_MAX), maxstay: text(TAG_MAX),
   location: text(TAG_MAX), level: text(TAG_MAX), covered: text(TAG_MAX), indoor: text(TAG_MAX),
   cards: v => typeof v === 'boolean' ? v : undefined,
+  wheelchair: v => ['yes', 'limited', 'no'].includes(v) ? v : undefined,
+  // The total a charger gives when its sockets share it (2 × 300 kW on a
+  // 300 kW cabinet): with another car plugged in, each gets less.
+  sharedKw: v => Number.isFinite(v) && v > 0 && v <= 1000 ? v : undefined,
+  // Codes the site had before ("ABF-00049") and who ran it: the old sticker
+  // may still be on the charger, so lookup_charger finds it by them.
+  oldRefs: v => {
+    const codes = Array.isArray(v) ? v.filter(c => typeof c === 'string' && /^[A-Z0-9-]{4,20}$/.test(c)).slice(0, 10) : [];
+    return codes.length ? codes : undefined;
+  },
+  oldOperator: text(NAME_MAX),
+  // The community's open questions about the charger ("Verificar se aceita
+  // pagamento com cartão bancário"): free text, so short, few, and only ever
+  // shown as something to check on site (note.osmFixme), never as a fact.
+  fixme: v => {
+    const notes = Array.isArray(v) ? v.map(x => cleanText(x, FIXME_MAX)).filter(Boolean).slice(0, 3) : [];
+    return notes.length ? notes : undefined;
+  },
   capacity: v => Number.isInteger(v) && v > 0 && v <= CAPACITY_MAX ? v : undefined,
 };
+
+// Every charger at the site, as mapped on OSM ("Alpitronic HYC_150", "Efacec
+// QC45"), most common first: the driver asks for them ("is it an Alpitronic?")
+// and lookup_charger finds a site by them. nap-dashboard sends `hardware`; an
+// older file only has the commonest manufacturer and model, so that's the one.
+const FIXME_MAX = 160; // the longest today has 120 characters
+const HARDWARE_MAX = 80; // the longest label today has 38 characters
+const HARDWARE_COUNT = 10; // the most a site has today is 2
+
+function hardwareLabels(osm) {
+  if (Array.isArray(osm.hardware)) return osm.hardware;
+  const make = typeof osm.manufacturer === 'string' ? osm.manufacturer.trim() : '';
+  const model = typeof osm.model === 'string' ? osm.model.trim() : '';
+  const label = (model.toLowerCase().startsWith(make.toLowerCase()) ? [model] : [make, model]).filter(Boolean).join(' ');
+  return label ? [label] : [];
+}
+
+function cleanHardware(osm, report) {
+  if (osm.hardware != null && !Array.isArray(osm.hardware)) count(report, 'dropped osm.hardware');
+  const out = [];
+  for (const h of hardwareLabels(osm)) {
+    const v = checked(text(HARDWARE_MAX), h, 'osm.hardware', report);
+    if (v && !out.includes(v)) out.push(v);
+  }
+  if (out.length > HARDWARE_COUNT) count(report, 'cut osm.hardware');
+  return out.slice(0, HARDWARE_COUNT);
+}
 
 const count = (report, what) => { report[what] = (report[what] ?? 0) + 1; };
 
@@ -171,6 +218,8 @@ export function cleanSite(s, report = {}) {
       const v = checked(clean, s.osm[k], `osm.${k}`, report);
       if (v != null) osm[k] = v;
     }
+    const hardware = cleanHardware(s.osm, report);
+    if (hardware.length) osm.hardware = hardware;
     if (Object.keys(osm).length) s.osm = osm;
     else delete s.osm;
   }

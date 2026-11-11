@@ -73,6 +73,13 @@ function siteCodes(site) {
   return out;
 }
 
+// The codes it had before (OpenStreetMap's old_ref): a charger that changed
+// operator may still carry the old sticker. nap-dashboard leaves out any old
+// code that is another site's code now.
+function oldCodes(site) {
+  return new Set((site.osm?.oldRefs ?? []).flatMap(c => codesIn(c).map(x => x.key)));
+}
+
 // Brand names people use for an operator, from offers/networks.json ("Powerdot"
 // for HORZ, "Tesla Supercharger" for TSLA). Data, so no operator lives in code.
 function brandNames() {
@@ -139,12 +146,16 @@ export class Index {
   constructor(sites) {
     const brands = brandNames();
     this.byCode = new Map();
+    this.byOldCode = new Map();
     this.entries = sites.map(site => {
       const fields = {
         operator: words([site.operator, site.operatorId, ...(brands.get(site.operatorId) || [])].join(' ')),
         // The NAP's own name for the site ("Auchan Cascais").
         name: words(site.name),
         osm: words(glued([site.osm?.name, site.osm?.brand, site.osm?.operator].join(' '))),
+        // The chargers' make and model ("Alpitronic HYC_400"). Not their bare
+        // numbers: "300" is a power the user asks for, not a HYC_300.
+        hardware: words((site.osm?.hardware ?? []).join(' ')).filter(w => /[a-z]/.test(w)),
         // "Mar Shopping" finds the chargers inside it, though none is named so.
         place: words(glued((site.places ?? []).map(p => p.name).join(' '))),
         city: words(site.city),
@@ -157,6 +168,10 @@ export class Index {
       for (const key of siteCodes(site)) {
         if (!this.byCode.has(key)) this.byCode.set(key, new Set());
         this.byCode.get(key).add(site);
+      }
+      for (const key of oldCodes(site)) {
+        if (!this.byOldCode.has(key)) this.byOldCode.set(key, new Set());
+        this.byOldCode.get(key).add(site);
       }
       return { site, fields, all: Object.values(fields).flat(), exact };
     });
@@ -176,6 +191,11 @@ export class Index {
     const codes = codesIn(query).filter(c => this.byCode.has(c.key));
     if (codes.length) {
       return codes.flatMap(c => [...this.byCode.get(c.key)].map(site => ({ site, matched: ['code'], socket: c.socket, score: Infinity })));
+    }
+    // A code no site has now, but one had before: the old sticker.
+    const old = codesIn(query).filter(c => this.byOldCode.has(c.key));
+    if (old.length) {
+      return old.flatMap(c => [...this.byOldCode.get(c.key)].map(site => ({ site, matched: ['oldCode'], socket: null, score: Infinity })));
     }
     const tokens = [...new Set(words(query).filter(w => !FILLER.has(w)))];
     if (!tokens.length) return [];
