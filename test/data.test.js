@@ -61,8 +61,8 @@ test('data: a plug the NAP left blank ("nan") is null, and no plug filter matche
   assert.deepEqual(ds.search({ connectors: ['T2'] }).results[0].points.map(p => p.id), ['2']);
 });
 
-test('data: OpenStreetMap\'s kW/V/A replace the NAP\'s, which stay in napKw/napV/napA', () => {
-  const ds = new Dataset({ sites: [site('A', [{ id: '1', kw: 187.5, v: 750, a: 250, dc: true, osm: { kw: 150, v: 1000 } }])] });
+test('data: OpenStreetMap\'s kW/V/A arrive in kw/v/a, the NAP\'s in napKw/napV/napA, and the filters use OSM\'s', () => {
+  const ds = new Dataset({ sites: [site('A', [{ id: '1', kw: 150, napKw: 187.5, v: 1000, napV: 750, a: 250, dc: true, osm: { kw: 150, v: 1000 } }])] });
   const [p] = ds.sites[0].points;
   assert.deepEqual([p.kw, p.napKw, p.v, p.napV, p.a, p.napA], [150, 187.5, 1000, 750, 250, undefined]);
   assert.equal(ds.search({ minVoltage: 900 }).total, 1);
@@ -75,9 +75,9 @@ test('data: bank card at the charger, from the NAP and OpenStreetMap', () => {
   assert.equal(cardPayment({}).value, null);
 });
 
-test('data: a socket with 0 kW or less is unknown power, and OpenStreetMap only replaces it with a real figure', () => {
+test('data: a socket with 0 kW or less is unknown power; one OpenStreetMap filled in keeps a null napKw', () => {
   const ds = new Dataset({ sites: [site('A', [
-    { id: '1', kw: 0, dc: true }, { id: '2', kw: -5 }, { id: '3', kw: 0, dc: true, osm: { kw: 150 } }, { id: '4', kw: 22, osm: { kw: 0 } },
+    { id: '1', kw: 0, dc: true }, { id: '2', kw: -5 }, { id: '3', kw: 150, napKw: null, dc: true }, { id: '4', kw: 22 },
   ])] });
   assert.deepEqual(ds.sites[0].points.map(p => p.kw), [null, null, 150, 22]);
   assert.equal(ds.sites[0].points[3].napKw, undefined);
@@ -123,7 +123,7 @@ test('data: the duration uses what the socket gives the car at its voltage, and 
 
 test('data: ampsSource says whether a socket\'s current was seen on OpenStreetMap or only declared', () => {
   const ds = new Dataset({ sites: [site('A', [
-    { id: '1', kw: 400, v: 920, a: 500, dc: true, osm: { v: 1000, a: 600 } },
+    { id: '1', kw: 400, v: 1000, napV: 920, a: 600, napA: 500, dc: true },
     { id: '2', kw: 400, v: 1000, a: 600, dc: true, osmSame: ['kw', 'a'] },
     { id: '3', kw: 400, v: 1000, a: 600, dc: true },
     { id: '4', kw: 22, dc: false },

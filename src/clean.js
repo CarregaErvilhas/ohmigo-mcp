@@ -158,24 +158,6 @@ function checked(clean, value, field, report) {
   return v;
 }
 
-// What an OSM number on a socket has to be for data.js to believe it over the
-// NAP. It decides filters and the session time, so a typo or a bad edit must
-// not get through, but OSM is there to correct the NAP, so the check can't
-// demand it be close:
-//   max    no public socket goes past this. Also tells a NAP value that can't
-//          be right (300 000 V, in the wrong unit): nothing to compare with.
-//   ratio  how far from a believable NAP value OSM can be. It stops garbage,
-//          not corrections, so it's wide: a NAP 3.7 on a 22 kW socket, 50 on a
-//          350 kW one or 500 A on a 25 kW one are what OSM is there to fix.
-const OSM_NUMBERS = { kw: { max: 1000, ratio: 20 }, v: { max: 1500, ratio: 10 }, a: { max: 1500, ratio: 10 } };
-
-function saneOsmNumber(key, value, nap) {
-  const { max, ratio } = OSM_NUMBERS[key];
-  const sane = x => Number.isFinite(x) && x > 0 && x <= max;
-  if (!sane(value)) return false;
-  return !sane(nap) || Math.max(value / nap, nap / value) <= ratio;
-}
-
 function cleanPoint(p, report) {
   // A blank level is how the NAP's blanks already arrive; the quote says so.
   if (p.level != null) p.level = checked(gridLevel, p.level, 'point.level', report) ?? null;
@@ -184,17 +166,11 @@ function cleanPoint(p, report) {
   // written as a string upstream). It is no plug: null, like a blank level,
   // so the answers and filters never show or match the word.
   if (typeof p.connector === 'string' && /^(nan|none|null)?$/i.test(p.connector.trim())) p.connector = null;
-  if (p.osm == null) return;
-  const osm = {};
-  for (const k of Object.keys(OSM_NUMBERS)) {
-    if (p.osm[k] == null) continue;
-    if (saneOsmNumber(k, p.osm[k], p[k])) osm[k] = p.osm[k];
-    else count(report, `ignored point.osm.${k}`);
-  }
-  // cable: booleano (o OSM distingue type2 com cabo de type2 sem cabo).
-  if (typeof p.osm.cable === 'boolean') osm.cable = p.osm.cable;
-  if (Object.keys(osm).length) p.osm = osm;
-  else delete p.osm;
+  // A socket's `osm` is what OpenStreetMap said about it where that differs
+  // from the NAP. nap-dashboard has already applied what was believable to
+  // kw/v/a/cable (the NAP's value stays in napKw/napV/napA/napCable), so
+  // nothing here reads it: third-party numbers nobody uses are not kept.
+  delete p.osm;
 }
 
 // `report` collects what was cut, dropped or ignored: { "cut address": 2 }.

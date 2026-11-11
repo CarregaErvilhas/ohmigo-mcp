@@ -5,6 +5,12 @@ its plugs, power and voltage level, how the site lets you pay, and the
 operator fees from MOBI.E's tariff file. It's one JSON file, served gzipped
 (the URL is `DEFAULT_URL` in `src/data.js`).
 
+It is nap-dashboard's network model: the site at nap.ocarroeletrico.com
+reads the same file for what it shows about each charger, and checks on every
+refresh that it does (`scripts/model_parity.py` there). So a fix to how a
+charger's power, fees or regime are worked out goes into nap-dashboard, once,
+and both see it.
+
 What's **not** in it: live status (changes by the minute, see
 [03](03-live-status.md)), CEME prices (ceme-v2's job), and operator direct
 offers (`offers/`, see [04](04-operator-offers.md)).
@@ -84,9 +90,9 @@ Monday.
              "payment": ["app", "membership_card"], "cards": false,
              "phone": "...", "manufacturer": "Tritium", "capacity": 4 },
     "points": [{
-      "id": "ALB-00019-01", "kw": 350, "v": 920, "a": 500, "cable": true,
+      "id": "ALB-00019-01", "kw": 350, "a": 500, "cable": true,
       "connector": "CCS", "dc": true, "phases": null,
-      "level": "MT", "regime": "mobie", "osm": { "v": 1000 },
+      "level": "MT", "regime": "mobie", "v": 1000, "napV": 920,
       "opc": { "REGULAR": { "energy": [0.51], "time": [{ "eur": 0.0813, "from": 60, "to": 560 }] },
                "AD_HOC_PAYMENT": { "energy": [0.51] } }
     }]
@@ -97,12 +103,12 @@ Monday.
 - `region`: `CONT`, `MAD` or `AZO`; it decides VAT and off-peak hours in ceme-v2.
 - `connector`: the plug (`CCS`, `T2`...). The NAP leaves some blank, which
   arrives as the text `"nan"`; `src/clean.js` turns it into `null`.
-- `v`, `a`: the connector's voltage (V) and max current (A), as the operator
-  declares them on the NAP. Optional: datasets built before nap-dashboard
-  published them have neither, and then ohmigo ignores `min_voltage` and says
-  so. Declared, not measured: some DC sockets carry a placeholder (750 or
-  600 V), which is why every answer filtered by voltage carries a sentence
-  saying so.
+- `v`, `a`: the connector's voltage (V) and max current (A): the operator's
+  declaration on the NAP, or OpenStreetMap's where it corrects it (below).
+  Optional: datasets built before nap-dashboard published them have neither,
+  and then ohmigo ignores `min_voltage` and says so. Mostly declared, not
+  measured: some DC sockets carry a placeholder (750 or 600 V), which is why
+  every answer filtered by voltage carries a sentence saying so.
 - `cable`: `true` when the cable is fixed to the charger, `false` when it's a
   socket and the driver brings their own (the NAP's `connectorFormat`).
 - `operator`, `operatorId`: as the NAP publishes them, which can be neither.
@@ -115,18 +121,20 @@ Monday.
   `src/hours.js` reads both sources the same way), where the charger is in
   the car park ("Parque Coberto - Piso -1") and the operator's phone. Each is
   there only when the NAP has it.
-- `osm` (point): the kW/V/A OpenStreetMap has for this socket (the OSM socket
-  of the same plug type at the site with the nearest power), only the fields
-  that differ from the NAP's. The community reads them off the charger's
-  plate, so they are usually more right than the NAP's declaration (DC
-  sockets declaring a 750 V placeholder, powers that V×I can't give).
-  `src/data.js` puts them in `kw`/`v`/`a` when it loads the file and keeps the
-  NAP's in `napKw`/`napV`/`napA`: filters, the session duration and the price
-  band all use OSM's, and every answer that does says so.
-  A value that isn't believable (`src/clean.js`: out of range, or too far from
-  a believable NAP value) is ignored.
+- `napKw`, `napV`, `napA`, `napCable` (point): present only where
+  OpenStreetMap corrected the NAP. The community reads kW/V/A off the
+  charger's plate (the OSM socket of the same plug type at the site with the
+  nearest power), so they are usually more right than the NAP's declaration
+  (DC sockets declaring a 750 V placeholder, powers that V×I can't give), and
+  nap-dashboard puts them in `kw`/`v`/`a`/`cable`, keeping the NAP's value
+  here (`null` when the NAP declared none). Filters, the session duration and
+  the price band all use the corrected value, and every answer that does says
+  so. nap-dashboard ignores an OSM number that isn't believable (out of range,
+  or too far from a believable NAP value: `osm_tags.sane_osm` there).
+  The point's `osm` (what OSM said, where it differs from the NAP) is in the
+  file too; `src/clean.js` drops it on load, since nothing here reads it.
 - `osmSame` (point): the fields (`kw`, `v`, `a`) where OpenStreetMap agrees
-  with the NAP. With `osm`, it tells a value checked on the charger from one
+  with the NAP. With `napA`, it tells a value checked on the charger from one
   only the operator declared: `src/data.js` turns it into `ampsSource`
   (`osm` or `nap`), which every `kwAt400V`/`kwForCar` carries. Optional:
   older files don't have it, and then every current not corrected by OSM
@@ -139,6 +147,11 @@ Monday.
   (outside MOBI.E).
 - `opc`: the plans described in [02](02-cost-math.md), in MOBI.E's raw form,
   per-minute tiers included.
+- `issues` (point): what nap-dashboard's NAP-only checks found on this socket
+  (`tensao_placeholder`: a 750/600 V placeholder on a DC connector;
+  `trifasico_sem_3p`: declared three-phase with single-phase voltage and
+  power). Optional. ohmigo doesn't read it yet: an answer that used it would
+  need its sentences in `src/i18n.js` and an evals run.
 - `osm`: what OpenStreetMap has for the site, joined by the MOBI.E code in
   its `ref` tag (only when the OSM element is within 1 km of the NAP's
   coordinates). Optional, and so is every field in it: `name`, `brand`,
@@ -198,7 +211,7 @@ absent), and every tool, sentence and search sees the result. `npm test`
 holds this in `test/third-party.test.js`.
 
 The limits sit well above real values. Each load logs one line with what they
-hit (`[ohmigo] third-party limits: cut address 2, ignored point.osm.kw 1`): if
+hit (`[ohmigo] third-party limits: cut address 2, dropped osm.phone 1`): if
 those are real values, raise the limit in `src/clean.js`.
 
 ## Building it locally
