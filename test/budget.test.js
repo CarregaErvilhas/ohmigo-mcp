@@ -70,5 +70,5 @@ test('budget: the presentation rules ride on the pricing tools, where every clie
 // the routing: a question that isn't a price goes to ev_rules_portugal, not to memory or a web search, which
 // still give the rules of the revoked DL 39/2010.
 test('budget: the instructions send non-price EV questions to ev_rules_portugal, even when tools are deferred', () => {
-  for (const must of [/Not a price\?/, /what a condo can refuse/, /not memory or the web/, /DL 93\/2025/, /by name only: load it/]) assert.match(INSTRUCTIONS, must);
+  for (const must of [/Not a price\?/, /what a condo can refuse/, /newer than memory or the web/, /DL 93\/2025/, /by name only: load it/]) assert.match(INSTRUCTIONS, must);
 });
