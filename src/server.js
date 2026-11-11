@@ -190,6 +190,11 @@ Preferred-Languages: pt, en
 // timingSafeEqual two buffers of the same length, whatever was sent. No token
 // configured means nobody gets the detail.
 const HEALTHZ_TOKEN = process.env.HEALTHZ_TOKEN || null;
+// OpenAI's plugin directory proves we own the domain by fetching a token it
+// hands out during submission, as plain text. It isn't a secret (anyone can
+// read it here), but it changes per submission, so it lives in the
+// environment, not the repo. Unset: 404, like any unknown path.
+const OPENAI_APPS_CHALLENGE = (process.env.OPENAI_APPS_CHALLENGE || '').trim() || null;
 const sha256 = s => createHash('sha256').update(s).digest();
 const healthzAllowed = given => !!HEALTHZ_TOKEN && timingSafeEqual(sha256(given ?? ''), sha256(HEALTHZ_TOKEN));
 
@@ -299,6 +304,7 @@ async function handle(req, res) {
   if (url.pathname === '/robots.txt' && get) return sendPublic(res, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
   if (url.pathname === '/llms.txt' && get) return sendPublic(res, LLMS_TXT, 'text/plain; charset=utf-8');
   if (url.pathname === '/.well-known/security.txt' && get) return send(res, 200, securityTxt(), 'text/plain; charset=utf-8');
+  if (url.pathname === '/.well-known/openai-apps-challenge' && get && OPENAI_APPS_CHALLENGE) return send(res, 200, OPENAI_APPS_CHALLENGE, 'text/plain; charset=utf-8');
   if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
   // Someone pasted the MCP address into a browser. MCP clients never ask for
   // text/html, so send the person to the page that explains what to do.

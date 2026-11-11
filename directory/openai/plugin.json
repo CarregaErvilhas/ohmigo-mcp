@@ -1,0 +1,79 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ohmigo",
+  "version": "1.0.0",
+  "description": "Prices every public EV charger in Portugal on the National Access Point (MOBI.E and the networks outside it) and finds the cheapest near a place or along a route, plus Portugal's EV charging rules.",
+  "author": { "name": "cocofree", "email": "info@ocarroeletrico.com", "url": "https://ocarroeletrico.com" },
+  "homepage": "https://ohmigo.ocarroeletrico.com",
+  "repository": "https://github.com/CarregaErvilhas/ohmigo-mcp",
+  "license": "AGPL-3.0-only",
+  "keywords": ["ev", "charging", "portugal", "mobi.e"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "ohmigo",
+        "shortDescription": "EV charging costs in Portugal",
+        "longDescription": "ohmigo prices every public EV charger in Portugal published on the National Access Point (NAP): the MOBI.E network and the ones outside it (Tesla, Continente and others).\n\nAsk where to charge and ohmigo gives the total cost and duration of the session for your car, at each charger, for every way you could pay there: your CEME card or app, a bank card at the charger, or the operator's own app or subscription. It accounts for the energy price (network access tariff, taxes and VAT), the operator's fee, the time of day, and whether the charger is free right now. Results show as an inline view.\n\nIt also answers questions about charging in Portugal: at home and in condominiums, electrical installation, plugs, grants and tax, fleets and batteries, current with Portuguese law (DL 93/2025).\n\nohmigo is read-only and keeps nothing linked to you: no accounts, no cookies, no user database. Prices are estimates; the charger's price on the day prevails. Answers in Portuguese or English.",
+        "developerName": "cocofree",
+        "category": "Travel",
+        "websiteURL": "https://ohmigo.ocarroeletrico.com/en",
+        "supportURL": "https://ohmigo.ocarroeletrico.com/support",
+        "privacyPolicyURL": "https://ohmigo.ocarroeletrico.com/privacy",
+        "termsOfServiceURL": "https://ohmigo.ocarroeletrico.com/terms",
+        "defaultPrompt": [
+          "Where's the cheapest place to charge my EV near Leiria?",
+          "How much to charge to 80% at the Continente in Coimbra?",
+          "Where should I charge on the way from Lisbon to Porto?"
+        ],
+        "logo": "./assets/logo.png",
+        "composerIcon": "./assets/logo.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Cheapest charger near a town, for a given car and battery level",
+              "prompt": "Where's the cheapest place to charge near Leiria? I drive a 2024 Tesla Model 3 RWD and I'm at 20%.",
+              "tools_triggered": ["find_cheapest_charging"],
+              "expected_behavior": "Calls find_cheapest_charging near Leiria with the car's specs and 20% start. Lists chargers ranked by total session cost in euros, with duration, plug, how to pay, and shows the inline results view."
+            },
+            {
+              "description": "Cost of one named charger with the user's card",
+              "prompt": "How much to charge from 15 to 80% at the Continente in Coimbra with a Via Verde card? Kia EV6 77 kWh.",
+              "tools_triggered": ["lookup_charger", "list_ceme_tariffs", "estimate_charging_cost"],
+              "expected_behavior": "Finds the Continente charger in Coimbra, resolves Via Verde to its tariff, and gives the total cost and duration for that session, with the plug to use and the other ways to pay there."
+            },
+            {
+              "description": "Cheapest charging along a route",
+              "prompt": "I'm driving from Lisbon to Porto in a Renault Megane E-Tech, starting at 90%. Where should I stop to charge, and how much will it cost?",
+              "tools_triggered": ["find_cheapest_charging"],
+              "expected_behavior": "Searches along the Lisbon-Porto route and lists the cheapest fast chargers near it, with cost, duration and distance off the route."
+            },
+            {
+              "description": "Chargers of one network, with live status",
+              "prompt": "Which IONITY chargers are there in Portugal, and are any free right now?",
+              "tools_triggered": ["find_chargers"],
+              "expected_behavior": "Lists IONITY sites in Portugal with power, plugs and how many sockets are free now from the live feed."
+            },
+            {
+              "description": "A rule question, not a price",
+              "prompt": "Can my condominium refuse to let me install a wallbox in my garage space in Portugal?",
+              "tools_triggered": ["ev_rules_portugal"],
+              "expected_behavior": "Answers from the condominium/home charging guide, citing current Portuguese law (DL 93/2025), and when a condominium can or cannot refuse."
+            }
+          ],
+          "negative": [
+            { "description": "Fuel price, not EV charging", "prompt": "What's the cheapest petrol station near Leiria?" },
+            { "description": "Creative writing about EVs", "prompt": "Write a short poem about electric cars." },
+            { "description": "Buying a car, not charging it", "prompt": "Should I buy a Tesla Model Y or a Kia EV6?" }
+          ]
+        },
+        "demo_recording_url": ""
+      },
+      "publication": {
+        "countries": [],
+        "release_notes": "First release: costs and cheapest charging at every public charger in Portugal on the NAP, live status, and Portugal's EV charging rules."
+      }
+    }
+  }
+}

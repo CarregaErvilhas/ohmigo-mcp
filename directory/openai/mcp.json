@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "ohmigo": {
+      "type": "streamable-http",
+      "url": "https://ohmigo.ocarroeletrico.com/mcp"
+    }
+  }
+}
