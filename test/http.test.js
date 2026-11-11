@@ -106,7 +106,12 @@ test('http: every tool is read-only and talks to the outside world', async () =>
   const { tools } = await call('tools/list');
   assert.equal(tools.length, 7);
   // ev_rules_portugal reads Voltaria's files shipped with the server: nothing open-world about it.
-  for (const t of tools) assert.deepEqual(t.annotations, { readOnlyHint: true, openWorldHint: t.name !== 'ev_rules_portugal' }, t.name);
+  // Both directories read these: Claude's wants a title and readOnlyHint or
+  // destructiveHint on every tool, OpenAI's all three hints set explicitly.
+  for (const t of tools) {
+    assert.ok(t.title, t.name);
+    assert.deepEqual(t.annotations, { readOnlyHint: true, destructiveHint: false, openWorldHint: t.name !== 'ev_rules_portugal' }, t.name);
+  }
 });
 
 // The tool list is in the assistant's context in every conversation, used or
@@ -116,8 +121,9 @@ test('http: every tool is read-only and talks to the outside world', async () =>
 // car_voltage (a DC socket's real power for the car) from 20 500; private
 // (a DPC's charger, priced with no site, instead of a seventh tool) from 21 300;
 // the presentation rules, moved out of INSTRUCTIONS (cut at 2048 by Claude
-// Code) onto both pricing tools, from 21 900.
-const TOOLS_MAX_CHARS = 26_000;
+// Code) onto both pricing tools, from 21 900; destructiveHint: false on
+// every tool, which OpenAI's directory wants explicit, from 26 000.
+const TOOLS_MAX_CHARS = 26_200;
 
 test('http: the tool list stays small, and every tool says what it is for so tool search finds it', async () => {
   const { tools } = await call('tools/list');
