@@ -105,25 +105,15 @@ export class Dataset {
       this.siteById.set(s.id, s);
       for (const p of s.points) {
         // A socket can't deliver 0 kW: in the data that's a blank, not a
-        // measurement. Blank here, so the duration, the price band and the
-        // answers all read it as unknown power.
+        // measurement. The dataset already says so; this keeps a stray 0 from
+        // reaching the duration and the price band as a real power.
         if (p.kw <= 0) p.kw = null;
-        // OpenStreetMap's kW/V/A are read off the charger's plate by the
-        // community and are usually more right than the NAP's declaration
-        // (DC sockets declaring a 750 V placeholder, powers V×I can't give).
-        // So they replace it everywhere (filters, duration, price band); the
-        // NAP's value stays in napKw/napV/napA for the answers to show.
-        // Only the believable ones are still here (clean.js).
-        for (const [k, nap] of [['kw', 'napKw'], ['v', 'napV'], ['a', 'napA']]) {
-          if (p.osm?.[k] > 0 && p[nap] === undefined) { p[nap] = p[k] ?? null; p[k] = p.osm[k]; }
-        }
-        // OpenStreetMap also says whether the Type 2 socket has a fixed cable
-        // (socket:type2_cable) or is a socket you bring your own cable to
-        // (socket:type2). The NAP's connectorFormat can be wrong, so OSM
-        // replaces it too, keeping the NAP's value in napCable.
-        if (typeof p.osm?.cable === 'boolean' && p.osm.cable !== p.cable) {
-          p.napCable = p.cable ?? null; p.cable = p.osm.cable;
-        }
+        // kw/v/a/cable arrive decided: where OpenStreetMap (read off the
+        // charger's plate by the community) corrects the NAP's declaration,
+        // nap-dashboard has already used OSM's value and kept the NAP's in
+        // napKw/napV/napA/napCable for the answers to show. Its site shows the
+        // same values, so ohmigo and nap.ocarroeletrico.com never disagree
+        // about a socket (docs/05-dataset.md).
         // Where the max current comes from: OpenStreetMap (it corrected the
         // NAP, or confirmed it: osmSame) or only the operator's declaration.
         // A DC socket's amps decide what a 400 V car gets (socket.js), so the
