@@ -114,6 +114,7 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `LIVE_WARMUP` | on | `0` skips the boot download |
 | `HEALTHZ_TOKEN` | none | unlocks the detail on `/healthz`, sent in the `x-healthz-token` header. Without it the detail stays private. |
 | `GIT_SHA` | none | the commit this build came from; `/healthz` shows it as `commit`, with `source` linking to that tree, so anyone can check what runs matches the public repo (AGPL section 13). Set it at deploy time; anything that isn't a 7-40 character hex SHA is ignored |
+| `OPENAI_APPS_CHALLENGE` | none | the token OpenAI's plugin submission gives for domain verification, served as plain text at `/.well-known/openai-apps-challenge`; unset, that path is a 404 |
 | `OHMIGO_QA` | off | `1` turns on QA mode: every result carries the quarter-hour `timeline` and a `debug` block, and the assistant is told to show them. Never in production |
 | `NAP_STATUS_URL` | MOBI.E's `evActualStatus` | the live feed |
 | `ARCHIVE_STATUS_URL` | unset | AmpereArchive's `v1/PT/status.json.gz`: read first, the NAP stays the fallback ([03](03-live-status.md)) |

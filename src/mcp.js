@@ -1056,10 +1056,12 @@ export function createServer(getDataset, live) {
     return ok(out.data, [...notes, ...lines].join('\n'), out.meta);
   });
 
+  // The view loads nothing from outside (its only link, to Google Maps, opens
+  // through the host), and says so: OpenAI's review reads the CSP.
   registerAppResource(server, 'Charging results', VIEW_URI, {
     description: 'Inline view of charging cost results',
   }, async () => ({
-    contents: [{ uri: VIEW_URI, mimeType: RESOURCE_MIME_TYPE, text: await viewHtml(), _meta: { ui: { prefersBorder: true } } }],
+    contents: [{ uri: VIEW_URI, mimeType: RESOURCE_MIME_TYPE, text: await viewHtml(), _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } } } }],
   }));
 
   // Voltaria: pt-PT EV guides and dated facts from the `voltaria/` submodule.

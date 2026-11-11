@@ -49,7 +49,7 @@ before(async () => {
     res.end(JSON.stringify(req.url === '/v1/promos' ? { data: [] } : { region: 'CONT', data: [] }));
   }).listen(0, '127.0.0.1');
   await once(ceme, 'listening');
-  [withToken, noToken] = await Promise.all([boot({ HEALTHZ_TOKEN: TOKEN, GIT_SHA: SHA }), boot({ GIT_SHA: '' })]);
+  [withToken, noToken] = await Promise.all([boot({ HEALTHZ_TOKEN: TOKEN, GIT_SHA: SHA, OPENAI_APPS_CHALLENGE: ' challenge-token\n' }), boot({ GIT_SHA: '' })]);
   // Each server tries the unreachable live feed, so /healthz has a failure to report.
   await Promise.all([withToken, noToken].map(s => fetch(`${s.base}/mcp`, {
     method: 'POST',
@@ -221,4 +221,12 @@ test('security.txt: RFC 9116 fields, with the contact on the privacy page', asyn
   assert.ok(days > 179 && days <= 180, `${days} days`);
   assert.match(text, /^Canonical: https:\/\/\S+\/\.well-known\/security\.txt$/m);
   assert.equal((await fetch(`${noToken.base}/.well-known/security.txt`, { method: 'POST' })).status, 404);
+});
+
+test('openai-apps-challenge: the token as plain text when set, 404 when not', async () => {
+  const r = await fetch(`${withToken.base}/.well-known/openai-apps-challenge`);
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /^text\/plain/);
+  assert.equal(await r.text(), 'challenge-token');
+  assert.equal((await fetch(`${noToken.base}/.well-known/openai-apps-challenge`)).status, 404);
 });
