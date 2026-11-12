@@ -94,9 +94,11 @@ function readJson(req) {
 // The landing page, one copy per language rendered at boot (src/site.js),
 // and its link-preview image.
 const OG_IMAGE = readFileSync(new URL('../site/og.png', import.meta.url));
-// The mascot as an icon. Assistants (ChatGPT's app list, Claude's connector
-// list) show the one the MCP server declares in serverInfo.icons (src/mcp.js)
-// or, failing that, the site's favicon, so every URL must answer with an image.
+// The mascot as an icon, declared in serverInfo.icons (src/mcp.js) and linked
+// from the landing page, so every URL must answer with an image. Claude ignores
+// serverInfo.icons: its connector list asks Google's favicon service for the
+// parent domain (ocarroeletrico.com), and its directory shows the icon URL
+// typed into the listing.
 const ICONS = Object.fromEntries([
   ['/icon.svg', 'image/svg+xml'], ['/icon-512.png', 'image/png'],
   ['/apple-touch-icon.png', 'image/png'], ['/favicon.ico', 'image/x-icon'],
@@ -160,6 +162,14 @@ const corsOpen = path => path === '/mcp' || path.startsWith('/mcp/') || path ===
 // Images go inside assistants' apps, some of which only load what says it may
 // be embedded elsewhere.
 const IMAGE_HEADERS = { 'cache-control': 'public, max-age=86400', 'cross-origin-resource-policy': 'cross-origin' };
+// writeHead() sends the headers before res.end() sees the body, so Node can't
+// add Content-Length itself and falls back to chunked. Image URL checkers
+// (directory icon fields) can refuse a reply that doesn't state its size, so
+// say it, on HEAD too.
+const sendImage = (req, res, type, body) => {
+  res.writeHead(200, { ...IMAGE_HEADERS, 'content-type': type, 'content-length': body.length });
+  return res.end(req.method === 'HEAD' ? undefined : body);
+};
 
 // Hoisted: SITE_HEADERS above uses it too.
 function csp(scriptSrc) {
@@ -264,14 +274,8 @@ async function handle(req, res) {
     res.writeHead(200, LANDING_HEADERS);
     return res.end(req.method === 'HEAD' ? undefined : PAGES[url.pathname === '/en' ? 'en' : 'pt']);
   }
-  if (url.pathname === '/og.png' && get) {
-    res.writeHead(200, { ...IMAGE_HEADERS, 'content-type': 'image/png' });
-    return res.end(req.method === 'HEAD' ? undefined : OG_IMAGE);
-  }
-  if (ICONS[url.pathname] && get) {
-    res.writeHead(200, { ...IMAGE_HEADERS, 'content-type': ICONS[url.pathname].type });
-    return res.end(req.method === 'HEAD' ? undefined : ICONS[url.pathname].body);
-  }
+  if (url.pathname === '/og.png' && get) return sendImage(req, res, 'image/png', OG_IMAGE);
+  if (ICONS[url.pathname] && get) return sendImage(req, res, ICONS[url.pathname].type, ICONS[url.pathname].body);
   if (url.pathname === '/sitemap.xml' && get) return sendPublic(res, SITEMAP, 'application/xml; charset=utf-8');
   if (LEGAL_PAGES[url.pathname] && get) {
     // Old links chose the language with ?lang=, as on the landing page.
