@@ -172,6 +172,18 @@ test('headers: images stay loadable from an assistant\'s app', async () => {
   }
 });
 
+test('headers: images state their size, on GET and HEAD', async () => {
+  for (const path of IMAGES) {
+    const body = Buffer.from(await (await fetch(`${noToken.base}${path}`)).arrayBuffer());
+    for (const method of ['GET', 'HEAD']) {
+      const r = await fetch(`${noToken.base}${path}`, { method });
+      assert.equal(r.headers.get('content-length'), String(body.length), `${method} ${path}`);
+      assert.equal(r.headers.get('transfer-encoding'), null, `${method} ${path}`);
+      await r.arrayBuffer();
+    }
+  }
+});
+
 test('headers: the landing page, the legal pages and /dados allow exactly their own inline scripts', async () => {
   for (const path of ['/', '/en', '/dados', '/privacidade', '/privacy', '/suporte', '/support', '/termos', '/terms']) {
     const r = await fetch(`${noToken.base}${path}`);
