@@ -711,7 +711,7 @@ async function privateCost(a, ctx, lang, t) {
 // every few hours, and each request should see the current one.
 export function createServer(getDataset, live) {
   const server = new McpServer({ name: 'ohmigo', title: 'Ohmigo: EV charging costs in Portugal', version: VERSION, websiteUrl: SITE_URL,
-    icons: [{ src: `${SITE_URL}/icon-512.png`, mimeType: 'image/png', sizes: ['512x512'] }, { src: `${SITE_URL}/icon.svg`, mimeType: 'image/svg+xml', sizes: ['any'] }] },
+    icons: [{ src: 'https://raw.githubusercontent.com/CarregaErvilhas/ohmigo-mcp/main/site/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }, { src: 'https://raw.githubusercontent.com/CarregaErvilhas/ohmigo-mcp/main/site/icon.svg', mimeType: 'image/svg+xml', sizes: ['any'] }] },
   { instructions: INSTRUCTIONS + (QA ? QA_NOTE : '') });
   // Every tool (registerAppTool goes through registerTool too) is timed and
   // counted, see stats.js.
