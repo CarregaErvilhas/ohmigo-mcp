@@ -10,6 +10,7 @@
 import { simulate, promos } from './ceme.js';
 import { NAP_NOTES, OFFERS, SOURCE, isStale, offersAt } from './offers.js';
 import { describePlan } from './opc.js';
+import { napFeesPlan } from './live.js';
 import { translator } from './i18n.js';
 import { operatorKey } from './lookup.js';
 import { NETWORKS } from './promos.js';
@@ -113,6 +114,8 @@ async function build(ds) {
     },
     promos: pr.error ? { error: pr.error } : (pr.data ?? pr),
     offers: { source: SOURCE, list: OFFERS.map(o => ({ ...o, stale: isStale(o) })), orphans: OFFERS.orphans },
+    // What each price on this page is: never one total, never averaged.
+    priceTypes: { plans: t('price.opc'), adhoc: t('price.adhoc'), napPrice: t('price.outside'), napFees: t('price.nap') },
     napNotes: NAP_NOTES,
     networks: NETWORKS,
     operators: operators(ds),
@@ -146,6 +149,7 @@ export function chargers(ds, key) {
     points: s.points.map(p => ({
       id: p.id, kw: p.kw, connector: p.connector, dc: p.dc, level: p.level, regime: p.regime,
       opc: plan(p.opc?.REGULAR), adhoc: plan(p.opc?.AD_HOC_PAYMENT), napPrice: p.napPrice ?? null,
+      napFees: plan(napFeesPlan(p.napFees)),
       offers: offersAt(s, p).map(x => ({ id: x.offer.id, label: x.offer.label, eurPerKwh: x.eurPerKwh })),
     })),
   }));

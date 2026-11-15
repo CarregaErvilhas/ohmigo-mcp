@@ -176,11 +176,32 @@ region: ceme-v2's `vat` for the operator fee next to a CEME tariff,
 don't go through ceme-v2. That's what makes these prices right on Madeira
 and the Azores, where VAT is lower.
 
-Where the fee comes from, in order:
+**Three kinds of price, never mixed.** Each one says which it is
+(`priceType`, `priceLabel`, `includesEnergy`; labels in `src/i18n.js`,
+`price.*`), and none is averaged with another:
+- `opc_fee`: the operator's fee, `opc.REGULAR`. No energy in it: it goes on
+  top of a CEME's energy, and is never a total on its own.
+- `adhoc`: the no-contract price, `opc.AD_HOC_PAYMENT`. Energy in it: its
+  own option, never added to a CEME.
+- `outside`: the NAP's `napPrice` outside MOBI.E (`sem_ceme`). One €/kWh,
+  energy in.
+
+A fourth number fills a gap: on a MOBI.E socket with no tariff in MOBI.E's
+file (`mobie_sem_tarifa`) the NAP has a price, but doesn't say whether it is
+the operator's fee or a price with the energy in it (real values fall
+between the two). It's `nap`, `includesEnergy: null`: added to the CEME's
+energy like a fee, so the total is the dearest reading, and flagged
+(`total.mayCountEnergyTwice`, plus an assumption saying so).
+
+Where the fee comes from, in order (`feePlan` in `quote.js`):
 1. MOBI.E's tariff file (in the dataset), which has the per-minute tiers;
-2. the NAP live feed, which is rounded to the cent and has no tiers, but
-   covers chargers missing from the file;
-3. neither: the total is energy only, marked `complete: false`, and ranked
+2. a socket with only an ad hoc price in MOBI.E's file: no fee. The NAP's
+   €/kWh there is that ad hoc price, energy in, so it's not used as a fee;
+3. the NAP live feed, which is rounded to the cent and has no tiers, but
+   covers chargers missing from the file (`nap`);
+4. the dataset's copy of the NAP's fees (`napFees`), when the live feed has
+   nothing for the socket (`nap` too);
+5. none: the total is energy only, marked `complete: false`, and ranked
    after the complete ones.
 
 ## 3. Every way to pay (`quote.js`)

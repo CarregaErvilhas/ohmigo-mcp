@@ -158,6 +158,17 @@ function checked(clean, value, field, report) {
   return v;
 }
 
+// 0-5 €: the dearest real fee is around 1.2 €/kWh; a typo in the NAP (a
+// price in cents) should not become a 30 € charge.
+const FEE_MAX = 5;
+const fee = v => Number.isFinite(v) && v >= 0 && v <= FEE_MAX;
+function napFees(v) {
+  if (typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out = {};
+  for (const k of ['kwh', 'min', 'flat']) if (fee(v[k])) out[k] = v[k];
+  return Object.keys(out).length ? out : undefined;
+}
+
 function cleanPoint(p, report) {
   // A blank level is how the NAP's blanks already arrive; the quote says so.
   if (p.level != null) p.level = checked(gridLevel, p.level, 'point.level', report) ?? null;
@@ -166,6 +177,12 @@ function cleanPoint(p, report) {
   // written as a string upstream). It is no plug: null, like a blank level,
   // so the answers and filters never show or match the word.
   if (typeof p.connector === 'string' && /^(nan|none|null)?$/i.test(p.connector.trim())) p.connector = null;
+  // The NAP's fees for a MOBI.E socket MOBI.E has no tariff for (regime
+  // mobie_sem_tarifa): { kwh, min, flat }, each optional, € without VAT. The
+  // live feed's own numbers win (quote.js feePlan); these stand in when it has
+  // none. A key that isn't a sane price is dropped, and an empty object goes.
+  if (p.napFees != null) p.napFees = checked(napFees, p.napFees, 'point.napFees', report);
+  if (p.napFees === undefined) delete p.napFees;
   // A socket's `osm` is what OpenStreetMap said about it where that differs
   // from the NAP. nap-dashboard has already applied what was believable to
   // kw/v/a/cable (the NAP's value stays in napKw/napV/napA/napCable), so

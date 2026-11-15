@@ -53,7 +53,7 @@ import { closesDuring, daysLater, siteOpen } from './hours.js';
 import { idleSlices, localOffset, localTime, MAX_SESSION_HOURS, REGION_TZ, sessionProfile } from './profile.js';
 import { translator } from './i18n.js';
 import { limiter } from './limit.js';
-import { napEurPerKwh, napPlan } from './live.js';
+import { napEurPerKwh, napFeesPlan, napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
 import { forAudiences, isStale, napNote, offersAt, ownWalkUp } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, unpricedHere, withPromos } from './promos.js';
@@ -257,15 +257,43 @@ function timeline(region, slices, tariffs, sim) {
   };
 }
 
-// The OPC fee plan for a point and where it came from. MOBI.E's tariff file
-// first (it has the per-minute tiers); the NAP live feed when the socket is
-// missing from it.
-function feePlan(point, live) {
-  if (point.opc?.REGULAR) return { plan: point.opc.REGULAR, source: 'mobie' };
+// The OPC fee plan for a point, where it came from, and what kind of price it
+// is. Three prices are never the same thing (docs/02-cost-math.md):
+//   opc.REGULAR       the operator's fee, energy NOT in it: added to a CEME's
+//                     energy. MOBI.E's file, with the per-minute tiers.
+//   opc.AD_HOC_PAYMENT the no-contract price, energy in it: its own option
+//                     (adhocOption), never added to a CEME.
+//   napPrice          outside MOBI.E (sem_ceme): one €/kWh, energy in.
+// A MOBI.E socket missing from MOBI.E's file (mobie_sem_tarifa) only has the
+// NAP's numbers, live or the dataset's copy (napFees). The NAP doesn't say
+// whether they are the operator's fee or a price with the energy in it (seen
+// between the two), so `type` is 'nap' and the quote says the total may count
+// the energy twice. Where MOBI.E publishes an ad hoc price, the NAP's €/kWh is
+// that ad hoc price, so it's never used as a fee there.
+//   source: 'mobie' | 'nap' (live feed) | 'napStatic' (dataset) | null
+//   type:   'opc_fee' | 'nap' | null;  adhocOnly: the NAP's price is the ad hoc
+export function feePlan(point, live) {
+  if (point.opc?.REGULAR) return { plan: point.opc.REGULAR, source: 'mobie', type: 'opc_fee' };
+  if (point.opc?.AD_HOC_PAYMENT) return { plan: null, source: null, type: null, adhocOnly: true };
   const lp = live && napPlan(live.fees);
-  if (lp) return { plan: lp, source: 'nap' };
-  return { plan: null, source: null };
+  if (lp) return { plan: lp, source: 'nap', type: 'nap' };
+  const sp = napFeesPlan(point.napFees);
+  if (sp) return { plan: sp, source: 'napStatic', type: 'nap' };
+  return { plan: null, source: null, type: null };
 }
+
+// What each kind of price says about itself, for every answer that shows one:
+// a type the code can test and a label in the user's language.
+//   includesEnergy: null when nobody knows (the NAP's price on MOBI.E)
+const PRICE_TYPES = {
+  opc_fee: { key: 'price.opc', includesEnergy: false },
+  adhoc: { key: 'price.adhoc', includesEnergy: true },
+  outside: { key: 'price.outside', includesEnergy: true },
+  nap: { key: 'price.nap', includesEnergy: null },
+};
+export const priceType = (type, t) => type && PRICE_TYPES[type]
+  ? { priceType: type, priceLabel: t(PRICE_TYPES[type].key), includesEnergy: PRICE_TYPES[type].includesEnergy }
+  : {};
 
 // MOBI.E's ad hoc price, which comes without VAT like its operator fees.
 // "Ad hoc" says no CEME is needed, not how you pay: at most of these chargers
@@ -282,7 +310,7 @@ function adhocOption(point, session, t, region, site, minutes = session.minutes)
   return {
     kind: 'adhoc', label: t(card === true ? 'option.adhoc.card' : card === false ? 'option.adhoc.noCard' : 'option.adhoc'),
     total: r2(c.high * vat), low: r2(c.low * vat), high: r2(c.high * vat),
-    tariff: describePlan(plan, t),
+    tariff: describePlan(plan, t), ...priceType('adhoc', t),
     note: [t('option.adhoc.note', { vat: pct(vat, t) }), ...(disagree ? [t('option.adhoc.cardDisagree')] : [])].join('; '),
   };
 }
@@ -476,7 +504,7 @@ export async function quotePoint(hit, car, opts = {}) {
       // Tesla's NAP price is what its app shows, VAT in: adding VAT again
       // put it above Tesla's own card terminal price.
       const withVat = note?.vatIncluded ? nap : nap * vat;
-      base.options.push({ kind: 'opc_direct', label,
+      base.options.push({ kind: 'opc_direct', label, ...priceType('outside', t),
         total: r2(withVat * session.kwh), eurPerKwh: r4(withVat), eurPerKwhExVat: r4(withVat / vat),
         ...(note?.vatIncluded && { napVatIncluded: true }),
         // Tesla publishes one fixed price on the NAP, its daily peak, and no
@@ -487,7 +515,7 @@ export async function quotePoint(hit, car, opts = {}) {
       base.assumptions.push(note?.vatIncluded ? t('assume.napVatIn') : t('assume.napPrice', { vat: pct(vat, t) }));
       if (note?.timeOfUse) base.assumptions.push(t('assume.napTimeOfUse'));
     } else if (walkUp) {
-      base.options.push(adhocOption(point, session, t, base.region, site));
+      base.options.push(adhocOption(point, session, t, base.region, site, pluggedMinutes));
     }
     base.options.sort((a, b) => a.total - b.total);
     const first = base.options[0];
@@ -554,12 +582,14 @@ export async function quotePoint(hit, car, opts = {}) {
   if (point.level == null) base.assumptions.push(t('assume.levelUnknown'));
 
   const vat = ceme.vat; // the region's VAT multiplier, e.g. 1.23 on the mainland
-  const { plan, source } = priv ? { plan: null, source: null } : feePlan(point, lp);
+  const { plan, source, type, adhocOnly } = priv ? { plan: null, source: null } : feePlan(point, lp);
   let opc = { low: 0, high: 0, parts: null };
   if (plan) opc = opcCost(plan, { kwh: session.kwh, minutes: pluggedMinutes });
   else if (priv) base.assumptions.push(t('assume.private'));
-  else base.assumptions.push(t('assume.noFee'));
+  else base.assumptions.push(t(adhocOnly ? 'assume.napIsAdhoc' : 'assume.noFee'));
   if (source === 'nap') base.assumptions.push(t('assume.napFee'));
+  if (source === 'napStatic') base.assumptions.push(t('assume.napFeeStatic'));
+  if (type === 'nap') base.assumptions.push(t('assume.napMayIncludeEnergy'));
   if (opc.low !== opc.high) base.assumptions.push(t('assume.feeRange'));
   if (plan?.time?.length) base.assumptions.push(plugged ? t('assume.perMinute.plugged', { at: base.session.unplugLocal }) : t('assume.perMinute'));
 
@@ -574,11 +604,15 @@ export async function quotePoint(hit, car, opts = {}) {
     ?? cemeOption(ceme, ctx);
   // complete: false when the operator fee is unknown, so the total is only
   // the energy part. Rankings put these after the complete ones.
-  base.total = { eur: head.total, low: head.low ?? head.total, high: head.total, complete: !!plan || priv };
+  // With the NAP's price on a socket MOBI.E has no tariff for, the total adds
+  // a number that may already have the energy in it: still ranked as complete
+  // (it is the dearest reading), and flagged so nobody takes it as certain.
+  base.total = { eur: head.total, low: head.low ?? head.total, high: head.total, complete: !!plan || priv,
+    ...(type === 'nap' && { mayCountEnergyTwice: true }) };
   base.eurPerKwh = session.batteryKwh > 0 ? r2(head.total / session.batteryKwh) : null;
   base.headline = head;
   if (!priv) base.opc = {
-    tariff: plan ? describePlan(plan, t) : null, source,
+    tariff: plan ? describePlan(plan, t) : null, source, ...priceType(type, t),
     eurExVat: r2(opc.high), eurWithVat: r2(opc.high * vat),
     parts: opc.parts && Object.fromEntries(Object.entries(opc.parts).map(([k, v]) => [k, r2(v.high)])),
   };
