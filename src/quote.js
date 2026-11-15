@@ -178,7 +178,7 @@ function cemeComponents(t, w) {
 //   opc: { low, high } operator fee excl. VAT; vat: the region's multiplier
 //   tr: the translator, for the note of a tariff billed by the session average
 //   unplugLocal: when the driver said they unplug, if after charging ends
-function cemeOption(t, { site, opc, vat, detail, tr, unplugLocal }) {
+function cemeOption(t, { site, opc, vat, detail, tr, unplugLocal, feeType }) {
   const promos = promosHere(t, site).filter(appliesToCustomers);
   const w = withPromos(promos, { energyEur: t.totalEur, opc, vat });
   return {
@@ -193,6 +193,9 @@ function cemeOption(t, { site, opc, vat, detail, tr, unplugLocal }) {
     ...(t.newCustomers && { newCustomersOnly: true }), ...(t.valid_until && { until: t.valid_until }),
     ...(w.applied.length && { promos: w.applied.map(p => p.id), ...(w.opcPct && { opcDiscountPct: w.opcPct }), ...(w.final && { opcIncluded: true }) }),
     ...(t.billing === 'MEDIA_SESSAO' && sessionBilling(t, w, detail, tr, unplugLocal)),
+    // The NAP's price on a socket MOBI.E has no tariff for is in this total
+    // as a fee; it may already have the energy in it (feePlan).
+    ...(feeType === 'nap' && !w.final && { mayCountEnergyTwice: true }),
   };
 }
 
@@ -272,7 +275,13 @@ function timeline(region, slices, tariffs, sim) {
 // that ad hoc price, so it's never used as a fee there.
 //   source: 'mobie' | 'nap' (live feed) | 'napStatic' (dataset) | null
 //   type:   'opc_fee' | 'nap' | null;  adhocOnly: the NAP's price is the ad hoc
+// Outside MOBI.E (sem_ceme) there's no CEME to add a fee to: the NAP's
+// numbers are the whole price, typed 'outside' (lookup_charger shows them).
 export function feePlan(point, live) {
+  if (point.regime === 'sem_ceme') {
+    const lp = live && napPlan(live.fees);
+    return lp ? { plan: lp, source: 'nap', type: 'outside' } : { plan: null, source: null, type: null };
+  }
   if (point.opc?.REGULAR) return { plan: point.opc.REGULAR, source: 'mobie', type: 'opc_fee' };
   if (point.opc?.AD_HOC_PAYMENT) return { plan: null, source: null, type: null, adhocOnly: true };
   const lp = live && napPlan(live.fees);
@@ -593,7 +602,7 @@ export async function quotePoint(hit, car, opts = {}) {
   if (opc.low !== opc.high) base.assumptions.push(t('assume.feeRange'));
   if (plan?.time?.length) base.assumptions.push(plugged ? t('assume.perMinute.plugged', { at: base.session.unplugLocal }) : t('assume.perMinute'));
 
-  const ctx = { site, opc, vat, detail: want, tr: t, unplugLocal: base.session.unplugLocal };
+  const ctx = { site, opc, vat, detail: want, tr: t, unplugLocal: base.session.unplugLocal, feeType: type };
   const shownOpts = picked.options.map(o => cemeOption(o, ctx)).map(o => tariffIds?.length ? listed(o) : o);
   // The headline, now that promotions may have changed the order: with the
   // user's tariffs, the cheapest of them; otherwise the cheapest shown one

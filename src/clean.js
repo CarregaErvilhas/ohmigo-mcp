@@ -162,10 +162,13 @@ function checked(clean, value, field, report) {
 // price in cents) should not become a 30 € charge.
 const FEE_MAX = 5;
 const fee = v => Number.isFinite(v) && v >= 0 && v <= FEE_MAX;
-function napFees(v) {
+function napFees(v, report) {
   if (typeof v !== 'object' || Array.isArray(v)) return undefined;
   const out = {};
-  for (const k of ['kwh', 'min', 'flat']) if (fee(v[k])) out[k] = v[k];
+  for (const [k, x] of Object.entries(v)) {
+    if (['kwh', 'min', 'flat'].includes(k) && fee(x)) out[k] = x;
+    else count(report, 'dropped point.napFees key');
+  }
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -181,7 +184,7 @@ function cleanPoint(p, report) {
   // mobie_sem_tarifa): { kwh, min, flat }, each optional, € without VAT. The
   // live feed's own numbers win (quote.js feePlan); these stand in when it has
   // none. A key that isn't a sane price is dropped, and an empty object goes.
-  if (p.napFees != null) p.napFees = checked(napFees, p.napFees, 'point.napFees', report);
+  if (p.napFees != null) p.napFees = checked(v => napFees(v, report), p.napFees, 'point.napFees', report);
   if (p.napFees === undefined) delete p.napFees;
   // A socket's `osm` is what OpenStreetMap said about it where that differs
   // from the NAP. nap-dashboard has already applied what was believable to

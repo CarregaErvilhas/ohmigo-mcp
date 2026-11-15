@@ -122,3 +122,18 @@ test('price kinds: sockets with different napFees are never priced as one', asyn
   assert.notEqual(socketKindKey(site, p({ kwh: 0.1 })), socketKindKey(site, p({ kwh: 0.3 })));
   assert.equal(socketKindKey(site, p(undefined)), socketKindKey(site, dc({ regime: 'mobie_sem_tarifa' })));
 });
+
+test('price kinds: outside MOBI.E the live NAP fee is typed outside, never as the NAP price on MOBI.E', () => {
+  const live = liveWith([{ policy: 'pricePerDeliveryUnit', eur: 0.3 }]);
+  const f = feePlan(dc({ regime: 'sem_ceme', napPrice: 0.3 }), live.get());
+  assert.equal(f.type, 'outside');
+  assert.deepEqual(f.plan, { energy: [0.3] });
+  assert.equal(feePlan(dc({ regime: 'sem_ceme', napPrice: 0.3 }), null).plan, null);
+});
+
+test('price kinds: CEME options priced with the NAP number carry the flag too', async () => {
+  const q = await quotePoint({ site, point: dc({ regime: 'mobie_sem_tarifa', napFees: { kwh: 0.2 } }) }, car, { at, lang: 'en', live: noLive });
+  assert.ok(q.options.filter(o => o.kind === 'ceme').every(o => o.mayCountEnergyTwice));
+  const plain = await quotePoint({ site, point: dc({ regime: 'mobie', opc: { REGULAR } }) }, car, { at, lang: 'en', live: noLive });
+  assert.ok(plain.options.every(o => !o.mayCountEnergyTwice));
+});
