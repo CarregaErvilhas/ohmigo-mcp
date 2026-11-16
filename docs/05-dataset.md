@@ -143,10 +143,15 @@ Monday.
   `MT`), which picks the BT or MT version of each CEME tariff. Not the
   socket's voltage (that's `v`).
 - `regime`: `mobie` (on MOBI.E, fee in the file), `mobie_sem_tarifa` (on
-  MOBI.E, missing from the file; ohmigo uses the NAP's fees), `sem_ceme`
+  MOBI.E, missing from the file; ohmigo uses the NAP's price, live or `napFees`), `sem_ceme`
   (outside MOBI.E).
 - `opc`: the plans described in [02](02-cost-math.md), in MOBI.E's raw form,
   per-minute tiers included.
+- `napFees` (point, `mobie_sem_tarifa` only): the NAP's fees for the socket,
+  `{ "kwh", "min", "flat" }`, each optional, € without VAT. Optional: an
+  older file without it prices those sockets from the live feed alone.
+  `clean.js` keeps only sane numbers. It may already include the energy
+  ([02](02-cost-math.md) says how ohmigo handles that).
 - `issues` (point): what nap-dashboard's NAP-only checks found on this socket
   (`tensao_placeholder`: a 750/600 V placeholder on a DC connector;
   `trifasico_sem_3p`: declared three-phase with single-phase voltage and

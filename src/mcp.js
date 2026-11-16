@@ -24,13 +24,13 @@ import { expandMonthKwh, promos, tariffs } from './ceme.js';
 import { clusterPlaces, directionLabel, onMotorway, PAIR_KM, sameStation, serviceAreas, sideFor } from './direction.js';
 import { haversineKm } from './geo.js';
 import { pickLang, translator } from './i18n.js';
-import { napEurPerKwh, napPlan } from './live.js';
+import { napEurPerKwh } from './live.js';
 import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt } from './offers.js';
 import { cardPayment, wheelchair } from './data.js';
 import { siteOpen } from './hours.js';
 import { COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
 import { describePlan } from './opc.js';
-import { byBest, privateCharger, quotePoint, rank, rankingSlot, tariffKey } from './quote.js';
+import { byBest, feePlan, priceType, privateCharger, quotePoint, rank, rankingSlot, tariffKey } from './quote.js';
 import { fold } from './text.js';
 import { MAX_SESSION_HOURS } from './profile.js';
 import { logged } from './stats.js';
@@ -403,15 +403,22 @@ function siteCard(h, live, t, audiences = [], notes = [], carVolts) {
   const groups = new Map();
   for (const p of h.points) {
     const lp = live.get(site.id, p.id);
-    const fee = p.opc?.REGULAR ?? (lp && napPlan(lp.fees));
-    const fromNap = !p.opc?.REGULAR;
+    // Each price with what kind it is (quote.js feePlan): the operator's fee
+    // (no energy), the ad hoc price (energy in), the price outside MOBI.E
+    // (energy in), or the NAP's price on a MOBI.E socket with no tariff there
+    // (nobody says whether the energy is in it).
+    const { plan: fee, source, type } = feePlan(p, lp);
+    const fromNap = source !== 'mobie';
     const napPrice = p.regime === 'sem_ceme' ? napEurPerKwh(lp, p.napPrice) : undefined;
     const card = {
       ...socketFields(p, carVolts), ...plugFields(p, t), regime: p.regime,
       operatorFee: fee ? describePlan(fee, t, { vatIncluded: fromNap && vatIn }) : undefined,
-      operatorFeeSource: fee ? (fromNap ? 'nap' : 'mobie') : undefined,
+      operatorFeeSource: fee ? source : undefined,
+      operatorFeeType: fee ? priceType(type, t).priceLabel : undefined,
       adHoc: p.opc?.AD_HOC_PAYMENT ? describePlan(p.opc.AD_HOC_PAYMENT, t) : undefined,
+      adHocType: p.opc?.AD_HOC_PAYMENT ? t('price.adhoc') : undefined,
       ...(vatIn ? { napPriceWithVat: napPrice } : { napPriceExVat: napPrice }),
+      napPriceType: napPrice != null ? t('price.outside') : undefined,
       ...(peak && napPrice != null && { napPriceIsPeak: true }),
       direct: offersAt(site, p, audiences).map(({ offer, eurPerKwh }) => ({ label: offer.label, eurPerKwh, sessionEur: offer.sessionEur, audience: offer.audience, walkUp: !!offer.walkUp || undefined, subscription: !!offer.subscription || undefined })),
     };
@@ -553,7 +560,7 @@ const canonical = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' &&
 // socket on a lent site must not merge into a named sibling's, or its
 // assumption goes with it. Hours likewise: merged across sites with different
 // hours, a closing warning would be lost or invented.
-export const socketKindKey = (site, point) => canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, site.operatorId, !!site.operatorInferred, site.hours ?? null, site.osm?.openingHours ?? null]);
+export const socketKindKey = (site, point) => canonical([point.kw, point.cable, point.connector, point.dc, point.level, point.regime, point.opc, point.napPrice, point.napFees ?? null, site.operatorId, !!site.operatorInferred, site.hours ?? null, site.osm?.openingHours ?? null]);
 
 // Nothing found because CHAdeMO was hidden (filterOf), while the words do
 // name a charger: it only has CHAdeMO. Said so, or a CHAdeMO driver whose
@@ -664,7 +671,7 @@ function rankCandidates(results, live, route) {
     const score = p => STATUS_RANK[live.get(r.site.id, p.id)?.status ?? 'unknown'] ?? 2;
     const kinds = new Map();
     for (const p of r.points) {
-      const key = canonical([p.kw, p.cable, p.connector, p.dc, p.level, p.regime, p.opc, p.napPrice]);
+      const key = canonical([p.kw, p.cable, p.connector, p.dc, p.level, p.regime, p.opc, p.napPrice, p.napFees ?? null]);
       const cur = kinds.get(key);
       if (!cur || score(p) < score(cur)) kinds.set(key, p);
     }

@@ -150,6 +150,19 @@ export function napPlan(fees) {
   return Object.keys(plan).length ? plan : null;
 }
 
+// The dataset's copy of the NAP's fees for a socket ({ kwh, min, flat }, each
+// optional, without VAT: nap-dashboard writes it for mobie_sem_tarifa sockets
+// from the same feed) as a plan, like napPlan. It stands in when the live
+// feed has nothing for the socket. null when there's nothing in it.
+export function napFeesPlan(f) {
+  if (!f) return null;
+  const plan = {};
+  if (f.flat != null) plan.flat = [f.flat];
+  if (f.kwh != null) plan.energy = [f.kwh];
+  if (f.min != null) plan.time = [{ eur: f.min, from: 0, to: null }];
+  return Object.keys(plan).length ? plan : null;
+}
+
 // The NAP's €/kWh for a socket outside MOBI.E (lp: its live entry, if any).
 // The live per-kWh fee wins. The static price from the dataset stands in only
 // when the live feed has no fees for the socket: when it has fees and none is
