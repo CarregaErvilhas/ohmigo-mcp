@@ -499,7 +499,11 @@ test('http: lookup_charger says each note once in its text', async () => {
   const r = await call('lookup_charger', { query: 'Continente', limit: 10, lang: 'en' });
   assert.ok(r.structuredContent.sites.filter(s => s.operatorInferred).length >= 2);
   const summary = r.content[0].text.split('\n\n')[0];
-  assert.equal(summary.split('\n').filter(l => /inferred/.test(l)).length, 1);
+  assert.equal(summary.split('\n').filter(l => /inferred from the charger's id prefix/.test(l)).length, 1);
+  // Each such site's own line says it in a few words, for the answer to repeat.
+  for (const s of r.structuredContent.sites.filter(x => x.operatorInferred)) {
+    assert.match(summary.split('\n').find(l => l.startsWith(`${s.siteId}:`)), /\(operator inferred: the NAP names none\)/);
+  }
 });
 
 test('http: a site with nobody to lend it an operator stays nameless, and /dados still lists it', async () => {
