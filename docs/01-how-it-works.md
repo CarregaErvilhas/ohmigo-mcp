@@ -98,7 +98,12 @@ it applies:
   `note`. Where a result's or a promotion's `note` is written for the
   assistant, `quote.js` also writes a `driverNote`, and the page shows that
   instead. The top-level `notes` list isn't shown there, so it's free to give
-  the assistant orders.
+  the assistant orders. A note it has to act on works better as an order ("tell
+  the user…") than as a statement of fact. The summary lines above the JSON
+  in the text are what the assistant reads first and quotes, so a fact about
+  one charger that the answer must carry goes on that charger's line too (the
+  walk-up price, the blog behind a price, an inferred operator, a socket with
+  no cable).
 
 Before a pricing answer goes out, `src/slim.js` takes the repetition out of
 it, because the whole result stays in the assistant's context for the rest of
