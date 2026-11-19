@@ -146,7 +146,7 @@
         ],
         "answer": {
           "noMatch": [
-            "\\d\\s*€"
+            "\\d\\s*€(?!\\s*/)"
           ]
         },
         "judge": [
@@ -189,7 +189,7 @@
         ],
         "answer": {
           "match": [
-            "\\?"
+            "\\?|\\b(diz|diga|indica|indique)-me\\b"
           ]
         },
         "judge": [
