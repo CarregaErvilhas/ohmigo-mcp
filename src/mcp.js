@@ -297,7 +297,7 @@ function siteFacts(site, t, at = new Date()) {
   const normPhone = x => String(x).replace(/\D/g, '').replace(/^351/, '').slice(-9);
   if (site.phone && site.osm?.phone && normPhone(site.phone) !== normPhone(site.osm.phone)) notes.push(t('note.phoneDisagree', { site: site.id, nap: site.phone, osm: site.osm.phone }));
   if (site.osm?.capacity != null && site.points?.length && site.osm.capacity !== site.points.length) notes.push(t('note.capacityDisagree', { site: site.id, nap: site.points.length, osm: site.osm.capacity }));
-  if (site.operatorInferred) notes.push(t('assume.operatorInferred', { operator: site.operator }));
+  if (site.operatorInferred) notes.push(t('note.operatorInferred', { operator: site.operator }));
   const phone = site.phone ?? site.osm?.phone;
   return {
     facts: {
@@ -536,6 +536,10 @@ export const curveNote = (results, a, t) => !a.charge_curve && results.some(q =>
 // Without tariff_ids only the popular tariffs are priced, and drivers often
 // hold a cheaper one they never thought to mention (see unlistedCheaper).
 export const unlistedNote = (results, t) => results.some(q => q.unlistedCheaper) ? [t('note.unlisted')] : [];
+// The estimate's own assumption says the operator is inferred, for the driver's
+// page; the assistant also gets it as an order, the form of note it repeats.
+export const operatorInferredNote = (results, t) => [...new Set(results.filter(q => q.operatorInferred).map(q => q.operator))]
+  .map(operator => t('note.operatorInferred', { operator }));
 
 // What a support question needs to reproduce an answer: which server, which
 // data, which live copy.
@@ -1018,6 +1022,7 @@ export function createServer(getDataset, live) {
           ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
           ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
           ...kwForCarQuoteNote(top, a, t),
+          ...operatorInferredNote(top, t),
           ...moreWays(top, t),
           ...directNote(top, t),
           ...unlistedNote(top, t),
@@ -1081,7 +1086,7 @@ export function createServer(getDataset, live) {
     if (cemeDown && !results.some(q => q.best)) return noCemeError(results, t);
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}${sourceText(q, t)}${adhocText(q, t)}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : t('summary.noPrice')} · ${q.session.minutes} min · ${socketLine(q, t)} [${q.pointId}]`);
     const notes = [...liveNotes(status, t), ...(cemeDown ? [noCemeNote(results, t)] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []),
-      ...kwForCarQuoteNote(results, a, t), ...moreWays(results, t), ...directNote(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
+      ...kwForCarQuoteNote(results, a, t), ...operatorInferredNote(results, t), ...moreWays(results, t), ...directNote(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
     const out = slim({ kind: 'single', ...meta(ds, status, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results });
     return ok(out.data, [...notes, ...lines].join('\n'), out.meta);
   });

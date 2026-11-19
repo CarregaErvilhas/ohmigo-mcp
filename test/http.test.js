@@ -504,6 +504,10 @@ test('http: lookup_charger says each note once in its text', async () => {
   for (const s of r.structuredContent.sites.filter(x => x.operatorInferred)) {
     assert.match(summary.split('\n').find(l => l.startsWith(`${s.siteId}:`)), /\(operator inferred: the NAP names none\)/);
   }
+  // The estimate tells the assistant to say so; the driver's page keeps the assumption.
+  const inferred = r.structuredContent.sites.find(x => x.operatorInferred);
+  const q = (await call('estimate_charging_cost', { site: inferred.siteId, ...car, lang: 'en' })).structuredContent;
+  assert.ok(q.notes.some(n => /tell the user the operator is inferred, not published/.test(n)), JSON.stringify(q.notes));
 });
 
 test('http: a site with nobody to lend it an operator stays nameless, and /dados still lists it', async () => {
