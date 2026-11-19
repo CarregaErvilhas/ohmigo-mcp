@@ -11,8 +11,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { moreWays, socketKindKey, unlistedNote } from '../src/mcp.js';
+import { adhocText, moreWays, socketKindKey, unlistedNote } from '../src/mcp.js';
 import { renderView } from './view-harness.js';
+import { translator } from '../src/i18n.js';
 
 let ceme, cemeDown = false, cheapTip = false, server, base, serverLog = '';
 // Enough rows to pass list_ceme_tariffs' cut, under a name with an accent.
@@ -183,6 +184,11 @@ test('the more-ways note names the walk-up price when it is not the best', () =>
   const ceme = { kind: 'ceme', total: 1 };
   assert.deepEqual(moreWays([{ best: ceme, options: [ceme, adhoc] }], t), ['note.moreWays.adhoc']);
   assert.deepEqual(moreWays([{ best: adhoc, options: [adhoc, ceme] }], t), ['note.moreWays'], 'already the price it leads with');
+  // The summary line names it too, after the best.
+  const en = translator('en');
+  assert.equal(adhocText({ best: ceme, options: [ceme, adhoc] }, en), ' · no CEME card: 3.00 €');
+  assert.equal(adhocText({ best: adhoc, options: [adhoc, ceme] }, en), '');
+  assert.equal(adhocText({ best: ceme, options: [ceme] }, en), '');
 });
 
 test('http: a search for the blue CEE socket says a household plug does not fit it', async () => {

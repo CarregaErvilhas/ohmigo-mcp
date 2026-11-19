@@ -515,6 +515,12 @@ const waysToPay = q => (q.options ?? []).filter(o => !o.notYours).length;
 const adhocBesides = q => q.best?.kind !== 'adhoc' && (q.options ?? []).some(o => o.kind === 'adhoc');
 export const moreWays = (results, t) => !results.some(q => waysToPay(q) > 1) ? []
   : [t(results.some(adhocBesides) ? 'note.moreWays.adhoc' : 'note.moreWays')];
+// The summary lines are what the assistant reads first: the walk-up price
+// goes there too, after the best.
+export const adhocText = (q, t) => {
+  const o = adhocBesides(q) && q.options.find(x => x.kind === 'adhoc');
+  return o ? ` · ${t('summary.adhoc', { eur: o.total.toFixed(2) })}` : '';
+};
 // What every "direct" price shares (quote.js directOptions), once per answer.
 export const directNote = (results, t) => results.some(q => (q.options ?? []).some(o => o.kind === 'direct')) ? [t('note.direct')] : [];
 // DC durations without the car's curve are a generic guess; the note says
@@ -1013,7 +1019,7 @@ export function createServer(getDataset, live) {
         const data = { kind: 'ranking', ...meta(ds, status, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: ranked.sitesPriced,
           ...(truncated && { truncated: true }), ...(ranked.socketsLeftOut && { socketsLeftOut: ranked.socketsLeftOut }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
         // Summary lines on top of the JSON in the text (see ok).
-        const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` ${t('summary.moreWays', { n: waysToPay(q) - 1 })}` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : t('summary.noPrice')} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q, t)}) [${q.pointId}]`);
+        const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` ${t('summary.moreWays', { n: waysToPay(q) - 1 })}` : '') + adhocText(q, t) : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : t('summary.noPrice')} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q, t)}) [${q.pointId}]`);
         const out = slim(data);
         return ok(out.data, [...notes, ...lines].join('\n'), out.meta);
       });
@@ -1066,7 +1072,7 @@ export function createServer(getDataset, live) {
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return noCemeError(results, t);
-    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : t('summary.noPrice')} · ${q.session.minutes} min · ${socketLine(q, t)} [${q.pointId}]`);
+    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}${adhocText(q, t)}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : t('summary.noPrice')} · ${q.session.minutes} min · ${socketLine(q, t)} [${q.pointId}]`);
     const notes = [...liveNotes(status, t), ...(cemeDown ? [noCemeNote(results, t)] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []),
       ...kwForCarQuoteNote(results, a, t), ...moreWays(results, t), ...directNote(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
     const out = slim({ kind: 'single', ...meta(ds, status, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results });
