@@ -177,6 +177,30 @@ test('the more-ways note does not count a tariff the user would have to switch t
   assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2 }] }], t), ['note.moreWays']);
 });
 
+test('the more-ways note names the walk-up price when it is not the best', () => {
+  const t = key => key;
+  const adhoc = { kind: 'adhoc', total: 3 };
+  const ceme = { kind: 'ceme', total: 1 };
+  assert.deepEqual(moreWays([{ best: ceme, options: [ceme, adhoc] }], t), ['note.moreWays.adhoc']);
+  assert.deepEqual(moreWays([{ best: adhoc, options: [adhoc, ceme] }], t), ['note.moreWays'], 'already the price it leads with');
+});
+
+test('http: a search for the blue CEE socket says a household plug does not fit it', async () => {
+  const data = JSON.parse(readFileSync(new URL('fixtures/chargers.json', import.meta.url)));
+  for (const site of data.sites) for (const p of site.points) if (p.connector === 'T2') { p.connector = 'iec60309x2single16'; delete p.osm; }
+  const dir = mkdtempSync(join(tmpdir(), 'ohmigo-'));
+  writeFileSync(join(dir, 'chargers.json'), JSON.stringify(data));
+  const cee = await boot(join(dir, 'chargers.json'));
+  try {
+    const schuko = n => /household \(Schuko\).*blue CEE plug/.test(n);
+    const found = (await call('find_chargers', { connectors: ['iec60309x2single16'], lang: 'en' }, cee.url)).structuredContent;
+    assert.ok(found.sites.length > 0);
+    assert.ok(found.notes.some(schuko), JSON.stringify(found.notes));
+    const other = (await call('find_chargers', { connectors: ['CCS'], lang: 'en' }, cee.url)).structuredContent;
+    assert.ok(!(other.notes ?? []).some(schuko));
+  } finally { cee.proc.kill('SIGKILL'); rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('the unlisted note shows only when a charger has cheaper tariffs left out', () => {
   const t = key => key;
   assert.deepEqual(unlistedNote([{ unlistedCheaper: 0 }, {}], t), []);

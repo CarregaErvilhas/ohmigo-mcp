@@ -323,6 +323,10 @@ const filterNotes = (ds, a, t) => [
   ...(a.min_voltage == null ? [] : [t(ds.hasVoltage ? 'assume.voltage' : 'note.noVoltage')]),
   ...(a.wheelchair ? [t('note.wheelchairFew')] : []),
 ];
+// A user with only the car's household-socket cable is sent to the blue CEE
+// sockets (DOMESTIC), and the answer has to say their plug won't fit as it is.
+// An order to the assistant, so a note of the lists, never an assumption.
+const domesticNote = (a, t) => a.connectors?.includes('iec60309x2single16') ? [t('note.domestic')] : [];
 
 const Region = {
   region: z.enum(['CONT', 'MAD', 'AZO']).optional().describe('Only this region: CONT (mainland), MAD (Madeira), AZO (Azores)'),
@@ -505,8 +509,12 @@ const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 // evals caught them leaving out every other way to pay. When a charger has
 // more than its best, the result itself says so.
 // A tariff the user would have to switch to (notYours) isn't a way to pay yet.
+// The walk-up (ad hoc) price is the one they left out most: it needs no CEME
+// card, so when a charger has one that isn't its best, the note names it.
 const waysToPay = q => (q.options ?? []).filter(o => !o.notYours).length;
-export const moreWays = (results, t) => results.some(q => waysToPay(q) > 1) ? [t('note.moreWays')] : [];
+const adhocBesides = q => q.best?.kind !== 'adhoc' && (q.options ?? []).some(o => o.kind === 'adhoc');
+export const moreWays = (results, t) => !results.some(q => waysToPay(q) > 1) ? []
+  : [t(results.some(adhocBesides) ? 'note.moreWays.adhoc' : 'note.moreWays')];
 // What every "direct" price shares (quote.js directOptions), once per answer.
 export const directNote = (results, t) => results.some(q => (q.options ?? []).some(o => o.kind === 'direct')) ? [t('note.direct')] : [];
 // DC durations without the car's curve are a generic guess; the note says
@@ -802,7 +810,7 @@ export function createServer(getDataset, live) {
       notes.push(sideAssumption(pick, towards.name, t));
     }
     if (directionNeeded) notes.push(t('note.direction'));
-    notes.push(...filterNotes(ds, a, t));
+    notes.push(...filterNotes(ds, a, t), ...domesticNote(a, t));
     if (results.some(h => h.matched.includes('place'))) notes.push(t('note.nearPlace'));
     for (const h of results.filter(x => x.matched.includes('oldCode')).slice(0, a.limit)) {
       notes.push(t('note.oldCode', { now: h.site.code, operator: h.site.operator ?? '?', old: h.site.osm?.oldOperator }));
@@ -863,6 +871,7 @@ export function createServer(getDataset, live) {
       ...liveNotes(status, t),
       ...(everywhere ? [t('note.nationwide', { shown: results.length, total, forCar: a.car_voltage })] : []),
       ...filterNotes(ds, a, t),
+      ...domesticNote(a, t),
       ...sides.notes,
     ];
     const facts = results.map(r => siteFacts(r.site, t));
@@ -990,6 +999,7 @@ export function createServer(getDataset, live) {
           ...liveNotes(status, t),
           ...(cemeDown ? [noCemeNote(ranked, t)] : []),
           ...filterNotes(ds, a, t),
+          ...domesticNote(a, t),
           ...sides.notes,
           ...(truncated ? [t('note.truncated', { n: ranked.sitesPriced, total, sockets: ranked.socketsLeftOut })] : []),
           ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
