@@ -157,6 +157,20 @@ test('pickTariffs: naming a card holds every billing cycle of it', () => {
   assert.deepEqual(pickTariffs(quotes, { level: 'BTN', dc: false }, ['edp-bt-cartoedp-4']).options.map(o => o.id), ['edp-bt-cartoedp-4', 'edp-bt-cartoedp-5']);
 });
 
+test('pickTariffs: naming a card does not hold its versions with a condition', () => {
+  // ceme-v2 numbers EDP's home-electricity-client price (-4) and its
+  // new-sign-up one like billing cycles: the plain card is neither.
+  const quotes = [q('edp-bt-cartoedp-4', 3, { bundle: true }), q('edp-bt-cartoedp-12', 4, { newCustomers: true }),
+    q('edp-bt-cartoedp-8', 5), q('edp-bt-cartoedp', 6)];
+  const t = pickTariffs(quotes, { level: 'BTN', dc: false }, ['edp-bt-cartoedp']);
+  assert.deepEqual(t.options.map(o => o.id), ['edp-bt-cartoedp-8', 'edp-bt-cartoedp']);
+  assert.equal(t.headline.id, 'edp-bt-cartoedp-8');
+  assert.equal(t.best.id, 'edp-bt-cartoedp-4', 'still the cheapest of all, for the tip');
+  // Named exactly (either voltage), it is theirs.
+  assert.deepEqual(pickTariffs(quotes, { level: 'BTN', dc: false }, ['edp-mt-cartoedp-4']).options.map(o => o.id),
+    ['edp-bt-cartoedp-4', 'edp-bt-cartoedp-8', 'edp-bt-cartoedp']);
+});
+
 test('pickTariffs: default is top 3 popular, headline skips ones needing another contract', () => {
   const quotes = [
     q('a-bt-x', 4, { popular: true, bundle: true }), q('b-bt-y', 5), q('c-bt-z', 6, { popular: true }),
@@ -334,4 +348,9 @@ test('eligible: audience tariffs only for that audience or when the user has the
   assert.deepEqual(mine.map(q => [q.id, q.bundle]), [['edp-bt-cartoedp-5', false], ['edp-bt-cartoedp', false]]);
   // Passed in tariff_ids (either voltage): they have it.
   assert.deepEqual(eligible([staff, open], [], ['edp-mt-cartoedp-5']).map(q => q.id), ['edp-bt-cartoedp-5', 'edp-bt-cartoedp']);
+  // The plain card is not the staff price of it.
+  assert.deepEqual(eligible([staff, open], [], ['edp-bt-cartoedp']).map(q => q.id), ['edp-bt-cartoedp']);
+  // An employee who names the plain card holds the staff price too.
+  const both = eligible([staff, open], ['edp-staff'], ['edp-bt-cartoedp']);
+  assert.deepEqual(pickTariffs(both.map(x => ({ ...x, voltage: 'BT' })), { level: 'BTN', dc: false }, ['edp-bt-cartoedp']).headline.id, 'edp-bt-cartoedp-5');
 });

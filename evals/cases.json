@@ -80,7 +80,7 @@
           ]
         },
         "judge": [
-          "Does the reply mention that the chargers have more ways to pay than the ones it shows (other cards or apps, subscriptions), or offer to list them?",
+          "Does the reply tell the user there are more ways to pay than the ones it shows (other CEME cards or apps, subscriptions), or offer to list them or to price another card or app they hold? \"If you have another CEME card, tell me and I'll recalculate\" counts.",
           "If the tool results include paying by bank card or QR code at the charger (an \"adhoc\" option, or a walk-up / no-account option), does the reply mention it? Answer n/a if no such option appears in the results."
         ]
       }
@@ -146,7 +146,7 @@
         ],
         "answer": {
           "noMatch": [
-            "\\d\\s*€"
+            "\\d\\s*€(?!\\s*/)"
           ]
         },
         "judge": [
@@ -189,7 +189,7 @@
         ],
         "answer": {
           "match": [
-            "\\?"
+            "\\?|\\b(diz|diga|indica|indique)-me\\b"
           ]
         },
         "judge": [
@@ -514,7 +514,7 @@
           }
         ],
         "judge": [
-          "Does the reply list sockets in Mealhada and make clear they are CEE (blue, industrial/camping) sockets rather than ordinary household Schuko sockets?"
+          "Does the reply point the user to chargers in Mealhada with a blue CEE socket (at least where the nearest one is), and make clear that a blue CEE socket is not an ordinary household (Schuko) socket, so a household plug does not fit it as it is?"
         ]
       }
     },
@@ -692,7 +692,7 @@
           }
         ],
         "judge": [
-          "Is the price the reply leads with something other than a CEME tariff marked notYours in the results?",
+          "Does the reply lead with a price the user can pay with what they hold or with an option open to anyone, rather than with a CEME tariff marked notYours in the results (one they would have to switch to or sign up for)?",
           "If the reply mentions a cheaper CEME tariff marked notYours, does it say the user would have to switch to it or sign up first? Answer n/a if it mentions none."
         ]
       }

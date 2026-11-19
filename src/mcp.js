@@ -25,10 +25,10 @@ import { clusterPlaces, directionLabel, onMotorway, PAIR_KM, sameStation, servic
 import { haversineKm } from './geo.js';
 import { pickLang, translator } from './i18n.js';
 import { napEurPerKwh } from './live.js';
-import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt } from './offers.js';
+import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt, SOURCE } from './offers.js';
 import { cardPayment, wheelchair } from './data.js';
 import { siteOpen } from './hours.js';
-import { COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
+import { bringsCable, COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
 import { describePlan } from './opc.js';
 import { byBest, feePlan, priceType, privateCharger, quotePoint, rank, rankingSlot, tariffKey } from './quote.js';
 import { fold } from './text.js';
@@ -162,7 +162,7 @@ const Where = {
 
 const Towards = {
   towards: z.union([z.string().max(100), z.object({ lat: z.number().min(30).max(43), lon: z.number().min(-32).max(-6) })]).optional()
-    .describe('Where the driver is heading, a town or lat/lon: picks the side of a motorway service area they can reach'),
+    .describe("Only if the user said where they're heading (town or lat/lon), never guessed: picks the side of a motorway service area they can reach"),
 };
 
 // `towards` as a point and a name for the sentences, or an error.
@@ -297,7 +297,7 @@ function siteFacts(site, t, at = new Date()) {
   const normPhone = x => String(x).replace(/\D/g, '').replace(/^351/, '').slice(-9);
   if (site.phone && site.osm?.phone && normPhone(site.phone) !== normPhone(site.osm.phone)) notes.push(t('note.phoneDisagree', { site: site.id, nap: site.phone, osm: site.osm.phone }));
   if (site.osm?.capacity != null && site.points?.length && site.osm.capacity !== site.points.length) notes.push(t('note.capacityDisagree', { site: site.id, nap: site.points.length, osm: site.osm.capacity }));
-  if (site.operatorInferred) notes.push(t('assume.operatorInferred', { operator: site.operator }));
+  if (site.operatorInferred) notes.push(t('note.operatorInferred', { operator: site.operator }));
   const phone = site.phone ?? site.osm?.phone;
   return {
     facts: {
@@ -323,6 +323,10 @@ const filterNotes = (ds, a, t) => [
   ...(a.min_voltage == null ? [] : [t(ds.hasVoltage ? 'assume.voltage' : 'note.noVoltage')]),
   ...(a.wheelchair ? [t('note.wheelchairFew')] : []),
 ];
+// A user with only the car's household-socket cable is sent to the blue CEE
+// sockets (DOMESTIC), and the answer has to say their plug won't fit as it is.
+// An order to the assistant, so a note of the lists, never an assumption.
+const domesticNote = (a, t) => a.connectors?.includes('iec60309x2single16') ? [t('note.domestic')] : [];
 
 const Region = {
   region: z.enum(['CONT', 'MAD', 'AZO']).optional().describe('Only this region: CONT (mainland), MAD (Madeira), AZO (Azores)'),
@@ -497,7 +501,12 @@ function glanceText(g, lang, t) {
 
 // A socket in a summary line, with the TAR (BT/MT) on MOBI.E. The NAP leaves
 // power and plug blank on some sockets: both arrive as null (clean.js).
-const socketLine = (q, t) => `${q.kw ?? '?'} kW${q.kwForCar != null ? ` ${t('summary.kwForCar', { kw: q.kwForCar })}` : q.kwAt400V != null ? ` ${t('summary.kwAt400V', { kw: q.kwAt400V })}` : ''} ${q.connector ?? '?'}${q.tar ? `, ${q.tar}` : ''}`;
+// A socket with no cable says so here too: the assistant quotes these lines,
+// and in the evals it turned the plug's "bring your own" into "no fixed cable".
+const socketLine = (q, t) => `${q.kw ?? '?'} kW${q.kwForCar != null ? ` ${t('summary.kwForCar', { kw: q.kwForCar })}` : q.kwAt400V != null ? ` ${t('summary.kwAt400V', { kw: q.kwAt400V })}` : ''} ${q.connector ?? '?'}${q.tar ? `, ${q.tar}` : ''}${bringsCable(q) ? `, ${t('plug.bringCable')}` : ''}`;
+// The operator in a summary line, and whether the NAP named it or it was
+// inferred from the charger's id (lookup.js): the answer has to say which.
+const operatorText = (x, t) => `${x.operator ?? '?'}${x.operatorInferred ? ` (${t('summary.operatorInferred')})` : ''}`;
 
 const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 
@@ -505,8 +514,20 @@ const rnd = x => x == null ? undefined : Math.round(x * 10) / 10;
 // evals caught them leaving out every other way to pay. When a charger has
 // more than its best, the result itself says so.
 // A tariff the user would have to switch to (notYours) isn't a way to pay yet.
+// The walk-up (ad hoc) price is the one they left out most: it needs no CEME
+// card, so when a charger has one that isn't its best, the note names it.
 const waysToPay = q => (q.options ?? []).filter(o => !o.notYours).length;
-export const moreWays = (results, t) => results.some(q => waysToPay(q) > 1) ? [t('note.moreWays')] : [];
+const adhocBesides = q => q.best?.kind !== 'adhoc' && (q.options ?? []).some(o => o.kind === 'adhoc');
+export const moreWays = (results, t) => !results.some(q => waysToPay(q) > 1) ? []
+  : [t(results.some(adhocBesides) ? 'note.moreWays.adhoc' : 'note.moreWays')];
+// The summary lines are what the assistant reads first, and what it quotes:
+// the walk-up price goes there too, after the best, and so does the blog's
+// author when the best is the blog's price (the credit the evals saw dropped).
+export const adhocText = (q, t) => {
+  const o = adhocBesides(q) && q.options.find(x => x.kind === 'adhoc');
+  return o ? ` · ${t('summary.adhoc', { eur: o.total.toFixed(2) })}` : '';
+};
+export const sourceText = (q, t) => q.best?.source === 'custofinal' ? ` (${t('summary.blog', { author: SOURCE.author })})` : '';
 // What every "direct" price shares (quote.js directOptions), once per answer.
 export const directNote = (results, t) => results.some(q => (q.options ?? []).some(o => o.kind === 'direct')) ? [t('note.direct')] : [];
 // DC durations without the car's curve are a generic guess; the note says
@@ -515,6 +536,10 @@ export const curveNote = (results, a, t) => !a.charge_curve && results.some(q =>
 // Without tariff_ids only the popular tariffs are priced, and drivers often
 // hold a cheaper one they never thought to mention (see unlistedCheaper).
 export const unlistedNote = (results, t) => results.some(q => q.unlistedCheaper) ? [t('note.unlisted')] : [];
+// The estimate's own assumption says the operator is inferred, for the driver's
+// page; the assistant also gets it as an order, the form of note it repeats.
+export const operatorInferredNote = (results, t) => [...new Set(results.filter(q => q.operatorInferred).map(q => q.operator))]
+  .map(operator => t('note.operatorInferred', { operator }));
 
 // What a support question needs to reproduce an answer: which server, which
 // data, which live copy.
@@ -802,7 +827,7 @@ export function createServer(getDataset, live) {
       notes.push(sideAssumption(pick, towards.name, t));
     }
     if (directionNeeded) notes.push(t('note.direction'));
-    notes.push(...filterNotes(ds, a, t));
+    notes.push(...filterNotes(ds, a, t), ...domesticNote(a, t));
     if (results.some(h => h.matched.includes('place'))) notes.push(t('note.nearPlace'));
     for (const h of results.filter(x => x.matched.includes('oldCode')).slice(0, a.limit)) {
       notes.push(t('note.oldCode', { now: h.site.code, operator: h.site.operator ?? '?', old: h.site.osm?.oldOperator }));
@@ -835,7 +860,7 @@ export function createServer(getDataset, live) {
       sites: cards,
       // OpenStreetMap's licence (ODbL) asks for this wherever its data shows.
       credit: r.results.some(h => h.site.osm) ? t('credit.osm') : undefined,
-    }, [...new Set(notes), ...cards.map(c => `${c.siteId}: ${c.operator ?? '?'}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g, t)}`).join(', ')}`)].join('\n'));
+    }, [...new Set(notes), ...cards.map(c => `${c.siteId}: ${operatorText(c, t)}, ${c.address ?? ''}, ${c.city ?? ''} · ${c.sockets.map(g => `${g.count}× ${socketLine(g, t)}`).join(', ')}`)].join('\n'));
   });
 
   server.registerTool('find_chargers', {
@@ -863,6 +888,7 @@ export function createServer(getDataset, live) {
       ...liveNotes(status, t),
       ...(everywhere ? [t('note.nationwide', { shown: results.length, total, forCar: a.car_voltage })] : []),
       ...filterNotes(ds, a, t),
+      ...domesticNote(a, t),
       ...sides.notes,
     ];
     const facts = results.map(r => siteFacts(r.site, t));
@@ -872,7 +898,7 @@ export function createServer(getDataset, live) {
     const maxOf = (r, k) => Math.max(...r.points.map(p => p[k] ?? 0)) || '?';
     const forCar = r => Math.max(...r.points.map(p => kwForCar(p, a.car_voltage ?? COMMON_CAR_VOLTS)?.kw ?? p.kw ?? 0));
     const forCarText = r => t(a.car_voltage ? 'summary.kwForCar' : 'summary.kwAt400V', { kw: forCar(r) });
-    const text = results.map(r => `${r.site.id}: ${r.site.operator ?? '?'}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.direction ? ` [${r.direction}]` : ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${t('summary.sockets', { n: r.points.length, kw: maxOf(r, 'kw') })}${forCar(r) < maxOf(r, 'kw') ? ` ${forCarText(r)}` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}${glanceText(siteGlance(r, status), lang, t)}`).join('\n');
+    const text = results.map(r => `${r.site.id}: ${operatorText(r.site, t)}, ${r.site.address ?? ''}, ${r.site.city ?? ''}${r.direction ? ` [${r.direction}]` : ''}${r.km != null ? ` · ${rnd(r.km)} km` : ''} · ${t('summary.sockets', { n: r.points.length, kw: maxOf(r, 'kw') })}${forCar(r) < maxOf(r, 'kw') ? ` ${forCarText(r)}` : ''}${ds.hasVoltage ? `, ${maxOf(r, 'v')} V` : ''}${glanceText(siteGlance(r, status), lang, t)}`).join('\n');
     return ok({
       ...meta(ds, status, lang), resolvedPlace: w.resolvedPlace, wholeCountry: everywhere || undefined, total,
       ...(notes.length && { notes: [...new Set(notes)] }),
@@ -990,11 +1016,13 @@ export function createServer(getDataset, live) {
           ...liveNotes(status, t),
           ...(cemeDown ? [noCemeNote(ranked, t)] : []),
           ...filterNotes(ds, a, t),
+          ...domesticNote(a, t),
           ...sides.notes,
           ...(truncated ? [t('note.truncated', { n: ranked.sitesPriced, total, sockets: ranked.socketsLeftOut })] : []),
           ...(ranked.tooLong ? [t('note.tooLong', tooLong)] : []),
           ...(a.detail && top.length > DETAIL_IN_RANKING ? [t('note.detailTop', { n: DETAIL_IN_RANKING })] : []),
           ...kwForCarQuoteNote(top, a, t),
+          ...operatorInferredNote(top, t),
           ...moreWays(top, t),
           ...directNote(top, t),
           ...unlistedNote(top, t),
@@ -1003,7 +1031,7 @@ export function createServer(getDataset, live) {
         const data = { kind: 'ranking', ...meta(ds, status, lang), resolvedPlace: w.resolvedPlace, searched: total, quoted: ranked.sitesPriced,
           ...(truncated && { truncated: true }), ...(ranked.socketsLeftOut && { socketsLeftOut: ranked.socketsLeftOut }), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results: top };
         // Summary lines on top of the JSON in the text (see ok).
-        const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + (waysToPay(q) > 1 ? ` ${t('summary.moreWays', { n: waysToPay(q) - 1 })}` : '') : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : t('summary.noPrice')} · ${q.session.minutes} min · ${q.operator ?? ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q, t)}) [${q.pointId}]`);
+        const lines = top.map((q, i) => `${i + 1}. ${q.best ? (q.best.peakPrice ? '<= ' : '') + q.best.total.toFixed(2) + ' € · ' + q.best.label + sourceText(q, t) + (waysToPay(q) > 1 ? ` ${t('summary.moreWays', { n: waysToPay(q) - 1 })}` : '') + adhocText(q, t) : q.total ? '>= ' + q.total.eur.toFixed(2) + ' €' : t('summary.noPrice')} · ${q.session.minutes} min · ${q.operator ? operatorText(q, t) : ''} ${q.address ?? ''}, ${q.city ?? ''} (${socketLine(q, t)}) [${q.pointId}]`);
         const out = slim(data);
         return ok(out.data, [...notes, ...lines].join('\n'), out.meta);
       });
@@ -1056,9 +1084,9 @@ export function createServer(getDataset, live) {
     for (const q of results) q.assumptions.push(...assumptions);
     const cemeDown = results.some(q => q.cemeUnavailable);
     if (cemeDown && !results.some(q => q.best)) return noCemeError(results, t);
-    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : t('summary.noPrice')} · ${q.session.minutes} min · ${socketLine(q, t)} [${q.pointId}]`);
+    const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}${sourceText(q, t)}${adhocText(q, t)}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : t('summary.noPrice')} · ${q.session.minutes} min · ${socketLine(q, t)} [${q.pointId}]`);
     const notes = [...liveNotes(status, t), ...(cemeDown ? [noCemeNote(results, t)] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []),
-      ...kwForCarQuoteNote(results, a, t), ...moreWays(results, t), ...directNote(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
+      ...kwForCarQuoteNote(results, a, t), ...operatorInferredNote(results, t), ...moreWays(results, t), ...directNote(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
     const out = slim({ kind: 'single', ...meta(ds, status, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results });
     return ok(out.data, [...notes, ...lines].join('\n'), out.meta);
   });

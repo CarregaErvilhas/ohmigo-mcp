@@ -214,7 +214,12 @@ keep the ones that fit this plug:
 - the right voltage version (BT or MT, from the charger's grid voltage level; every answer shows it in `tar`);
 - no AC-only tariffs on DC chargers (Atlante's "(AC)" tariffs);
 - if the user gave their `tariff_ids`, only those; otherwise the top 3 (or
-  `tariffs_shown`) of ceme-v2's "popular" list.
+  `tariffs_shown`) of ceme-v2's "popular" list. A card's other billing cycles
+  count as the user's too (`edp-bt-cartoedp-8` is the Bi-Horário of
+  `edp-bt-cartoedp`), but not its numbered versions with a condition: the
+  price for the CEME's electricity clients, a fleet or staff price, one only
+  for new sign-ups. Those count only when the user names that exact id, or
+  belongs to the audience (`audiences`).
 
 **CEME promotions** (`promos.js`) — some CEMEs give a discount only at one
 network: cheaper energy at Powerdot chargers, a subscription that cuts the

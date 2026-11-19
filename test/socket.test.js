@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { translator } from '../src/i18n.js';
-import { gridOf, kwForCar, plugLabel, usableKw } from '../src/socket.js';
+import { bringsCable, gridOf, kwForCar, plugLabel, usableKw } from '../src/socket.js';
 
 const en = translator('en'), pt = translator('pt');
 
@@ -46,4 +46,11 @@ test('kwForCar: a DC socket gives a car its amps × the car\'s battery volts, ca
   assert.equal(kwForCar(ionity, undefined), null);
   assert.equal(usableKw(ionity, 400), 240);
   assert.equal(usableKw(ionity), 400);
+});
+
+test('bringsCable: only an AC socket that says it has no cable', () => {
+  assert.equal(bringsCable({ connector: 'T2', cable: false }), true);
+  assert.equal(bringsCable({ connector: 'T2', cable: true }), false);
+  assert.equal(bringsCable({ connector: 'T2' }), false, 'unknown is not "bring one"');
+  assert.equal(bringsCable({ connector: 'CCS', cable: false }), false);
 });

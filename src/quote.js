@@ -69,10 +69,24 @@ const pct = (vat, t) => t.num(r4((vat - 1) * 100), 1);
 // user doesn't care which. Dropping the voltage gives the "same tariff" key.
 export const tariffKey = id => id.replace(/-(bt|mt)(?=-|$)/, '');
 
-// The same card in another billing cycle ("edp-bt-cartoedp-4", "-5"...) ends
-// in a number. A driver who names their card holds one cycle of it and may not
-// know which, so for "is this tariff theirs" all cycles of a card are one.
+// The same card in another billing cycle ("edp-bt-cartoedp-8" is the
+// Bi-Horário of "edp-bt-cartoedp") ends in a number. A driver who names their
+// card holds one cycle of it and may not know which, so for "is this tariff
+// theirs" all cycles of a card are one.
 const cardKey = id => tariffKey(id).replace(/-\d+$/, '');
+
+// But ceme-v2 numbers a card's conditional versions the same way: EDP's
+// "-4" is the price for its home-electricity clients, "-6" the fleet one,
+// and there is a staff price. Holding the plain card meets none of those
+// conditions, so another number of the card only counts as theirs when it has
+// none left to meet: no other contract (`bundle`, which eligible clears for an
+// audience the user is in) and not only for new sign-ups. The exact tariff
+// they named (either voltage) always counts.
+function holds(tariffIds) {
+  const exact = new Set((tariffIds || []).map(tariffKey));
+  const cards = new Set((tariffIds || []).map(cardKey));
+  return t => exact.has(tariffKey(t.id)) || (cards.has(cardKey(t.id)) && !t.bundle && !t.newCustomers);
+}
 
 export const DEFAULT_SHOWN = 3;
 
@@ -100,13 +114,14 @@ export const rankingSlot = (signal, job) => rankings(job, signal);
 //     contract (home electricity client, club member...) is never "the" price.
 // The same card in two cycles often has the same price: shown once.
 // The tariffs this driver can have: those for everyone, those for an
-// audience they said they belong to, and any they passed in tariff_ids (they
-// have it). An audience tariff is "bundle" in ceme-v2 (being an employee is
-// the condition); for someone in that audience the condition is met, so it
-// can headline.
+// audience they said they belong to, and any they passed in tariff_ids by its
+// exact id (they have it; the plain card isn't the staff price of it). An
+// audience tariff is "bundle" in ceme-v2 (being an employee is the
+// condition); for someone in that audience the condition is met, so it can
+// headline.
 export function eligible(quotes, audiences = [], tariffIds = []) {
-  const want = new Set((tariffIds || []).map(cardKey));
-  return quotes.filter(q => forAudiences(q, audiences) || want.has(cardKey(q.id)))
+  const exact = new Set((tariffIds || []).map(tariffKey));
+  return quotes.filter(q => forAudiences(q, audiences) || exact.has(tariffKey(q.id)))
     .map(q => q.audience ? { ...q, bundle: false } : q);
 }
 
@@ -114,8 +129,7 @@ export function pickTariffs(quotes, point, tariffIds, shown = DEFAULT_SHOWN) {
   const ok = applicable(quotes, point);
   const best = ok.find(t => !t.newCustomers) || null;
   if (tariffIds?.length) {
-    const want = new Set(tariffIds.map(cardKey));
-    const options = ok.filter(t => want.has(cardKey(t.id)));
+    const options = ok.filter(holds(tariffIds));
     return { options, headline: options[0] || null, best, missing: !options.length };
   }
   const seen = new Set();

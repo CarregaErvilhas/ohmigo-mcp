@@ -27,6 +27,12 @@ const ALIAS = { iec60309x2single16: 'CEE' };
 // brings their own.
 const CABLE_MATTERS = new Set(['T2', 'T1']);
 
+// An AC socket with no cable attached: the driver brings their own.
+export function bringsCable(point) {
+  const code = ALIAS[point.connector] ?? point.connector;
+  return CABLE_MATTERS.has(code) && point.cable === false;
+}
+
 // The sentence that says which plug to use at this socket.
 export function plugLabel(point, t) {
   const code = ALIAS[point.connector] ?? point.connector;

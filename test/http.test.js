@@ -11,8 +11,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { moreWays, socketKindKey, unlistedNote } from '../src/mcp.js';
+import { adhocText, moreWays, socketKindKey, sourceText, unlistedNote } from '../src/mcp.js';
 import { renderView } from './view-harness.js';
+import { translator } from '../src/i18n.js';
 
 let ceme, cemeDown = false, cheapTip = false, server, base, serverLog = '';
 // Enough rows to pass list_ceme_tariffs' cut, under a name with an accent.
@@ -175,6 +176,42 @@ test('the more-ways note does not count a tariff the user would have to switch t
   const t = key => key;
   assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2, notYours: true }] }], t), []);
   assert.deepEqual(moreWays([{ options: [{ total: 1 }, { total: 2 }] }], t), ['note.moreWays']);
+});
+
+test('the more-ways note names the walk-up price when it is not the best', () => {
+  const t = key => key;
+  const adhoc = { kind: 'adhoc', total: 3 };
+  const ceme = { kind: 'ceme', total: 1 };
+  assert.deepEqual(moreWays([{ best: ceme, options: [ceme, adhoc] }], t), ['note.moreWays.adhoc']);
+  assert.deepEqual(moreWays([{ best: adhoc, options: [adhoc, ceme] }], t), ['note.moreWays'], 'already the price it leads with');
+  // The summary line names it too, after the best.
+  const en = translator('en');
+  assert.equal(adhocText({ best: ceme, options: [ceme, adhoc] }, en), ' · no CEME card: 3.00 €');
+  assert.equal(adhocText({ best: adhoc, options: [adhoc, ceme] }, en), '');
+  assert.equal(adhocText({ best: ceme, options: [ceme] }, en), '');
+});
+
+test('the summary line credits the blog when the best is its price', () => {
+  const en = translator('en');
+  assert.match(sourceText({ best: { kind: 'direct', source: 'custofinal' } }, en), /^ \(price from .+'s blog\)$/);
+  assert.equal(sourceText({ best: { kind: 'direct', source: 'https://example.pt/precos' } }, en), '');
+  assert.equal(sourceText({ best: { kind: 'ceme' } }, en), '');
+});
+
+test('http: a search for the blue CEE socket says a household plug does not fit it', async () => {
+  const data = JSON.parse(readFileSync(new URL('fixtures/chargers.json', import.meta.url)));
+  for (const site of data.sites) for (const p of site.points) if (p.connector === 'T2') { p.connector = 'iec60309x2single16'; delete p.osm; }
+  const dir = mkdtempSync(join(tmpdir(), 'ohmigo-'));
+  writeFileSync(join(dir, 'chargers.json'), JSON.stringify(data));
+  const cee = await boot(join(dir, 'chargers.json'));
+  try {
+    const schuko = n => /household \(Schuko\).*blue CEE plug/.test(n);
+    const found = (await call('find_chargers', { connectors: ['iec60309x2single16'], lang: 'en' }, cee.url)).structuredContent;
+    assert.ok(found.sites.length > 0);
+    assert.ok(found.notes.some(schuko), JSON.stringify(found.notes));
+    const other = (await call('find_chargers', { connectors: ['CCS'], lang: 'en' }, cee.url)).structuredContent;
+    assert.ok(!(other.notes ?? []).some(schuko));
+  } finally { cee.proc.kill('SIGKILL'); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('the unlisted note shows only when a charger has cheaper tariffs left out', () => {
@@ -462,7 +499,15 @@ test('http: lookup_charger says each note once in its text', async () => {
   const r = await call('lookup_charger', { query: 'Continente', limit: 10, lang: 'en' });
   assert.ok(r.structuredContent.sites.filter(s => s.operatorInferred).length >= 2);
   const summary = r.content[0].text.split('\n\n')[0];
-  assert.equal(summary.split('\n').filter(l => /inferred/.test(l)).length, 1);
+  assert.equal(summary.split('\n').filter(l => /inferred from the charger's id prefix/.test(l)).length, 1);
+  // Each such site's own line says it in a few words, for the answer to repeat.
+  for (const s of r.structuredContent.sites.filter(x => x.operatorInferred)) {
+    assert.match(summary.split('\n').find(l => l.startsWith(`${s.siteId}:`)), /\(operator inferred: the NAP names none\)/);
+  }
+  // The estimate tells the assistant to say so; the driver's page keeps the assumption.
+  const inferred = r.structuredContent.sites.find(x => x.operatorInferred);
+  const q = (await call('estimate_charging_cost', { site: inferred.siteId, ...car, lang: 'en' })).structuredContent;
+  assert.ok(q.notes.some(n => /tell the user the operator is inferred, not published/.test(n)), JSON.stringify(q.notes));
 });
 
 test('http: a site with nobody to lend it an operator stays nameless, and /dados still lists it', async () => {
