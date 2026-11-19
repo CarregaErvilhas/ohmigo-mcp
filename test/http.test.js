@@ -688,6 +688,19 @@ test('http: /healthz, robots.txt, favicon and 404', async () => {
   assert.match(nf.headers.get('content-type'), /text\/plain/);
 });
 
+// Firefox loads a favicon as one of the page's images, so the CSP's img-src
+// ('self' data:) applies to it, and Firefox always picks the SVG for the tab:
+// an icon on another host leaves the tab without one.
+test('http: the pages link their icons from this host', async () => {
+  for (const path of ['/', '/en', '/privacidade', '/privacy']) {
+    const r = await fetch(`${base}${path}`);
+    assert.match(r.headers.get('content-security-policy'), /img-src 'self'/, path);
+    const links = [...(await r.text()).matchAll(/<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"/g)].map(m => m[1]);
+    assert.ok(links.includes('/icon.svg'), `${path} links the SVG`);
+    for (const href of links) assert.match(href, /^\/[^/]/, `${path} ${href}`);
+  }
+});
+
 test('http: the landing page has its link preview tags and labels in each language', async () => {
   for (const [path, alt, skip, langs] of [['/', 'A mascote do ohmigo', 'Saltar para o conteúdo', 'Idioma'], ['/en', "ohmigo's mascot", 'Skip to content', 'Language']]) {
     const page = await (await fetch(`${base}${path}`)).text();
