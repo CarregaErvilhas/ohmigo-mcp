@@ -18,6 +18,7 @@
 // the landing page's <head> script (THEME_SCRIPT), so a theme picked there
 // applies here too.
 
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { REPO_URL } from './version.js';
 
@@ -25,6 +26,12 @@ export const SITE_URL = (process.env.SITE_URL || 'https://ohmigo.ocarroeletrico.
 export const PATHS = { pt: '/', en: '/en' };
 const LOCALE = { pt: 'pt_PT', en: 'en_GB' };
 const HTML_LANG = { pt: 'pt-PT', en: 'en' };
+// The share image's URL carries a hash of the file. X, Facebook and LinkedIn
+// cache what they fetched per image URL for days, a failed fetch included (X
+// then draws a grey box): a new URL whenever the image changes makes them
+// fetch it again. The server answers /og.png whatever the query.
+export const OG_IMAGE_URL = `${SITE_URL}/og.png?v=${createHash('sha256')
+  .update(readFileSync(new URL('../site/og.png', import.meta.url))).digest('hex').slice(0, 10)}`;
 
 const source = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
 const S = JSON.parse(source.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
@@ -106,12 +113,16 @@ function seo(lang, paths, title, desc) {
     `<meta property="og:title" content="${attr(title)}">`,
     `<meta property="og:description" content="${attr(desc)}">`,
     `<meta property="og:locale" content="${LOCALE[lang]}">`,
-    `<meta property="og:image" content="${SITE_URL}/og.png">`,
+    `<meta property="og:image" content="${OG_IMAGE_URL}">`,
+    `<meta property="og:image:type" content="image/png">`,
     `<meta property="og:image:width" content="1200">`,
     `<meta property="og:image:height" content="630">`,
     `<meta property="og:image:alt" content="${attr(alt)}">`,
     `<meta name="twitter:card" content="summary_large_image">`,
-    // X falls back to og:* for title, description and image, but not for alt.
+    // X is meant to fall back to og:*, but its card is more reliable with its own tags.
+    `<meta name="twitter:title" content="${attr(title)}">`,
+    `<meta name="twitter:description" content="${attr(desc)}">`,
+    `<meta name="twitter:image" content="${OG_IMAGE_URL}">`,
     `<meta name="twitter:image:alt" content="${attr(alt)}">`,
   ];
 }

@@ -664,7 +664,7 @@ test('http: the landing page is rendered in each language at its own URL, for cr
   assert.match(pt, /<h1 [^>]*data-i="hero.title">Do preço do carregamento/);
   assert.match(pt, /<link rel="canonical" href="https:\/\/ohmigo\.ocarroeletrico\.com\/">/);
   assert.match(pt, /hreflang="en" href="https:\/\/ohmigo\.ocarroeletrico\.com\/en"/);
-  assert.match(pt, /og:image" content="https:\/\/ohmigo\.ocarroeletrico\.com\/og\.png"/);
+  assert.match(pt, /og:image" content="https:\/\/ohmigo\.ocarroeletrico\.com\/og\.png\?v=[0-9a-f]{10}"/);
   assert.match(pt, /href="https:\/\/ceme\.ocarroeletrico\.com">comparador/);
   const ld = JSON.parse(pt.match(/<script type="application\/ld\+json">(.*?)<\/script>/)[1]);
   assert.equal(ld['@type'], 'WebApplication');
@@ -731,6 +731,19 @@ test('http: /healthz, robots.txt, favicon and 404', async () => {
   const nf = await fetch(`${base}/nope`);
   assert.equal(nf.status, 404);
   assert.match(nf.headers.get('content-type'), /text\/plain/);
+});
+
+// Firefox loads a favicon as one of the page's images, so the CSP's img-src
+// ('self' data:) applies to it, and Firefox always picks the SVG for the tab:
+// an icon on another host leaves the tab without one.
+test('http: the pages link their icons from this host', async () => {
+  for (const path of ['/', '/en', '/privacidade', '/privacy']) {
+    const r = await fetch(`${base}${path}`);
+    assert.match(r.headers.get('content-security-policy'), /img-src 'self'/, path);
+    const links = [...(await r.text()).matchAll(/<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"/g)].map(m => m[1]);
+    assert.ok(links.includes('/icon.svg'), `${path} links the SVG`);
+    for (const href of links) assert.match(href, /^\/[^/]/, `${path} ${href}`);
+  }
 });
 
 test('http: the landing page has its link preview tags and labels in each language', async () => {

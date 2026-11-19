@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { CTA, LEGAL, LEGAL_PAGES, PAGES, SITEMAP, THEME_SCRIPT } from '../src/site.js';
+import { CTA, LEGAL, LEGAL_PAGES, OG_IMAGE_URL, PAGES, SITEMAP, THEME_SCRIPT } from '../src/site.js';
 
 const html = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
 const S = JSON.parse(html.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
@@ -157,8 +157,13 @@ for (const { path, twin, page, lang, html, locale } of URLS) {
     assert.ok(h.includes(`<meta property="og:title" content="${t[`${page}.title`]}">`), 'og:title');
     assert.ok(h.includes(`<meta property="og:description" content="${t[`${page}.desc`]}">`), 'og:description');
     assert.ok(h.includes(`<meta property="og:locale" content="${locale}">`), 'og:locale');
-    assert.ok(h.includes(`<meta property="og:image" content="${ORIGIN}/og.png">`), 'og:image');
+    // The image URL changes with the file, so a cache that kept a failed fetch fetches it again.
+    assert.match(OG_IMAGE_URL, /^https:\/\/ohmigo\.ocarroeletrico\.com\/og\.png\?v=[0-9a-f]{10}$/);
+    assert.ok(h.includes(`<meta property="og:image" content="${OG_IMAGE_URL}">`), 'og:image');
     assert.ok(h.includes('<meta name="twitter:card" content="summary_large_image">'), 'twitter:card');
+    assert.ok(h.includes(`<meta name="twitter:title" content="${t[`${page}.title`]}">`), 'twitter:title');
+    assert.ok(h.includes(`<meta name="twitter:description" content="${t[`${page}.desc`]}">`), 'twitter:description');
+    assert.ok(h.includes(`<meta name="twitter:image" content="${OG_IMAGE_URL}">`), 'twitter:image');
   });
 
   test(`legal ${path}: the content is in the HTML, in one language`, () => {
