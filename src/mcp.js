@@ -162,7 +162,7 @@ const Where = {
 
 const Towards = {
   towards: z.union([z.string().max(100), z.object({ lat: z.number().min(30).max(43), lon: z.number().min(-32).max(-6) })]).optional()
-    .describe('Where the driver is heading, a town or lat/lon: picks the side of a motorway service area they can reach'),
+    .describe("Only if the user said where they're heading (town or lat/lon), never guessed: picks the side of a motorway service area they can reach"),
 };
 
 // `towards` as a point and a name for the sentences, or an error.
