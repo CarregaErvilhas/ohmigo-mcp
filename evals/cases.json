@@ -80,7 +80,7 @@
           ]
         },
         "judge": [
-          "Does the reply mention that the chargers have more ways to pay than the ones it shows (other cards or apps, subscriptions), or offer to list them?",
+          "Does the reply tell the user there are more ways to pay than the ones it shows (other CEME cards or apps, subscriptions), or offer to list them or to price another card or app they hold? \"If you have another CEME card, tell me and I'll recalculate\" counts.",
           "If the tool results include paying by bank card or QR code at the charger (an \"adhoc\" option, or a walk-up / no-account option), does the reply mention it? Answer n/a if no such option appears in the results."
         ]
       }
