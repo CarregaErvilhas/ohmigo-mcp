@@ -11,7 +11,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { adhocText, moreWays, socketKindKey, unlistedNote } from '../src/mcp.js';
+import { adhocText, moreWays, socketKindKey, sourceText, unlistedNote } from '../src/mcp.js';
 import { renderView } from './view-harness.js';
 import { translator } from '../src/i18n.js';
 
@@ -189,6 +189,13 @@ test('the more-ways note names the walk-up price when it is not the best', () =>
   assert.equal(adhocText({ best: ceme, options: [ceme, adhoc] }, en), ' · no CEME card: 3.00 €');
   assert.equal(adhocText({ best: adhoc, options: [adhoc, ceme] }, en), '');
   assert.equal(adhocText({ best: ceme, options: [ceme] }, en), '');
+});
+
+test('the summary line credits the blog when the best is its price', () => {
+  const en = translator('en');
+  assert.match(sourceText({ best: { kind: 'direct', source: 'custofinal' } }, en), /^ \(price from .+'s blog\)$/);
+  assert.equal(sourceText({ best: { kind: 'direct', source: 'https://example.pt/precos' } }, en), '');
+  assert.equal(sourceText({ best: { kind: 'ceme' } }, en), '');
 });
 
 test('http: a search for the blue CEE socket says a household plug does not fit it', async () => {
