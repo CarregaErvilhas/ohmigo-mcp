@@ -7,6 +7,10 @@
 | OPC fees and ad hoc prices | MOBI.E tariff file, via nap-dashboard | Open data | as above |
 | CEME energy prices | [ceme-v2](https://ceme.ocarroeletrico.com/api) | Our own service | — |
 | Walk-up, app, roaming and subscription prices (`offers/custofinal.json`) | [Preços (finais) kWh Portugal](https://custofinal.blogspot.com), by Alexandre Moleiro | **Alexandre Moleiro's**; public use allowed by him, with no restrictions | Blog and author named in every direct option's `note` and in the view's footer; the agent is told to cite both |
+| Per-car power of each charger model (`models`) | [Modelos de Carregadores usados em Portugal](https://docs.google.com/document/d/1SyhISXEaZiAPYuRLQ9dA2OtFrwysFm01Yei11qTLQLw), by Alexandre Moleiro, via nap-dashboard | **Alexandre Moleiro's**; public and free to use | `note.chargerModels` and the `assume.kwForCarModel` assumption name the list and its author; the dataset's `modelsSource` has the link |
+| Per-site history (`history`) | NAP live status as kept by the [AmpereArchive](https://github.com/CarregaErvilhas/AmpereArchive), via nap-dashboard | As the NAP (open data, with source) | `note.history` says it is the operators' declared status |
+| What is nearby (`nearby`), underground car parks (`underground`), chargers per post (`unit`) | OpenStreetMap, via nap-dashboard | ODbL 1.0, as the `osm` fields | `credit` on every result that uses it |
+| Charger photos (`photos`) | Panoramax and Wikimedia Commons (via OpenStreetMap tags or chosen per model), thumbnails published by nap-dashboard | Each photo's own licence, mostly CC BY-SA 4.0 | `credit`, `license` and `source` on every photo; `note.photos` tells the agent to cite them |
 | Corrections (`offers/manual.json`) | Each entry's `source` URL | Public price pages | Named in the option's `note` |
 | EV guides and dated facts (`voltaria/`, served by `ev_rules_portugal`) | [Voltaria](https://github.com/CarregaErvilhas/voltaria) | Content [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | The landing page's footer and `llms.txt` |
 

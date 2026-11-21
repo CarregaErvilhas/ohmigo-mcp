@@ -68,13 +68,16 @@ async function readCapped(res, max) {
   }
   return Buffer.concat(chunks).toString('utf8');
 }
-import { usableKw } from './socket.js';
+import { chargerSpec, usableKw } from './socket.js';
 import { fold } from './text.js';
 
 // How many site ids list_operators names per operator with no OPC fee on file.
 const NO_OPC_TARIFF_MAX = 20;
 
 export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
+// The photo thumbnails (photos/<id>.jpg) are published at the root of the
+// same site as the dataset: nap-dashboard's Pages deploy puts them there.
+export const photoUrl = src => new URL(src, new URL('/', process.env.DATASET_URL || DEFAULT_URL)).href;
 // The dataset format this code understands. nap-dashboard bumps SCHEMA in
 // ohmigo_dataset.py when the format changes incompatibly.
 const SCHEMA = 1;
@@ -122,6 +125,13 @@ export class Dataset {
         // Same for the cable: seen on the charger (OpenStreetMap) or only the
         // operator's declaration (NAP).
         if (p.cable != null) p.cableSource = p.napCable !== undefined || p.osmSame?.includes('cable') ? 'osm' : 'nap';
+        // The charger model this socket is, when nap-dashboard could tell
+        // (socket.js chargerSpec): what each car gets at 400 V and 800 V,
+        // alone and sharing. Not enumerable: answers pick it explicitly.
+        if (p.model != null && s.models?.[p.model]) {
+          const spec = chargerSpec(s.models[p.model]);
+          if (spec) Object.defineProperty(p, 'charger', { value: spec, enumerable: false });
+        }
         // A point id is only unique within its site ("19" exists on several
         // sites), so the key is "SITE/POINT". The bare id also resolves when
         // it happens to be unique.
@@ -371,7 +381,10 @@ export class Dataset {
       if (!points.length) continue;
       const key = operatorKey(s);
       let o = by.get(key);
-      if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, inferredSites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {}, noOpcTariff: [] });
+      if (!o) by.set(key, o = { operatorId: s.operatorId ?? undefined, names: new Map(), websites: new Set(), sites: 0, inferredSites: 0, points: 0, dcPoints: 0, maxKw: 0, maxV: 0, regions: {}, regimes: {}, noOpcTariff: [], models: new Map() });
+      // The charger models at its sites (OSM's make + Alexandre Moleiro's list):
+      // "what chargers does this network use?".
+      for (const m of s.models ?? []) o.models.set(m.name, (o.models.get(m.name) || 0) + 1);
       // A lent name isn't a spelling the NAP published, so it doesn't vote; it
       // only names an operator whose sites here are all inferred (a region
       // or filter can leave just those).
@@ -397,6 +410,7 @@ export class Dataset {
         website: [...o.websites][0], sites: o.sites, inferredSites: o.inferredSites || undefined, points: o.points, dcPoints: o.dcPoints,
         maxKw: o.maxKw || undefined, maxVoltage: o.maxV || undefined, regions: o.regions, regimes: o.regimes,
         noOpcTariffSites: o.noOpcTariff.length ? o.noOpcTariff.sort().slice(0, NO_OPC_TARIFF_MAX) : undefined,
+        chargerModels: o.models.size ? [...o.models].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, 5).map(([name, sites]) => ({ name, sites })) : undefined,
       };
     }).sort((x, y) => y.sites - x.sites || x.name.localeCompare(y.name));
   }

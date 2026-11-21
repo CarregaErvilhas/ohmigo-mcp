@@ -242,7 +242,7 @@ test('evals: every case is well formed', () => {
       }
     }
     for (const re of [...(e.answer?.match ?? []), ...(e.answer?.noMatch ?? [])]) new RegExp(re, 'i');
-    for (const r of c.requires ?? []) assert.ok(r.site || r.tariff != null || r.promo != null, `${c.id}: requirement ${JSON.stringify(r)}`);
+    for (const r of c.requires ?? []) assert.ok(r.site || r.models || r.photos || r.tariff != null || r.promo != null, `${c.id}: requirement ${JSON.stringify(r)}`);
   }
 });
 

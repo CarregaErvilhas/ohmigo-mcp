@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { translator } from '../src/i18n.js';
-import { bringsCable, gridOf, kwForCar, plugLabel, usableKw } from '../src/socket.js';
+import { bringsCable, chargerSpec, gridOf, kwForCar, plugLabel, usableKw } from '../src/socket.js';
 
 const en = translator('en'), pt = translator('pt');
 
@@ -53,4 +53,27 @@ test('bringsCable: only an AC socket that says it has no cable', () => {
   assert.equal(bringsCable({ connector: 'T2', cable: true }), false);
   assert.equal(bringsCable({ connector: 'T2' }), false, 'unknown is not "bring one"');
   assert.equal(bringsCable({ connector: 'CCS', cable: false }), false);
+});
+
+test('kwForCar: the charger model\'s own figure for the car\'s voltage caps it too', () => {
+  // An Alpitronic HYC300 with 500 A cables: 200 kW for a 400 V car, 300 kW for an 800 V one.
+  const charger = chargerSpec({ name: 'Alpitronic HYC300', variants: [{ maxV: 1000, cars: [[1, 200, 300], [2, 150, 150]] }] });
+  const p = { kw: 300, dc: true, charger };
+  assert.deepEqual(kwForCar(p, 400), { kw: 200, limited: true, volts: 400, boosted: false, model: 'Alpitronic HYC300' });
+  assert.deepEqual(kwForCar(p, 800), { kw: 300, limited: false, volts: 800, boosted: false });
+  // The amps still count when they are lower than the model says.
+  assert.equal(kwForCar({ ...p, a: 400 }, 400).kw, 160);
+  assert.equal(kwForCar({ ...p, a: 400 }, 400).model, undefined);
+  // An operator cap (nameplate 150) wins over the model.
+  assert.deepEqual(kwForCar({ ...p, kw: 150 }, 400), { kw: 150, limited: false, volts: 400, boosted: false });
+});
+
+test('chargerSpec: with several versions that fit, the lowest; null where the list has no figure', () => {
+  const c = chargerSpec({ name: 'X', variants: [{ maxV: 1000, cars: [[1, 200, 300], [2, 150, 150]] }, { maxV: 1000, cars: [[1, 150, 150]] }] });
+  assert.deepEqual(c, { name: 'X', alone400: 150, alone800: 150, two400: null, two800: null, maxV: 1000, versions: 2 });
+  assert.equal(chargerSpec({ name: 'AC', variants: [{ acKw: 22 }] }), null);
+  // A 500 V charger: nothing at 800 V, so kwForCar falls back to amps and volts.
+  const qc = chargerSpec({ name: 'Efacec QC45', variants: [{ maxV: 500, cars: [[1, 50, null]] }] });
+  assert.equal(qc.alone800, null);
+  assert.deepEqual(kwForCar({ kw: 50, v: 500, a: 125, dc: true, charger: qc }, 800), { kw: 50, limited: false, volts: 500, boosted: true });
 });

@@ -57,7 +57,7 @@ a client that ignores them: then the tool descriptions have to carry it).
 | `why` | The rule it checks, for whoever reads a failure |
 | `message` | What the user writes |
 | `memory` | What the app remembers about the user (optional) |
-| `requires` | What it needs that isn't frozen (optional): `{"site": "<id>"}` in the dataset; `{"tariff": "<name query>", "id": "<regex>", "audience": "<id>", "newCustomersOnly": true}` or `{"promo": "<target regex>", "newCustomers": true}` in ceme-v2 |
+| `requires` | What it needs that isn't frozen (optional): `{"site": "<id>"}` in the dataset (with `"has": "<field>"`, a site that has that field, e.g. `history`), `{"models": "<id>"}` / `{"photos": "<id>"}` a site with charger models / a photo in it; `{"tariff": "<name query>", "id": "<regex>", "audience": "<id>", "newCustomersOnly": true}` or `{"promo": "<target regex>", "newCustomers": true}` in ceme-v2 |
 | `expect` | What a good assistant does (below) |
 
 `message` and `memory` can say `{{month}}` and `{{year}}` (the current ones,

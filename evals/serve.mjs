@@ -79,6 +79,11 @@ async function serve(o) {
   }
   const dataset = JSON.parse(readFileSync(DATA, 'utf8'));
   const siteIds = new Set(dataset.sites.map(s => s.id));
+  // Sites with charger models / photos in the frozen copy: a case about them
+  // is skipped on a dataset from before nap-dashboard published them.
+  siteIds.models = new Set(dataset.sites.filter(s => s.models?.length).map(s => s.id));
+  siteIds.photos = new Set(dataset.sites.filter(s => s.photos?.some(p => p.src)).map(s => s.id));
+  siteIds.byId = new Map(dataset.sites.map(s => [s.id, s]));
 
   // The server under test: this checkout, or another git ref in a worktree
   // (to compare a change with main). The evals themselves always come from
@@ -166,7 +171,13 @@ async function serve(o) {
 async function unmet(url, reqs, siteIds) {
   const out = [];
   for (const r of reqs) {
-    if (r.site) { if (!siteIds.has(r.site)) out.push(`site ${r.site} not in the dataset`); continue; }
+    if (r.site) {
+      if (!siteIds.has(r.site)) out.push(`site ${r.site} not in the dataset`);
+      else if (r.has && siteIds.byId.get(r.site)[r.has] == null) out.push(`site ${r.site} has no ${r.has} in the dataset`);
+      continue;
+    }
+    if (r.models) { if (!siteIds.models.has(r.models)) out.push(`site ${r.models} has no charger models in the dataset`); continue; }
+    if (r.photos) { if (!siteIds.photos.has(r.photos)) out.push(`site ${r.photos} has no photo in the dataset`); continue; }
     const res = (await mcp(url, 'tools/call', { name: 'list_ceme_tariffs', arguments: { query: r.tariff ?? '', ...(r.audience && { audiences: [r.audience] }) } })).result;
     if (res.isError) { out.push(`ceme-v2 unavailable: ${res.content[0].text}`); continue; }
     const { tariffs = [], promos = [] } = res.structuredContent;
