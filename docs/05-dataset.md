@@ -187,6 +187,24 @@ Monday.
   with a note to present them as things to check on site, never as facts,
   and to send whoever checks to the mappers' Telegram group (`FIXME_FEEDBACK`
   in `src/i18n.js`).
+- `models`: the charger models at the site, from Alexandre Moleiro's list of
+  chargers used in Portugal, which nap-dashboard joins to the OSM `hardware`
+  (`scripts/charger_models.py` there). Each has a `name` and `variants`, the
+  versions of that model that fit the site's sockets: `totalKw`, `maxV`,
+  `maxA`, `acKw`, and `cars`, `[[cars plugged in, kW each at 400 V, kW each
+  at 800 V], ...]` (null where the list has no figure, as for 800 V on a
+  500 V charger). A socket's `model` is its index into `models`, when
+  nap-dashboard could tell which charger the socket is. `src/socket.js`
+  (`chargerSpec`) reads the lowest figure of the versions, and `kwForCar`
+  uses it (see [02](02-cost-math.md)); `lookup_charger` and `find_chargers`
+  show it as `chargerModels`, with a note to credit the list.
+- `photos` (per site) and `models[].photo`: photos to recognise the charger.
+  `src` is a thumbnail nap-dashboard publishes next to the dataset
+  (`photos/<id>.jpg`, made absolute by `photoUrl` in `src/data.js`); without
+  it, `page` is only a link (Mapillary). Each carries `credit`, `license`,
+  `page` (the original) and maybe `taken`. A site's photos are of that site
+  (the community put them on OpenStreetMap); a model's is another charger of
+  the same model, and the note tells the assistant never to call it this one.
 - `accessibility`: the NAP's own DATEX II accessibility values, `|`-joined
   ("disabilityAccessible"). `wheelchair()` in `src/data.js` reads it first,
   then OpenStreetMap's `wheelchair`; the `wheelchair` filter keeps yes and

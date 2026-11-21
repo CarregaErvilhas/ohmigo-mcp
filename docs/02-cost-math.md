@@ -26,9 +26,14 @@ assistant found out about the car:
    On DC, with the car's battery voltage (`car_voltage`), "the charger" is
    what the socket can give that car: its max current × the car's volts (or
    the socket's own max volts, if lower), when that's below its kW. A 400 V
-   car at a 400 kW, 600 A socket is capped at 240 kW. That's `kwForCar` in
-   `src/socket.js`; it applies to all three cases below, and the estimate
-   says so when it, not the car, is the limit.
+   car at a 400 kW, 600 A socket is capped at 240 kW. When the socket's
+   charger model is known (the site's `models`, [05](05-dataset.md)), the
+   manufacturer's own figure for a car of that voltage counts too, and the
+   lowest of the three wins. That's `kwForCar` in `src/socket.js`; it
+   applies to all three cases below, and the estimate says so when it, not
+   the car, is the limit. When the model says a second car on the same
+   charger gets less, the estimate adds that as an assumption: it prices the
+   socket alone.
 2. **10-80 % time**: 70 % of the battery charged in that many minutes gives
    the car's real average speed below 80 %, at the battery. The meter counts
    the losses too, so that speed is scaled up to the meter's side, and a

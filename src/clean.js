@@ -220,7 +220,85 @@ export function cleanSite(s, report = {}) {
     else delete s.osm;
   }
   cleanPlaces(s, report);
-  for (const p of s.points) cleanPoint(p, report);
+  cleanModels(s, report);
+  s.photos = cleanPhotos(s.photos, PHOTOS_MAX, report);
+  if (!s.photos) delete s.photos;
+  for (const p of s.points) {
+    cleanPoint(p, report);
+    // Which of the site's charger models this socket is (an index into models).
+    if (p.model != null && !(Number.isInteger(p.model) && p.model >= 0 && p.model < (s.models?.length ?? 0))) {
+      if (s.models) count(report, 'dropped point.model');
+      delete p.model;
+    }
+  }
+}
+
+// The charger models at the site: nap-dashboard joins the make and model the
+// community maps on OpenStreetMap to Alexandre Moleiro's list of charger
+// models (its charger_models.py). Each version: total kW, max volts and amps,
+// and `cars`, [[cars plugged in, kW each at 400 V, kW each at 800 V], ...]:
+// what the plate doesn't say (a "300 kW" gives a 400 V car 200 kW, and 150
+// with a second car). Numbers out of range drop the version; a model with no
+// version left goes.
+const MODELS_MAX = 4;
+const VARIANTS_MAX = 6;
+const PHOTOS_MAX = 4;
+const num = max => v => (Number.isFinite(v) && v > 0 && v <= max ? v : undefined);
+const VARIANT_FIELDS = {
+  totalKw: num(1500), acKw: num(50), acSockets: v => (Number.isInteger(v) && v > 0 && v <= 8 ? v : undefined),
+  maxV: num(1500), maxA: num(1500), boostA: num(1500), batteryKwh: num(2000),
+  exclusive: v => (v === true ? true : undefined), cable: v => (typeof v === 'boolean' ? v : undefined),
+};
+function cleanVariant(v) {
+  if (!v || typeof v !== 'object') return undefined;
+  const out = {};
+  for (const [k, f] of Object.entries(VARIANT_FIELDS)) {
+    const x = f(v[k]);
+    if (x !== undefined) out[k] = x;
+  }
+  if (Array.isArray(v.cars)) {
+    const kw = x => (x == null ? null : num(1000)(x));
+    const cars = v.cars.slice(0, 12).filter(c => Array.isArray(c) && Number.isInteger(c[0]) && c[0] >= 1 && c[0] <= 12
+      && kw(c[1]) !== undefined && kw(c[2]) !== undefined && (c[1] != null || c[2] != null))
+      .map(c => [c[0], c[1] ?? null, c[2] ?? null]);
+    if (cars.length) out.cars = cars;
+  }
+  return out.cars || out.acKw ? out : undefined;
+}
+function cleanModels(s, report) {
+  if (s.models == null) return;
+  const out = [];
+  for (const m of Array.isArray(s.models) ? s.models.slice(0, MODELS_MAX) : []) {
+    const name = cleanText(m?.name, NAME_MAX, () => count(report, 'cut models.name'));
+    const variants = (Array.isArray(m?.variants) ? m.variants.slice(0, VARIANTS_MAX) : []).map(cleanVariant).filter(Boolean);
+    if (!name || !variants.length) { count(report, 'dropped models'); continue; }
+    const photo = cleanPhotos(m.photo ? [m.photo] : [], 1, report)?.[0];
+    out.push({ name, variants, ...(photo && { photo }) });
+  }
+  if (out.length) s.models = out;
+  else delete s.models;
+}
+
+// Photos (nap-dashboard's charger_photos.py): a thumbnail it publishes next
+// to the dataset (`src`, photos/<16 hex>.jpg), or only a link (Mapillary),
+// with the author, the licence and the original's page, which the licence
+// asks to credit. A photo whose source is not a plain https link goes.
+const PHOTO_SRC = /^photos\/[0-9a-f]{16}\.jpg$/;
+function cleanPhotos(list, max, report) {
+  if (list == null) return undefined;
+  const out = [];
+  for (const x of Array.isArray(list) ? list.slice(0, 10) : []) {
+    if (out.length >= max) break;
+    const src = typeof x?.src === 'string' && PHOTO_SRC.test(x.src) ? x.src : undefined;
+    let page;
+    try { page = typeof x?.page === 'string' && new URL(x.page).protocol === 'https:' && x.page.length <= 300 ? x.page : undefined; } catch { page = undefined; }
+    if (!src && !page) { count(report, 'dropped photos'); continue; }
+    const credit = cleanText(x.credit, NAME_MAX) || undefined;
+    const license = cleanText(x.license, TAG_MAX) || undefined;
+    const taken = typeof x.taken === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x.taken) ? x.taken : undefined;
+    out.push(Object.fromEntries(Object.entries({ src, page, credit, license, taken }).filter(([, v]) => v !== undefined)));
+  }
+  return out.length ? out : undefined;
 }
 
 // The places a site is at (a shopping centre, a hospital...): OpenStreetMap

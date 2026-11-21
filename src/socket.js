@@ -68,12 +68,44 @@ export function gridOf(point, t) {
 // AC is different: the car's on-board charger converts, and car_ac_kw is
 // already its limit. So only DC, and only when the socket's amps are known.
 // -> { kw, limited, volts, boosted } or null.
+//
+// When the charger's model is known (`point.charger`, from the catalogue of
+// models nap-dashboard joins to the make the community maps on OSM: see
+// chargerSpec), the manufacturer's own figure for a car of that voltage
+// counts too: it already holds the cable's limit and the power modules'.
+// The lowest of nameplate, model and amps wins; `model` names the model when
+// it is the one that caps.
 export function kwForCar(point, carVolts) {
-  if (!point.dc || !(carVolts > 0) || !(point.a > 0)) return null;
+  if (!point.dc || !(carVolts > 0)) return null;
+  const m = point.charger;
+  const byModel = m ? (carVolts > 500 ? m.alone800 : m.alone400) : null;
+  if (!(point.a > 0) && !byModel) return null;
   const volts = point.v > 0 ? Math.min(point.v, carVolts) : carVolts;
-  const byAmps = Math.round(point.a * volts / 100) / 10;
-  const limited = point.kw == null || byAmps < point.kw;
-  return { kw: limited ? byAmps : point.kw, limited, volts, boosted: point.v > 0 && point.v < carVolts };
+  const byAmps = point.a > 0 ? Math.round(point.a * volts / 100) / 10 : Infinity;
+  const cap = Math.min(byAmps, byModel ?? Infinity);
+  const limited = point.kw == null || cap < point.kw;
+  const kw = limited ? cap : point.kw;
+  return {
+    kw, limited, volts, boosted: point.v > 0 && point.v < carVolts,
+    ...(byModel && byModel <= byAmps && limited && { model: m.name }),
+  };
+}
+
+// One model's figures, the cautious way: with several versions that fit the
+// sockets, the lowest. -> { name, alone400, alone800, two400, two800, maxV,
+// versions } (kW per car; null when the list has no figure, as for 800 V on a
+// charger that only reaches 500 V).
+export function chargerSpec(model) {
+  const vs = (model?.variants ?? []).filter(v => v.cars);
+  if (!vs.length) return null;
+  const low = (n, i) => {
+    const xs = vs.map(v => v.cars.find(c => c[0] === n)?.[i]).filter(x => x != null);
+    return xs.length === vs.length ? Math.min(...xs) : null;
+  };
+  return {
+    name: model.name, alone400: low(1, 1), alone800: low(1, 2), two400: low(2, 1), two800: low(2, 2),
+    maxV: Math.max(...vs.map(v => v.maxV ?? 0)) || null, versions: vs.length,
+  };
 }
 
 // Most cars have a ~400 V battery: without the car's voltage, a DC socket

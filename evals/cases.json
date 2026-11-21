@@ -1439,6 +1439,84 @@
           }
         ]
       }
+    },
+    {
+      "id": "charger-model-speed",
+      "why": "On a known charger model, the speed a 400 V car gets is the model's figure for that voltage, not the nameplate, and sharing the charger with another car lowers it; the list is credited.",
+      "message": "Vou parar no IONITY de Abrantes com o meu Tesla Model 3 Long Range de 2024. Chego com 10% e quero sair com 80%. A que velocidade vou carregar e quanto tempo demora?",
+      "requires": [
+        {
+          "models": "IOY-ABT-00039"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost",
+            "args": {
+              "site": "abrantes|abt-00039|ionity",
+              "start_pct": [
+                10,
+                10
+              ],
+              "target_pct": [
+                80,
+                80
+              ]
+            }
+          }
+        ],
+        "every": {
+          "args": {
+            "lang": "^pt"
+          }
+        },
+        "answer": {
+          "noMatch": [
+            "carrega a 400 ?kW",
+            "(a|aos|até) 400 ?kW (todos|completos)"
+          ]
+        },
+        "judge": [
+          "Does the reply say the car charges well below the charger's 400 kW (at most about 200 to 250 kW), rather than at 400 kW?",
+          "Does the reply say it is slower when another car is plugged into the same charger?",
+          "Does the reply credit Alexandre Moleiro's list of charger models, or the manufacturer's figures, for the speed?"
+        ]
+      }
+    },
+    {
+      "id": "charger-photo",
+      "why": "A site with a photo: the answer links it and credits its author and licence; a photo of the model is never presented as this site.",
+      "message": "Vou ao posto da Galp em Tavira, na N125 (TVR-00037). Como é que o reconheço quando lá chegar? Há alguma foto?",
+      "requires": [
+        {
+          "photos": "GLP-TVR-00037"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger",
+            "args": {
+              "query": "tvr-00037|tavira"
+            }
+          }
+        ],
+        "every": {
+          "args": {
+            "lang": "^pt"
+          }
+        },
+        "answer": {
+          "match": [
+            "nap\\.ocarroeletrico\\.com/photos/"
+          ]
+        },
+        "judge": [
+          "Does the reply credit the photo's author or its licence (for example CC BY-SA)?",
+          "Does the reply name the charger model (an Efacec), to help recognise it?"
+        ]
+      }
     }
-  ]
+]
 }

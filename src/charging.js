@@ -95,7 +95,15 @@ export function estimateSession(point, car, t = translator('en')) {
   const chargerKw = socketKw ?? (Number.isFinite(carKw) ? carKw : DEFAULTS.carDcKw);
   if (socketKw == null) assumptions.push(t(point.private ? 'assume.privateKwUnknown' : 'assume.chargerKwUnknown'));
   // Said only when it's what slows the session, not the car.
-  else if (forCar?.limited && forCar.kw < carKw) assumptions.push(t('assume.kwForCar', { kw: forCar.kw, nameplate: point.kw, amps: point.a, volts: forCar.volts, carVolts: car.volts, declared: point.ampsSource === 'nap' }));
+  else if (forCar?.limited && forCar.kw < carKw) {
+    assumptions.push(forCar.model
+      ? t('assume.kwForCarModel', { kw: forCar.kw, nameplate: point.kw, model: forCar.model, carVolts: car.volts, versions: point.charger.versions })
+      : t('assume.kwForCar', { kw: forCar.kw, nameplate: point.kw, amps: point.a, volts: forCar.volts, carVolts: car.volts, declared: point.ampsSource === 'nap' }));
+  }
+  // The model says how much each car gets with a second one on the same
+  // charger: the estimate takes the socket alone, so the time may be longer.
+  const two = point.dc && point.charger && (car.volts > 500 ? point.charger.two800 : point.charger.two400);
+  if (two && two < Math.min(socketKw ?? Infinity, carKw)) assumptions.push(t('assume.sharedModel', { model: point.charger.name, kw: two }));
   if (forCar?.boosted) assumptions.push(t('assume.boosted', { volts: point.v, carVolts: car.volts }));
   const peak = Math.min(chargerKw, carKw);
 

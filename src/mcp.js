@@ -26,9 +26,9 @@ import { haversineKm } from './geo.js';
 import { pickLang, translator } from './i18n.js';
 import { napEurPerKwh } from './live.js';
 import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt, SOURCE } from './offers.js';
-import { cardPayment, wheelchair } from './data.js';
+import { cardPayment, photoUrl, wheelchair } from './data.js';
 import { siteOpen } from './hours.js';
-import { bringsCable, COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
+import { bringsCable, chargerSpec, COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
 import { describePlan } from './opc.js';
 import { byBest, feePlan, priceType, privateCharger, quotePoint, rank, rankingSlot, tariffKey } from './quote.js';
 import { fold } from './text.js';
@@ -277,12 +277,57 @@ const socketFields = (p, carVolts) => ({
 // Said once per answer when a socket shown has kwForCar or kwAt400V.
 const kwForCarNote = (points, a, t) => points.some(p => kwForCar(p, a.car_voltage ?? COMMON_CAR_VOLTS)?.limited)
   ? [t(a.car_voltage ? 'note.kwForCar' : 'note.kwAt400V', { volts: a.car_voltage })] : [];
+// A DC estimate on a charger whose model is known: the speed came from the
+// model's figures (credit the list), and a second car on the same charger
+// lowers it. Said once per charger model, in the answer's notes, because the
+// same two facts in the assumptions alone get lost among the others.
+const chargerModelNote = (ds, quotes, a, t) => {
+  const seen = new Map();
+  for (const q of quotes) {
+    const p = ds.findPoint(q.pointId)?.point;
+    const c = p?.dc && p.charger;
+    if (!c || seen.has(c.name)) continue;
+    const hi = a.car_voltage > 500;
+    const two = hi ? c.two800 : c.two400, alone = hi ? c.alone800 : c.alone400;
+    seen.set(c.name, t('note.chargerModelSpeed', { model: c.name, two: two != null && alone != null && two < alone ? two : null }));
+  }
+  return [...seen.values()];
+};
 const kwForCarQuoteNote = (quotes, a, t) => quotes.some(q => q.kwForCar != null || q.kwAt400V != null)
   ? [t(a.car_voltage ? 'note.kwForCar' : 'note.kwAt400V', { volts: a.car_voltage })] : [];
 const fromOsm = p => p.napKw !== undefined || p.napV !== undefined || p.napA !== undefined;
 // Which plug to use and, on MOBI.E, the grid (BT/MT) and the TAR it picks.
 // See socket.js.
 const plugFields = (p, t) => ({ connector: p.connector, plug: plugLabel(p, t), dc: p.dc, ...gridOf(p, t) });
+
+// The charger models at the site (nap-dashboard joins the make OSM maps there
+// to Alexandre Moleiro's list of models): what one car gets at 400 V and at
+// 800 V, and each of two cars sharing the charger. With several versions that
+// fit, the lowest (socket.js chargerSpec), and `versions` says how many.
+function chargerModels(site) {
+  if (!site.models) return undefined;
+  return site.models.map(m => {
+    const c = chargerSpec(m);
+    const ac = Math.max(...m.variants.map(v => v.acKw ?? 0)) || undefined;
+    const drop = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null));
+    return drop({
+      name: m.name,
+      kwAlone400V: c?.alone400, kwAlone800V: c?.alone800,
+      kwEachTwoCars400V: c?.two400, kwEachTwoCars800V: c?.two800,
+      maxVolts: c?.maxV, acKw: ac, versions: c && c.versions > 1 ? c.versions : null,
+      exclusive: m.variants.some(v => v.exclusive) || null,
+    });
+  });
+}
+// Photos to recognise the charger: the site's own (OSM: Panoramax, Commons)
+// and one of each model (Commons: the same model, not this site). url is a
+// thumbnail; source, the original's page; credit and license, what to cite.
+function sitePhotos(site) {
+  const one = (p, kind) => ({ kind, ...(p.src && { url: photoUrl(p.src) }), source: p.page, credit: p.credit, license: p.license, taken: p.taken });
+  const out = [...(site.photos ?? []).map(p => one(p, 'site')),
+    ...(site.models ?? []).filter(m => m.photo).map(m => ({ ...one(m.photo, 'model'), model: m.name }))];
+  return out.length ? out : undefined;
+}
 
 // What a driver wants to know about the site before going, and the notes it
 // needs: opening hours (and whether it's open at `at`), where it is in the car
@@ -298,6 +343,8 @@ function siteFacts(site, t, at = new Date()) {
   if (site.phone && site.osm?.phone && normPhone(site.phone) !== normPhone(site.osm.phone)) notes.push(t('note.phoneDisagree', { site: site.id, nap: site.phone, osm: site.osm.phone }));
   if (site.osm?.capacity != null && site.points?.length && site.osm.capacity !== site.points.length) notes.push(t('note.capacityDisagree', { site: site.id, nap: site.points.length, osm: site.osm.capacity }));
   if (site.operatorInferred) notes.push(t('note.operatorInferred', { operator: site.operator }));
+  if (site.models) notes.push(t('note.chargerModels', { site: site.id }));
+  if (site.photos?.some(p => p.src) || site.models?.some(m => m.photo)) notes.push(t('note.photos', { site: site.id }));
   const phone = site.phone ?? site.osm?.phone;
   return {
     facts: {
@@ -311,6 +358,8 @@ function siteFacts(site, t, at = new Date()) {
       wheelchair: wheelchair(site) ?? undefined,
       // kW a charger gives in total when its sockets share it (OpenStreetMap).
       sharedKw: site.osm?.sharedKw,
+      chargerModels: chargerModels(site),
+      photos: sitePhotos(site),
       support: phone || site.osm?.email ? { phone, email: site.osm?.email } : undefined,
     },
     notes,
@@ -1086,7 +1135,7 @@ export function createServer(getDataset, live) {
     if (cemeDown && !results.some(q => q.best)) return noCemeError(results, t);
     const lines = results.map(q => `${q.best ? `${q.best.peakPrice ? '<= ' : ''}${q.best.total.toFixed(2)} € · ${q.best.label}${sourceText(q, t)}${adhocText(q, t)}` : q.total ? `>= ${q.total.eur.toFixed(2)} €` : t('summary.noPrice')} · ${q.session.minutes} min · ${socketLine(q, t)} [${q.pointId}]`);
     const notes = [...liveNotes(status, t), ...(cemeDown ? [noCemeNote(results, t)] : []), ...(tooLong.n ? [t('note.tooLong', tooLong)] : []),
-      ...kwForCarQuoteNote(results, a, t), ...operatorInferredNote(results, t), ...moreWays(results, t), ...directNote(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
+      ...kwForCarQuoteNote(results, a, t), ...chargerModelNote(ds, results, a, t), ...operatorInferredNote(results, t), ...moreWays(results, t), ...directNote(results, t), ...unlistedNote(results, t), ...curveNote(results, a, t)];
     const out = slim({ kind: 'single', ...meta(ds, status, lang), ...(cemeDown && { cemeUnavailable: true }), ...(notes.length && { notes }), results });
     return ok(out.data, [...notes, ...lines].join('\n'), out.meta);
   });

@@ -265,3 +265,29 @@ test('third-party: the community\'s fixme notes stay, short and few', () => {
   assert.ok(s.osm.fixme[1].length <= 160);
   assert.equal(load({ osm: { fixme: 'not a list' } }).osm, undefined);
 });
+
+// Charger models (nap-dashboard's charger_models.py) and photos (charger_photos.py).
+const HYC300 = { name: 'Alpitronic HYC300', variants: [{ totalKw: 300, maxV: 1000, maxA: 500, cars: [[1, 200, 300], [2, 150, 150]] }] };
+
+test('third-party: charger models keep sane numbers, and a socket points at one that exists', () => {
+  const s = load({ models: [HYC300, { name: 'Bad', variants: [{ totalKw: 99999, cars: [[1, 5000, null]] }] }, { name: '', variants: [] }] },
+    [{ id: '1', kw: 300, dc: true, model: 0 }, { id: '2', kw: 300, dc: true, model: 1 }]);
+  assert.deepEqual(s.models, [HYC300]);
+  assert.equal(s.points[0].charger.alone400, 200);
+  // The bad model went, so the socket that pointed at it points at nothing.
+  assert.equal(s.points[1].model, undefined);
+  assert.equal(s.points[1].charger, undefined);
+  const bad = load({ models: 'nope' });
+  assert.equal(bad.models, undefined);
+});
+
+test('third-party: photos need our thumbnail path or an https page', () => {
+  const s = load({ photos: [
+    { src: 'photos/0123456789abcdef.jpg', page: 'https://api.panoramax.xyz/#focus=pic&pic=x', credit: 'RuiM', license: 'CC-BY-SA-4.0', taken: '2025-10-12' },
+    { src: '../../etc/passwd', page: 'javascript:alert(1)' },
+    { page: 'https://www.mapillary.com/app/?pKey=1', credit: 'Mapillary' },
+  ] });
+  assert.equal(s.photos.length, 2);
+  assert.equal(s.photos[0].src, 'photos/0123456789abcdef.jpg');
+  assert.equal(s.photos[1].src, undefined);
+});
