@@ -205,6 +205,25 @@ Monday.
   `page` (the original) and maybe `taken`. A site's photos are of that site
   (the community put them on OpenStreetMap); a model's is another charger of
   the same model, and the note tells the assistant never to call it this one.
+- `underground` (`osm` | `nap`): the site is in an underground car park, as
+  OpenStreetMap or the operator's description on the NAP says. There may be
+  no mobile signal, and the note tells the assistant to say so.
+- `osm.checkDate`: the last time someone from the community checked the
+  charger on site (OSM `check_date`). `checkedOnSite` in the answers.
+- `nearby`: what is within 150 m for the wait, from OpenStreetMap: per type
+  (`cafe`, `restaurant`, `fast_food`, `toilets`, `shop`, `fuel`) how many
+  (`n`), the nearest one's distance (`m`) and `name`.
+- `history`: the site over the last `days` days in the AmpereArchive, from the
+  status operators declare: `down`, the % of the time its sockets were out of
+  order, and `busy.wd`/`busy.we`, the % of the time they were charging per
+  local hour on weekdays and weekends (null with too little data).
+  `siteHistory` in `src/mcp.js` turns it into `outOfOrderPct`,
+  `busyPctAtHour` (at the hour asked) and `quietestHours` (7 to 23).
+  Top-level `historySource` has the window.
+- A DC socket's `unit`: which charger of the site it is on (an OpenStreetMap
+  post with several sockets). `chargerUnits` in `src/mcp.js` groups them with
+  the live status: on a charger with a car on it, each gets the model's
+  two-car figure, and `pickCharger` names a charger nobody is using.
 - `accessibility`: the NAP's own DATEX II accessibility values, `|`-joined
   ("disabilityAccessible"). `wheelchair()` in `src/data.js` reads it first,
   then OpenStreetMap's `wheelchair`; the `wheelchair` filter keeps yes and

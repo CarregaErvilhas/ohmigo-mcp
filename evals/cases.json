@@ -1513,8 +1513,91 @@
           ]
         },
         "judge": [
-          "Does the reply credit the photo's author or its licence (for example CC BY-SA)?",
-          "Does the reply name the charger model (an Efacec), to help recognise it?"
+          "Does the reply credit the photo's author or its licence (for example CC BY-SA)?"
+        ]
+      }
+    },
+    {
+      "id": "underground-signal",
+      "why": "A site in an underground car park: the answer warns there may be no mobile signal and to open the app or have the card ready before driving in.",
+      "message": "Vou carregar no Pingo Doce de Viseu, o da Mendonça, que fica no parque subterrâneo. Algum conselho antes de ir?",
+      "requires": [
+        {
+          "site": "ATL-VIS-00097",
+          "has": "underground"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|estimate_charging_cost"
+          }
+        ],
+        "every": {
+          "args": {
+            "lang": "^pt"
+          }
+        },
+        "judge": [
+          "Does the reply warn that there may be no mobile signal in the underground car park, and say to open the app or have the card at hand before going in?"
+        ]
+      }
+    },
+    {
+      "id": "busy-hours",
+      "why": "The site's history says when it is usually busy and the quietest hours; the answer uses it as past behaviour, never a promise.",
+      "message": "O IONITY de Barcelos, no sentido norte-sul, costuma estar cheio? A que horas é melhor ir?",
+      "requires": [
+        {
+          "site": "IOY-BCL-00027",
+          "has": "history"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|find_chargers"
+          }
+        ],
+        "every": {
+          "args": {
+            "lang": "^pt"
+          }
+        },
+        "judge": [
+          "Does the reply say which hours are usually quieter (or busier) at this charger, based on its recent history?",
+          "Does the reply present it as past behaviour (what usually happens), not as a guarantee that it will be free?"
+        ]
+      }
+    },
+    {
+      "id": "nearby-wait",
+      "why": "What is near the charger for the wait comes from `nearby` (OpenStreetMap): the answer names it with the distance.",
+      "message": "Vou carregar no Lusitanos Parque em Leiria. Enquanto espero, há algum café perto?",
+      "requires": [
+        {
+          "site": "HRZ-LRA-00049",
+          "has": "nearby"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "lookup_charger|find_chargers"
+          }
+        ],
+        "every": {
+          "args": {
+            "lang": "^pt"
+          }
+        },
+        "answer": {
+          "match": [
+            "Café Central"
+          ]
+        },
+        "judge": [
+          "Does the reply say how far the café is from the charger (about 120 m)?"
         ]
       }
     }

@@ -119,6 +119,8 @@ const OSM_FIELDS = {
     return notes.length ? notes : undefined;
   },
   capacity: v => Number.isInteger(v) && v > 0 && v <= CAPACITY_MAX ? v : undefined,
+  // The last time someone checked the charger on site (OSM check_date).
+  checkDate: v => typeof v === 'string' && /^\d{4}(-\d{2}(-\d{2})?)?$/.test(v) ? v : undefined,
 };
 
 // Every charger at the site, as mapped on OSM ("Alpitronic HYC_150", "Efacec
@@ -223,8 +225,15 @@ export function cleanSite(s, report = {}) {
   cleanModels(s, report);
   s.photos = cleanPhotos(s.photos, PHOTOS_MAX, report);
   if (!s.photos) delete s.photos;
+  // Underground car park, and who says so: 'osm' or 'nap'.
+  if (s.underground != null && !['osm', 'nap'].includes(s.underground)) { count(report, 'dropped underground'); delete s.underground; }
+  cleanNearby(s, report);
+  cleanHistory(s, report);
   for (const p of s.points) {
     cleanPoint(p, report);
+    // Which charger of the site this socket is on (OSM's posts): sockets with
+    // the same `unit` share its power.
+    if (p.unit != null && !(Number.isInteger(p.unit) && p.unit >= 0 && p.unit < 100)) { count(report, 'dropped point.unit'); delete p.unit; }
     // Which of the site's charger models this socket is (an index into models).
     if (p.model != null && !(Number.isInteger(p.model) && p.model >= 0 && p.model < (s.models?.length ?? 0))) {
       if (s.models) count(report, 'dropped point.model');
@@ -277,6 +286,37 @@ function cleanModels(s, report) {
   }
   if (out.length) s.models = out;
   else delete s.models;
+}
+
+// What is near the charger for the wait (nap-dashboard's osm_places.nearby_for):
+// per type, how many within 150 m, the nearest's distance and name.
+const NEARBY_TYPES = new Set(['cafe', 'restaurant', 'fast_food', 'toilets', 'shop', 'fuel']);
+function cleanNearby(s, report) {
+  if (s.nearby == null) return;
+  const out = [];
+  for (const x of Array.isArray(s.nearby) ? s.nearby.slice(0, 10) : []) {
+    const ok = x && NEARBY_TYPES.has(x.type) && Number.isInteger(x.n) && x.n > 0 && x.n <= 500
+      && Number.isInteger(x.m) && x.m >= 0 && x.m <= 200;
+    if (!ok) { count(report, 'dropped nearby'); continue; }
+    const name = cleanText(x.name, NAME_MAX) || undefined;
+    out.push({ type: x.type, n: x.n, m: x.m, ...(name && { name }) });
+  }
+  if (out.length) s.nearby = out;
+  else delete s.nearby;
+}
+
+// The site's history in the AmpereArchive (nap-dashboard's archive_stats.site_stats):
+// % of the time out of order and occupancy per local hour, weekdays (wd) and
+// weekends (we), over `days` days. Operator-declared status, not measured.
+function cleanHistory(s, report) {
+  const h = s.history;
+  if (h == null) return;
+  const pct = v => (Number.isFinite(v) && v >= 0 && v <= 100 ? v : undefined);
+  const row = r => (Array.isArray(r) && r.length === 24 && r.every(v => v === null || pct(v) !== undefined) ? r : undefined);
+  const days = Number.isFinite(h?.days) && h.days > 0 && h.days <= 400 ? h.days : undefined;
+  const out = { down: pct(h?.down), days, busy: h?.busy && row(h.busy.wd) && row(h.busy.we) ? { wd: h.busy.wd, we: h.busy.we } : undefined };
+  if (!days || (out.down === undefined && !out.busy)) { count(report, 'dropped history'); delete s.history; return; }
+  s.history = Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined));
 }
 
 // Photos (nap-dashboard's charger_photos.py): a thumbnail it publishes next
