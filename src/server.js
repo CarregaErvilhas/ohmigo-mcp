@@ -25,7 +25,8 @@ import { Dataset, DatasetRefused } from './data.js';
 import { LiveStatus } from './live.js';
 import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
-import { GROUP_IMAGES, GROUP_PAGES, GROUP_PATHS, LEGAL, LEGAL_PAGES, LLMS_TXT, PAGES, SITEMAP, SITE_URL } from './site.js';
+import { GROUP_IMAGES, GROUP_PAGES, GROUP_PATHS, LEGAL, LEGAL_PAGES, LLMS_TXT, PAGES, SITEMAP, SITEMAP_URLS, SITE_URL } from './site.js';
+import { INDEXNOW_KEY, indexNowSubmit } from './indexnow.js';
 import { statsSummary } from './stats.js';
 import { COMMIT, SOURCE_URL, VERSION } from './version.js';
 
@@ -312,6 +313,7 @@ async function handle(req, res) {
   }
   if (url.pathname === '/robots.txt' && get) return sendPublic(res, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
   if (url.pathname === '/llms.txt' && get) return sendPublic(res, LLMS_TXT, 'text/plain; charset=utf-8');
+  if (url.pathname === `/${INDEXNOW_KEY}.txt` && get) return sendPublic(res, INDEXNOW_KEY, 'text/plain; charset=utf-8');
   if (url.pathname === '/.well-known/security.txt' && get) return send(res, 200, securityTxt(), 'text/plain; charset=utf-8');
   if (url.pathname === '/.well-known/openai-apps-challenge' && get && OPENAI_APPS_CHALLENGE) return send(res, 200, OPENAI_APPS_CHALLENGE, 'text/plain; charset=utf-8');
   if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
@@ -368,6 +370,10 @@ const httpServer = createHttp((req, res) => {
     else send(res, 500, 'internal error\n', 'text/plain; charset=utf-8');
   });
 }).listen(PORT, HOST, () => console.log(`[ohmigo] ${VERSION} http://${HOST}:${httpServer.address().port}/mcp`));
+
+// After a deploy, tell IndexNow (src/indexnow.js). A minute's wait, so the new
+// instance is already serving when the engine comes for the key file.
+if (process.env.INDEXNOW === 'on') setTimeout(() => indexNowSubmit(SITE_URL, SITEMAP_URLS), 60_000).unref();
 
 // A deploy sends SIGTERM to the old process: stop taking connections, let
 // the requests in flight finish (a ranking, a ceme-v2 call: seconds), then

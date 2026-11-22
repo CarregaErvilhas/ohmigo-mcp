@@ -290,11 +290,14 @@ export const GROUP_PAGES = Object.fromEntries(Object.entries(GROUP_PATHS).map(([
 const sitemapEntry = (path, paths) =>
   `  <url><loc>${SITE_URL + path}</loc>${alternates(paths).map(([l, u]) => `<xhtml:link rel="alternate" hreflang="${l}" href="${u}"/>`).join('')}</url>`;
 
+const SITEMAP_PATHS = [PATHS, GROUP_PATHS, ...Object.values(LEGAL).map(p => p.paths)];
 export const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
-${[PATHS, GROUP_PATHS, ...Object.values(LEGAL).map(p => p.paths)].flatMap(paths => Object.values(paths).map(p => sitemapEntry(p, paths))).join('\n')}
+${SITEMAP_PATHS.flatMap(paths => Object.values(paths).map(p => sitemapEntry(p, paths))).join('\n')}
 </urlset>
 `;
+// The same URLs, for IndexNow (src/indexnow.js).
+export const SITEMAP_URLS = SITEMAP_PATHS.flatMap(paths => Object.values(paths).map(p => SITE_URL + p));
 
 // What ohmigo is, for AI crawlers (llmstxt.org). English only on purpose: it's
 // read by models, not by the people the two-language pages are for.

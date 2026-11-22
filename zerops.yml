@@ -38,6 +38,9 @@ zerops:
           name: mcp
           workingDir: /var/www
           user: ohmigo
+      envVariables:
+        # Tell IndexNow about the sitemap's URLs on start (src/indexnow.js).
+        INDEXNOW: "on"
       ports:
         - port: 3002
           httpSupport: true
