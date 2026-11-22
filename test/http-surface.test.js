@@ -149,7 +149,7 @@ test('dados: a new dataset drops the memo that held the old one', async () => {
   await Promise.all([first, second]);
 });
 
-const HTML_PATHS = ['/', '/en', '/privacidade', '/privacy', '/suporte', '/support', '/termos', '/terms', '/dados'];
+const HTML_PATHS = ['/', '/en', '/privacidade', '/privacy', '/suporte', '/support', '/termos', '/terms', '/grupo', '/group', '/dados'];
 const IMAGES = ['/og.png', '/favicon.ico', '/icon.svg', '/icon-512.png', '/apple-touch-icon.png'];
 
 test('headers: every HTML page asks for isolation', async () => {
@@ -184,8 +184,8 @@ test('headers: images state their size, on GET and HEAD', async () => {
   }
 });
 
-test('headers: the landing page, the legal pages and /dados allow exactly their own inline scripts', async () => {
-  for (const path of ['/', '/en', '/dados', '/privacidade', '/privacy', '/suporte', '/support', '/termos', '/terms']) {
+test('headers: the landing page, the legal pages, the group page and /dados allow exactly their own inline scripts', async () => {
+  for (const path of ['/', '/en', '/dados', '/privacidade', '/privacy', '/suporte', '/support', '/termos', '/terms', '/grupo', '/group']) {
     const r = await fetch(`${noToken.base}${path}`);
     const page = await r.text();
     const scriptSrc = r.headers.get('content-security-policy').match(/script-src ([^;]*)/)[1];

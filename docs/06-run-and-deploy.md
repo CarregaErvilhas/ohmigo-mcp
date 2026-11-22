@@ -53,6 +53,15 @@ carry `?lang=` so the landing page's script saves the language being read. If
 the server starts keeping or sending
 anything new about the user, update the privacy page first.
 
+`GET /grupo` and `GET /group` are the group page: the sites of the same
+community, in the order `GROUP` in `src/site.js` lists them, with ohmigo
+marked "you are here". It's built like the legal pages (its own source,
+`site/grupo.html`, the theme script as its only script, one copy per URL at
+boot). The mascots are local files in `site/grupo/`, served at
+`/grupo/<id>.svg`, so the page asks no other host for anything. The other
+sites have the same page in their own style; when a description changes on
+one, bring the others in step.
+
 `GET /.well-known/security.txt` is the RFC 9116 file with the contact for
 reporting a security problem. It's generated per request (`securityTxt` in
 `src/server.js`), so `Expires` is always ahead of today.

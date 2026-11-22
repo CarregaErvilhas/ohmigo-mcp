@@ -25,7 +25,7 @@ import { Dataset, DatasetRefused } from './data.js';
 import { LiveStatus } from './live.js';
 import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
-import { LEGAL, LEGAL_PAGES, LLMS_TXT, PAGES, SITEMAP, SITE_URL } from './site.js';
+import { GROUP_IMAGES, GROUP_PAGES, GROUP_PATHS, LEGAL, LEGAL_PAGES, LLMS_TXT, PAGES, SITEMAP, SITE_URL } from './site.js';
 import { statsSummary } from './stats.js';
 import { COMMIT, SOURCE_URL, VERSION } from './version.js';
 
@@ -186,6 +186,9 @@ const LANDING_HEADERS = { ...SITE_HEADERS, 'content-security-policy': csp(inline
 // for each. Their only script is the landing page's theme script, allowed by
 // its hash.
 const LEGAL_HEADERS = { ...SITE_HEADERS, 'content-security-policy': csp(inlineScripts(Object.values(LEGAL_PAGES).join(''))) };
+// The group page (/grupo, /group) works like the legal pages: rendered at
+// boot, the theme script its only script. Its mascots are local SVG files.
+const GROUP_HEADERS = { ...SITE_HEADERS, 'content-security-policy': csp(inlineScripts(Object.values(GROUP_PAGES).join(''))) };
 const DADOS_PAGE_HEADERS = { ...SITE_HEADERS, ...DADOS_CACHE, 'content-security-policy': csp(inlineScripts(DADOS.toString())) };
 
 // RFC 9116. Expires is required and a fixed date would rot, so each answer
@@ -277,9 +280,11 @@ async function handle(req, res) {
   if (url.pathname === '/og.png' && get) return sendImage(req, res, 'image/png', OG_IMAGE);
   if (ICONS[url.pathname] && get) return sendImage(req, res, ICONS[url.pathname].type, ICONS[url.pathname].body);
   if (url.pathname === '/sitemap.xml' && get) return sendPublic(res, SITEMAP, 'application/xml; charset=utf-8');
-  if (LEGAL_PAGES[url.pathname] && get) {
+  if (GROUP_IMAGES[url.pathname] && get) return sendImage(req, res, 'image/svg+xml', GROUP_IMAGES[url.pathname].body);
+  if ((LEGAL_PAGES[url.pathname] || GROUP_PAGES[url.pathname]) && get) {
     // Old links chose the language with ?lang=, as on the landing page.
-    const { paths } = Object.values(LEGAL).find(p => Object.values(p.paths).includes(url.pathname));
+    const group = !!GROUP_PAGES[url.pathname];
+    const paths = group ? GROUP_PATHS : Object.values(LEGAL).find(p => Object.values(p.paths).includes(url.pathname)).paths;
     const want = url.searchParams.get('lang');
     const twin = Object.hasOwn(paths, want ?? '') ? paths[want] : null;
     if (twin && twin !== url.pathname) {
@@ -287,8 +292,8 @@ async function handle(req, res) {
       res.writeHead(301, { location: twin + url.search });
       return res.end();
     }
-    res.writeHead(200, LEGAL_HEADERS);
-    return res.end(req.method === 'HEAD' ? undefined : LEGAL_PAGES[url.pathname]);
+    res.writeHead(200, group ? GROUP_HEADERS : LEGAL_HEADERS);
+    return res.end(req.method === 'HEAD' ? undefined : (group ? GROUP_PAGES : LEGAL_PAGES)[url.pathname]);
   }
   if (url.pathname === '/dados' && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, DADOS_PAGE_HEADERS);
