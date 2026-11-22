@@ -17,6 +17,10 @@
 // place a browser has nothing left to do. The one script those pages send is
 // the landing page's <head> script (THEME_SCRIPT), so a theme picked there
 // applies here too.
+//
+// site/grupo.html is the group page (/grupo and /group): the other sites of
+// O Carro Elétrico's community, each one's mascot beside a speech bubble. It
+// is rendered like the legal pages, with the sites from GROUP below.
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -85,8 +89,32 @@ export const CTA = [
   { key: 's1.cta3', attrs: `class="sec" href="https://m.me/OCarroEletricoDotCom" ${NEW_TAB}` },
 ];
 
+// The group's sites, in the order every site of the group lists them (O Carro
+// Elétrico's GRUPO, in its scripts/oce.py). Each mascot is site/grupo/<id>.svg,
+// that site's own art; its texts are the group.<id>.* strings in
+// site/grupo.html. `here` is this site: no button to open it, a "you are here"
+// instead. AmpereArchive has no page to visit and its code is private.
+export const GROUP = [
+  { id: 'carro', site: 'https://ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/OCarroEletrico' },
+  { id: 'ohmigo', here: true, repo: REPO_URL },
+  { id: 'voltaria', site: 'https://voltaria.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/voltaria' },
+  { id: 'ceme', site: 'https://ceme.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/CEME' },
+  { id: 'nap', site: 'https://nap.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/nap-dashboard' },
+  { id: 'ampere', repo: 'https://github.com/CarregaErvilhas/AmpereArchive', private: true },
+];
+export const GROUP_PATHS = { pt: '/grupo', en: '/group' };
+// Each mascot's file, and its size from its viewBox: width and height on the
+// <img> keep the page from jumping as the images load.
+export const GROUP_IMAGES = Object.fromEntries(GROUP.map(({ id }) => {
+  const body = readFileSync(new URL(`../site/grupo/${id}.svg`, import.meta.url));
+  const [, w, h] = body.toString().match(/viewBox="[\d.-]+ [\d.-]+ ([\d.]+) ([\d.]+)"/);
+  return [`/grupo/${id}.svg`, { body, w, h }];
+}));
+
 const legalSource = readFileSync(new URL('../site/legal.html', import.meta.url), 'utf8');
 const L = JSON.parse(legalSource.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
+const groupSource = readFileSync(new URL('../site/grupo.html', import.meta.url), 'utf8');
+const G = JSON.parse(groupSource.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
 
 const attr = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 // Strings may hold markup (<span class="hl">); <title> and meta want text.
@@ -155,7 +183,8 @@ function head(lang) {
 const englishLegalLinks = html => html
   .replaceAll('href="/privacidade"', `href="${LEGAL.privacy.paths.en}"`)
   .replaceAll('href="/suporte"', `href="${LEGAL.support.paths.en}"`)
-  .replaceAll('href="/termos"', `href="${LEGAL.terms.paths.en}"`);
+  .replaceAll('href="/termos"', `href="${LEGAL.terms.paths.en}"`)
+  .replaceAll('href="/grupo"', `href="${GROUP_PATHS.en}"`);
 
 export function render(lang) {
   const t = S[lang];
@@ -196,6 +225,11 @@ export function renderLegal(page, lang) {
     .replace('<p class="lede" id="lede"></p>', () => `<p class="lede" id="lede">${t[`${page}.lede`]}</p>`)
     .replace('<div id="body"></div>', () => `<div id="body">${sections.map(s => section(s, t)).join('')}</div>`)
     .replace(/(<(\w+)\b[^>]*\bdata-i="([^"]+)"[^>]*>)(<\/\2>)/g, (m, open, tag, key, close) => open + (t[key] ?? '') + close);
+  return linkUp(html, lang, paths);
+}
+
+// The links of a page without the landing page's script, in its language.
+function linkUp(html, lang, paths) {
   const linked = lang === 'en' ? englishLegalLinks(html) : html;
   // These pages have no script that saves a language choice, so the way home
   // carries it and the landing page's script saves it (site/index.html).
@@ -205,11 +239,52 @@ export function renderLegal(page, lang) {
     `<a href="${paths[l]}" data-lang="${l}"${l === lang ? ' aria-current="page"' : ''}`);
 }
 
+// One site of the group: its mascot in a circle of its colour, then a speech
+// bubble with the host, the name, what it does and its buttons.
+function mate(g, t) {
+  const k = `group.${g.id}`, img = GROUP_IMAGES[`/grupo/${g.id}.svg`];
+  const go = g.here ? `<span class="here">${t['group.here']}</span>`
+    : g.site ? `<a class="btn btn-main" href="${g.site}">${t['group.open']} →</a>` : '';
+  const code = `<a class="btn btn-line" href="${g.repo}"><svg aria-hidden="true"><use href="#${g.private ? 'i-lock' : 'i-code'}"/></svg>${t[g.private ? 'group.private' : 'group.code']}</a>`;
+  const note = g.private ? `<p class="mate-note">${t[`${k}.note`]}</p>` : '';
+  return `<li class="mate m-${g.id}">`
+    + `<div class="mate-pic"><img src="/grupo/${g.id}.svg" alt="${attr(t[`${k}.mascot`])}" width="${img.w}" height="${img.h}" loading="lazy"></div>`
+    + `<div class="mate-bubble"><p class="mate-host">${t[`${k}.host`]}</p><h2>${t[`${k}.name`]}</h2><p>${t[`${k}.desc`]}</p>${note}`
+    + `<p class="mate-links">${go}${code}</p></div></li>`;
+}
+
+export function renderGroup(lang) {
+  const t = G[lang];
+  const title = text(t['group.title']), desc = text(t['group.desc']);
+  const ld = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: text(t['group.eyebrow']),
+    url: SITE_URL + GROUP_PATHS[lang],
+    inLanguage: HTML_LANG[lang],
+    hasPart: GROUP.filter(g => g.site || g.here).map(g => ({ '@type': 'WebSite', name: text(t[`group.${g.id}.name`]), url: g.site || `${SITE_URL}/` })),
+  };
+  const html = groupSource
+    .replace(/<!-- strings:[\s\S]*?<\/script>\n/, '')
+    .replace(/<!-- theme:[^>]*-->/, () => THEME_SCRIPT)
+    .replace(/<!-- ohmi,[^>]*-->\n/, '')
+    .replace(/<html lang="[^"]*">/, `<html lang="${HTML_LANG[lang]}">`)
+    .replace(/<title>[^<]*<\/title>/, () => `<title>${attr(title)}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${attr(desc)}">`)
+    .replace(/<!-- seo:[^>]*-->/, () => [...seo(lang, GROUP_PATHS, title, desc),
+      `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>`].join('\n'))
+    .replace('<ol class="mates" id="mates"></ol>', () => `<ol class="mates" id="mates">${GROUP.map(g => mate(g, t)).join('')}</ol>`)
+    .replace(/(<(\w+)\b[^>]*\bdata-i="([^"]+)"[^>]*>)(<\/\2>)/g, (m, open, tag, key, close) => open + (t[key] ?? '') + close)
+    .replace(/data-aria="([^"]+)"/g, (m, key) => `aria-label="${attr(t[key] ?? '')}"`);
+  return linkUp(html, lang, GROUP_PATHS);
+}
+
 export const PAGES = { pt: Buffer.from(render('pt')), en: Buffer.from(render('en')) };
 
 // URL -> its HTML: one copy per URL, rendered once at boot.
 export const LEGAL_PAGES = Object.fromEntries(Object.entries(LEGAL).flatMap(([page, { paths }]) =>
   Object.entries(paths).map(([lang, path]) => [path, Buffer.from(renderLegal(page, lang))])));
+export const GROUP_PAGES = Object.fromEntries(Object.entries(GROUP_PATHS).map(([lang, path]) => [path, Buffer.from(renderGroup(lang))]));
 
 // Every page worth indexing, each with its other language.
 const sitemapEntry = (path, paths) =>
@@ -217,7 +292,7 @@ const sitemapEntry = (path, paths) =>
 
 export const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
-${[PATHS, ...Object.values(LEGAL).map(p => p.paths)].flatMap(paths => Object.values(paths).map(p => sitemapEntry(p, paths))).join('\n')}
+${[PATHS, GROUP_PATHS, ...Object.values(LEGAL).map(p => p.paths)].flatMap(paths => Object.values(paths).map(p => sitemapEntry(p, paths))).join('\n')}
 </urlset>
 `;
 
@@ -241,6 +316,7 @@ MCP server (Streamable HTTP): ${SITE_URL}/mcp
 
 - [Home, in Portuguese](${SITE_URL + PATHS.pt}): what ohmigo is and how to add it to an assistant
 - [Home, in English](${SITE_URL + PATHS.en})
+- [The group](${SITE_URL + GROUP_PATHS.en}): the other sites of the same community, with their code
 - [Privacy](${SITE_URL}/privacy)
 - [Support](${SITE_URL}/support)
 - [Terms of service](${SITE_URL}/terms)

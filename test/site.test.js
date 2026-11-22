@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { CTA, LEGAL, LEGAL_PAGES, OG_IMAGE_URL, PAGES, SITEMAP, THEME_SCRIPT } from '../src/site.js';
+import { CTA, GROUP, GROUP_IMAGES, GROUP_PAGES, GROUP_PATHS, LEGAL, LEGAL_PAGES, OG_IMAGE_URL, PAGES, SITEMAP, THEME_SCRIPT } from '../src/site.js';
 
 const html = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
 const S = JSON.parse(html.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
@@ -95,6 +95,7 @@ test('site: the vision palettes are the same block on the landing and legal page
   const block = h => h.match(/\/\* vision: start[\s\S]*?\/\* vision: end \*\//)?.[0];
   assert.ok(block(html), 'landing page has the vision block');
   assert.equal(block(html), block(readFileSync(new URL('../site/legal.html', import.meta.url), 'utf8')));
+  assert.equal(block(html), block(readFileSync(new URL('../site/grupo.html', import.meta.url), 'utf8')));
   for (const l of ['pt', 'en']) for (const m of ['off', 'cb', 'hc']) {
     assert.ok(S[l][`vision.${m}`] && S[l][`vision.toast.${m}`], `missing ${l} vision.${m}`);
   }
@@ -238,4 +239,49 @@ test('sitemap: every legal URL lists both languages', () => {
     assert.ok(entry.includes(`hreflang="en" href="${ORIGIN}${enPath}"`), `${path} en`);
     assert.ok(entry.includes(`hreflang="x-default" href="${ORIGIN}${ptPath}"`), `${path} x-default`);
   }
+});
+
+// The group page (site/grupo.html): the community's sites, from GROUP.
+const grupo = readFileSync(new URL('../site/grupo.html', import.meta.url), 'utf8');
+const G = JSON.parse(grupo.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
+
+test('group: en and pt have the same keys, and every key used has a string', () => {
+  assert.deepEqual(Object.keys(G.pt).sort(), Object.keys(G.en).sort());
+  const used = [...grupo.matchAll(/data-(?:i|aria)="([^"]+)"/g)].map(m => m[1]);
+  for (const g of GROUP) for (const f of ['name', 'host', 'desc', 'mascot']) used.push(`group.${g.id}.${f}`);
+  for (const k of used) assert.ok(k in G.pt, `missing ${k}`);
+});
+
+for (const [lang, path] of Object.entries(GROUP_PATHS)) {
+  test(`group ${path}: every site in order, with its mascot and its buttons, in one language`, () => {
+    const h = GROUP_PAGES[path].toString(), t = G[lang], other = G[lang === 'pt' ? 'en' : 'pt'];
+    assert.ok(h.includes(`<link rel="canonical" href="${ORIGIN}${path}">`), 'canonical');
+    const items = [...h.matchAll(/<li class="mate m-(\w+)">([\s\S]*?)<\/li>/g)];
+    assert.deepEqual(items.map(m => m[1]), GROUP.map(g => g.id), 'order');
+    for (const [[, id, li], g] of items.map((m, i) => [m, GROUP[i]])) {
+      assert.ok(GROUP_IMAGES[`/grupo/${id}.svg`], `${id} mascot file`);
+      assert.match(li, new RegExp(`<img src="/grupo/${id}\\.svg" alt="[^"]+" width="[\\d.]+" height="[\\d.]+"`));
+      assert.ok(li.includes(`href="${g.repo}"`), `${id} GitHub`);
+      assert.equal(li.includes(t['group.here']), !!g.here, `${id} you are here`);
+      assert.equal(li.includes(t['group.private']), !!g.private, `${id} private`);
+      if (g.site) assert.ok(li.includes(`href="${g.site}"`), `${id} site`);
+    }
+    // ohmigo is here; AmpereArchive has no page: two items without the open button.
+    assert.equal([...h.matchAll(new RegExp(`>${t['group.open']} →<`, 'g'))].length, GROUP.filter(g => g.site).length);
+    assert.ok(!h.includes(other['group.lead']), 'no text of the other language');
+    // The theme script is the only script; the page loads nothing from other hosts.
+    assert.deepEqual(h.match(/<script>[\s\S]*?<\/script>/g), [THEME_SCRIPT]);
+    assert.doesNotMatch(h, /<(img|script|link)\b[^>]*(src|href)="https?:\/\/(?!ohmigo\.ocarroeletrico\.com)[^"]*"[^>]*>/, 'no outside resources');
+    assert.doesNotMatch(h, /data-i="[^"]+"><\//, 'no element left empty');
+    assert.doesNotMatch(h, /<!-- /, 'no source comment sent');
+    for (const [tag] of h.matchAll(/<svg\b[^>]*>/g)) assert.match(tag, /aria-hidden="true"|aria-label=/, tag);
+  });
+}
+
+test('group: linked from the landing and legal footers, in each language, and in the sitemap', () => {
+  assert.ok(PAGES.pt.toString().includes('href="/grupo"'));
+  assert.ok(PAGES.en.toString().includes('href="/group"') && !PAGES.en.toString().includes('href="/grupo"'));
+  assert.ok(LEGAL_PAGES['/privacidade'].toString().includes('href="/grupo"'));
+  assert.ok(LEGAL_PAGES['/privacy'].toString().includes('href="/group"'));
+  for (const path of Object.values(GROUP_PATHS)) assert.ok(SITEMAP.includes(`<loc>${ORIGIN}${path}</loc>`), path);
 });
