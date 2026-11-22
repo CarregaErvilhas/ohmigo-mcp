@@ -682,6 +682,8 @@ test('http: the landing page is rendered in each language at its own URL, for cr
   const map = await (await fetch(`${base}/sitemap.xml`)).text();
   assert.match(map, /<loc>https:\/\/ohmigo\.ocarroeletrico\.com\/en<\/loc>/);
   assert.match(await (await fetch(`${base}/robots.txt`)).text(), /Sitemap: https:\/\/ohmigo\.ocarroeletrico\.com\/sitemap\.xml/);
+  const { INDEXNOW_KEY } = await import('../src/indexnow.js');
+  assert.equal(await (await fetch(`${base}/${INDEXNOW_KEY}.txt`)).text(), INDEXNOW_KEY);
   const og = await fetch(`${base}/og.png`);
   assert.equal(og.headers.get('content-type'), 'image/png');
 });
