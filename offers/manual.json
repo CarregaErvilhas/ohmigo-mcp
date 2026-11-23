@@ -1,6 +1,6 @@
 {
   "about": "Hand-maintained corrections and additions to offers/custofinal.json (the scraped blog). An entry whose id exists there overrides the fields it lists; {\"id\": ..., \"disable\": true} removes it; {\"add\": true} adds a new offer (all fields required); an override or disable whose id is not in the scrape fails the tests. Every entry needs source and checkedAt, and the source host must be in sourceHosts (also for offers/nap-notes.json). Guide: docs/04-operator-offers.md.",
-  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com", "atlante.energy", "www.telpark.com"],
+  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com", "atlante.energy", "www.telpark.com", "electroverse.com", "www.ionity.eu"],
   "offers": [
     {
       "id": "telpark-app-telpark-lancamento-telpark",
@@ -62,36 +62,32 @@
       "why": "On DC the myAtlante app charges this flat price instead of its CEME tariff (energy + operator fee). myAtlante Business has its own DC price (atlante-app-myatlante-business-*)."
     },
     {
+      "id": "ionity-app-ionity",
+      "prices": { "dcMax": 0.59 },
+      "source": "https://www.ionity.eu/network/access-and-payments",
+      "checkedAt": "2026-11-23",
+      "why": "IONITY App (no subscription) on IONITY's price page with Portugal selected, 23 Nov 2026: from 0.59 €/kWh, VAT in. The blog's 22 Nov post says 0.62. IONITY gives its current minimum: a station may charge more."
+    },
+    {
       "id": "ionity-tpa-ionity",
       "prices": { "dcMax": 0.63 },
-      "source": "https://fleetmagazine.pt/ionity-portugal/",
-      "checkedAt": "2026-10-28",
-      "why": "IONITY's own launch of direct sales in Portugal (20 Oct 2026) says walk-up from 0.63 €/kWh; the blog's 14 Oct post says 0.62."
+      "source": "https://www.ionity.eu/network/access-and-payments",
+      "checkedAt": "2026-11-23",
+      "why": "IONITY Direct (card at the charger or QR, no app) on IONITY's price page with Portugal selected, 23 Nov 2026: from 0.63 €/kWh, VAT in. The blog's 22 Nov post says 0.66. IONITY gives its current minimum: a station may charge more."
     },
     {
       "id": "ionity-motion-6-mes-ionity",
       "fee": { "eur": 5.99, "per": "month" },
-      "source": "https://fleetmagazine.pt/ionity-portugal/",
-      "checkedAt": "2026-10-28",
+      "source": "https://www.ionity.eu/network/access-and-payments",
+      "checkedAt": "2026-11-23",
       "why": "the blog rounds the fee to 6 €"
     },
     {
       "id": "ionity-power-12-mes-ionity",
       "fee": { "eur": 11.99, "per": "month" },
-      "source": "https://fleetmagazine.pt/ionity-portugal/",
-      "checkedAt": "2026-10-28",
+      "source": "https://www.ionity.eu/network/access-and-payments",
+      "checkedAt": "2026-11-23",
       "why": "the blog rounds the fee to 12 €"
-    },
-    {
-      "id": "ionity-app-ionity",
-      "add": true,
-      "label": "IONITY - App (no subscription)",
-      "provider": "IONITY", "plan": "App", "network": "Ionity",
-      "scope": { "operatorIds": ["IONY"] },
-      "walkUp": false, "subscription": false, "fee": null,
-      "prices": { "dcMax": 0.59 },
-      "source": "https://fleetmagazine.pt/ionity-portugal/",
-      "checkedAt": "2026-10-28"
     },
     {
       "id": "ionity-motion-365-ionity",
@@ -101,8 +97,8 @@
       "scope": { "operatorIds": ["IONY"] },
       "walkUp": false, "subscription": true, "fee": { "eur": 59.99, "per": "year" },
       "prices": { "dcMax": 0.46 },
-      "source": "https://fleetmagazine.pt/ionity-portugal/",
-      "checkedAt": "2026-10-28"
+      "source": "https://www.ionity.eu/network/access-and-payments",
+      "checkedAt": "2026-11-23"
     },
     {
       "id": "ionity-power-365-ionity",
@@ -112,8 +108,8 @@
       "scope": { "operatorIds": ["IONY"] },
       "walkUp": false, "subscription": true, "fee": { "eur": 119.99, "per": "year" },
       "prices": { "dcMax": 0.38 },
-      "source": "https://fleetmagazine.pt/ionity-portugal/",
-      "checkedAt": "2026-10-28"
+      "source": "https://www.ionity.eu/network/access-and-payments",
+      "checkedAt": "2026-11-23"
     },
     {
       "id": "powerdot-uber-driver-powerdot",
@@ -140,7 +136,41 @@
       "sessionEur": 0.3,
       "source": "https://custofinal.blogspot.com/2026/10/blog-post_14.html",
       "checkedAt": "2026-10-30",
-      "why": "Powerdot employees pay half of Electroverse's price at Powerdot chargers. Only the 150 kW band was seen (0.36 €/kWh + 0.30 € connection fee, exactly half of electroverse-rede-mobi-e's 0.72); the other bands are half of that row too, not seen. The employee discount itself has no public page: the 150 kW price is from a Powerdot employee's Electroverse app at HRZ-AMD-00054 (screenshot, 30 Oct 2026); the source is the blog row it halves."
+      "why": "Powerdot employees pay half of Electroverse's price at Powerdot chargers. Only the 150 kW band was seen (0.36 €/kWh + 0.30 € connection fee, exactly half of Electroverse's MOBI.E-wide 0.72, now electroverse-outros-mobi-e); the other bands are half of that row too, not seen. The employee discount itself has no public page: the 150 kW price is from a Powerdot employee's Electroverse app at HRZ-AMD-00054 (screenshot, 30 Oct 2026); the source is the blog row it halves."
+    },
+    {
+      "id": "electroverse-atlante",
+      "perMinute": [],
+      "prices": { "ac22": 0.6, "dc100": 0.6, "dcMax": 0.7 },
+      "source": "https://electroverse.com/pt-PT/map",
+      "checkedAt": "2026-11-23",
+      "why": "Electroverse's map, 23 Nov 2026, at 8 Atlante sites, no time price and no connection fee at any: 0.60 €/kWh at AC 7 and 22 kW and DC 50-60 kW (PRT-00221/00225, LSB-00662, LSB-80044, GMR-70012, STB-00122; some from screenshots), 0.70 at DC 100 kW (TVD-00041), 150 kW (PBL-00018) and 300 kW (TNV-00031..00034). The blog's notice marks AC 22 as kWh + minutes (not seen anywhere, so perMinute is emptied) and has 0.75 above 180 kW (0.70 seen). Our dc100 band (51-100 kW) holds 228 Atlante sockets at 60 kW (0.60) and 76 at 100 kW (0.70): it gets 0.60, so a 100 kW Atlante socket shows 0.10 €/kWh too low."
+    },
+    {
+      "id": "electroverse-galp",
+      "scope": { "operatorIds": ["GLPP"] },
+      "prices": { "ac22": 0.42, "ac43": 0.6 },
+      "minuteEur": { "ac22": 0.05, "ac43": 0.08 },
+      "sessionEur": 0.3,
+      "source": "https://electroverse.com/pt-PT/map",
+      "checkedAt": "2026-11-23",
+      "why": "The blog's notice (22 Nov 2026) marks Galp AC 22 and 43 as kWh + minutes without the rates. Electroverse's public map, 23 Nov 2026: AC 22 kW 0.42 €/kWh + 0.05 €/min at all 19 GLPP sites seen (ALB-00022, ALM-00106, ALM-90010, AMD-00068, AVR-00093, BRG-00159, BTL-90001, GMR-00172, GMR-90001, LGS-00018, LRA-00139, LRA-00143, LSB-00519, MRV-90001, OBR-00014, OBR-00015, PMS-90001, SSB-00009, SXL-00071), whatever Galp's own MOBI.E time fee there (0.0375, 0.039 or 0.125 €/min); PRT-00314 the same in the app (screenshot). AC 43 kW 0.60 €/kWh + 0.08 €/min at 6 sites (ALQ-00005, CTB-00056, OER-00069, OER-00076, SXL-00073, TVR-00027). AC 7 and 11 kW and DC have no time price, as in the notice. A 0.30 € connection fee per session everywhere. Scope GLPP only: at the two GLPG sites seen (GLG-LSB-00310, GLG-SNS-00006) AC 22 is 0.42 without minutes and DC 50 0.60, the MOBI.E-wide row's prices, so those get electroverse-outros-mobi-e."
+    },
+    {
+      "id": "electroverse-outros-mobi-e",
+      "sessionEur": 0.3,
+      "source": "https://electroverse.com/pt-PT/map",
+      "checkedAt": "2026-11-23",
+      "why": "Electroverse's public map, 23 Nov 2026: a 0.30 € connection fee per session at every charger seen, AC and DC: EDP (LOU-00008, PLM-00072), Powerdot (ODV-00028, BRG-00115), Prio (PSR-00017), MOBI.E (BRG-00006), Galp and EMEL. The blog's rows leave it out. The per-kWh prices there match the blog's notice row (0.42 at 22 kW, 0.72 at 60-120 kW, 0.79 at 180-200 kW)."
+    },
+    {
+      "id": "electroverse-emel",
+      "prices": { "ac22": 0.6 },
+      "minuteEur": { "ac22": 0.25 },
+      "sessionEur": 0.3,
+      "source": "https://electroverse.com/pt-PT/map",
+      "checkedAt": "2026-11-23",
+      "why": "Electroverse's map, 23 Nov 2026. AC 22 kW at EML-LSB-00418 (Largo da República da Turquia, sockets LSB-00418..00420, screenshot): 0.60 €/kWh + 0.25 €/min, not the 0.42 the notice gives EMEL's 11 kW; the notice only says 22 kW bills per minute. One site seen for AC 22. A 0.30 € connection fee per session at every EMEL socket seen: that one, LSB-00393/00395 (Campo Grande: DC 50 kW and AC 43 kW 0.60 €/kWh, screenshot) and LSB-00352..00363 (DC 50 kW, AC 43 kW 0.60 €/kWh, no time price)."
     },
     {
       "id": "tesla-subscricao-12-mes-tesla-supercharger",

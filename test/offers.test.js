@@ -5,8 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { bandFor, BLOG_HOST, MAX_EUR_PER_KWH, MAX_LABEL_LENGTH, MIN_EUR_PER_KWH, newestPost, offerProblems, parseTables, toOffers } from '../src/offers-parse.js';
-import { activeOn, AUDIENCES, civilDay, gaps, isStale, mergeOffers, NAP_NOTES, noteFor, OFFERS, offersAt, ownWalkUp } from '../src/offers.js';
+import { applyNotices, bandFor, bandPrice, BLOG_HOST, MAX_EUR_PER_KWH, MAX_LABEL_LENGTH, MIN_EUR_PER_KWH, offerProblems, parseTables, pricePosts, toOffers } from '../src/offers-parse.js';
+import { activeOn, AUDIENCES, civilDay, gaps, isStale, mergeOffers, NAP_NOTES, noteFor, OFFERS, offersAt, ownWalkUp, perMinuteAt, unpricedMinutes } from '../src/offers.js';
 
 const HEAD = `<thead><tr><th rowspan="2">Operador - Plano</th><th rowspan="2">Postos</th><th colspan="2">AC</th><th colspan="6">DC</th></tr>
 <tr><th>&le;7.4</th><th>11..22</th><th>≤50</th><th>100</th><th>120</th><th>150</th><th>180</th><th>&gt;180</th></tr></thead>`;
@@ -101,23 +101,80 @@ test('offerProblems: nothing on a good offer, each problem on a bad one', () => 
   assert.deepEqual(offerProblems({ id: 'a', prices: { dcMax: 0.63 } }), []);
 });
 
-test('newestPost: by publication date, so editing an old post changes nothing', () => {
-  const post = (id, published, updated, table = true) => ({ id, published: { $t: published }, updated: { $t: updated }, content: { $t: table ? '<table class="evtable"><th>Operador</th></table>' : '<p>hi</p>' } });
+test('pricePosts: the newest price list by publication date, and the notices after it', () => {
+  const LIST = '<table class="evtable"><caption>Preços por kWh — Sem promoções ou subscrições pagas</caption><th>Operador</th></table>';
+  const NOTICE = '<table class="evtable"><th>Operador</th></table>';
+  const post = (id, published, updated, content = LIST) => ({ id, published: { $t: published }, updated: { $t: updated }, content: { $t: content } });
   const old = post('old', '2026-03-01T10:00:00.000-08:00', '2026-10-30T10:00:00.000-07:00');
   const current = post('current', '2026-10-14T14:13:01.133-07:00', '2026-10-14T14:13:01.133-07:00');
-  const chat = post('chat', '2026-10-20T10:00:00.000-07:00', '2026-10-20T10:00:00.000-07:00', false);
-  assert.equal(newestPost([old, chat, current]).id, 'current');
-  assert.equal(newestPost([current, chat, old]).id, 'current');
+  const chat = post('chat', '2026-10-20T10:00:00.000-07:00', '2026-10-20T10:00:00.000-07:00', '<p>hi</p>');
+  const ids = ({ list, notices }) => [list?.id, notices.map(n => n.id)];
+  assert.deepEqual(ids(pricePosts([old, chat, current])), ['current', []], 'editing an old post changes nothing');
+  assert.deepEqual(ids(pricePosts([current, chat, old])), ['current', []]);
   // As instants, not as text: 23:30 at -08:00 is later than 00:30 next day at +01:00.
   const late = post('late', '2026-10-14T23:30:00.000-08:00', '2026-10-14T23:30:00.000-08:00');
   const early = post('early', '2026-10-15T00:30:00.000+01:00', '2026-10-15T00:30:00.000+01:00');
-  assert.equal(newestPost([early, late]).id, 'late');
-  assert.equal(newestPost([chat]), undefined);
+  assert.equal(pricePosts([early, late]).list.id, 'late');
+  assert.deepEqual(ids(pricePosts([chat])), [undefined, []]);
+  // Tables without the list's caption: a notice if newer than the list
+  // (oldest first), ignored if older.
+  const n1 = post('n1', '2026-10-16T10:00:00.000-07:00', '2026-10-16T10:00:00.000-07:00', NOTICE);
+  const n2 = post('n2', '2026-10-18T10:00:00.000-07:00', '2026-10-18T10:00:00.000-07:00', NOTICE);
+  const before = post('before', '2026-10-01T10:00:00.000-07:00', '2026-10-01T10:00:00.000-07:00', NOTICE);
+  assert.deepEqual(ids(pricePosts([n2, before, current, n1, chat])), ['current', ['n1', 'n2']]);
   // A newer post whose table doesn't read as prices stops the scrape loudly,
   // instead of falling back to last month's post.
   const renamed = { ...chat, content: { $t: '<table class="evtable"><th>Fornecedor</th></table>' } };
-  assert.equal(newestPost([current, renamed]).id, 'chat');
-  assert.throws(() => parseTables(renamed.content.$t));
+  assert.deepEqual(ids(pricePosts([current, renamed])), ['current', ['chat']]);
+  assert.throws(() => parseTables(renamed.content.$t, { notice: true }), /no price tables/);
+});
+
+// The Electroverse notice of 22 Nov 2026, cut down: the provider's name spans
+// its rows, AC is split in 11 / 22 / 43, "⚡️+🕘" = billed per minute too.
+const NOTICE_HEAD = `<thead><tr><th class="evtable-operator" rowspan="2">Operador - Plano</th><th rowspan="2">Postos</th><th colspan="4">AC</th><th colspan="6">DC</th></tr>
+<tr class="evtable-subhead"><th>≤7.4</th><th>11</th><th>22</th><th>43</th><th>≤50</th><th>100</th><th>120</th><th>150</th><th>180</th><th>&gt;180</th></tr></thead>`;
+const NOTICE = `<div class="evtable-wrap"><table class="evtable">${NOTICE_HEAD}<tbody>
+<tr><td class="evtable-operator" rowspan="3">Roamy</td><td class="evtable-network">Acme</td><td class="price">0,40</td><td>0,42</td><td>⚡️+🕘</td><td>⚡️+🕘</td><td>0,60</td><td>0,72</td></tr>
+<tr><td class="evtable-network">Outros Mobi.E</td><td>0,40</td><td>0,42</td><td>0,42</td><td>0,60</td><td>0,60</td><td>0,72</td></tr>
+  <tr><td class="evtable-network">Ionity</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>0,62</td></tr>
+</tbody></table></div>`;
+
+test('parser: a notice, its provider spanning rows, AC 11/22/43 and per-minute cells', () => {
+  assert.throws(() => parseTables(NOTICE), /without a caption/, 'a price list needs its captions');
+  const [t] = parseTables(NOTICE, { notice: true });
+  assert.equal(t.kind, 'payg');
+  assert.deepEqual(t.bands, ['ac7', 'ac11', 'ac22', 'ac43', 'dc50', 'dc100', 'dc120', 'dc150', 'dc180', 'dcMax']);
+  assert.deepEqual(t.rows.map(r => [r.name, r.network]), [['Roamy', 'Acme'], ['Roamy', 'Outros Mobi.E'], ['Roamy', 'Ionity']]);
+  assert.deepEqual(t.rows[0].prices, { ac7: 0.4, ac11: 0.42, ac22: null, ac43: null, dc50: 0.6, dc100: 0.72, dc120: null, dc150: null, dc180: null, dcMax: null });
+  assert.deepEqual(t.rows[0].perMinute, ['ac22', 'ac43']);
+  assert.equal(t.rows[1].perMinute, undefined);
+  assert.equal(t.rows[2].prices.dcMax, 0.62);
+  // A span past the last row, or on any other cell, would shift the prices.
+  assert.throws(() => parseTables(NOTICE.replace('rowspan="3"', 'rowspan="4"'), { notice: true }), /spans more rows/);
+  assert.throws(() => parseTables(NOTICE.replace('<td>0,42</td><td>0,42</td>', '<td rowspan="2">0,42</td><td>0,42</td>'), { notice: true }), /merged cells/);
+  // A fee in a notice's name: a subscription we couldn't tell from the list's.
+  assert.throws(() => parseTables(NOTICE.replace('>Roamy<', '>Roamy - Plus 8€/mês<'), { notice: true }), /fee in its name/);
+  const [o] = toOffers([t], { ...NETS, 'Outros Mobi.E': { scope: 'mobie' }, Ionity: { operatorIds: ['IONY'] } }, { url: POST, checkedAt: '2026-11-22', origin: 'custofinal' }).offers;
+  assert.deepEqual(o.perMinute, ['ac22', 'ac43']);
+  assert.deepEqual(offerProblems(o), []);
+  assert.equal(offerProblems({ perMinute: ['ac99'] }).length, 1);
+});
+
+test('applyNotices: a notice replaces its provider\'s pay-as-you-go rows, not its subscriptions', () => {
+  const src = url => ({ url, checkedAt: '2026-11-22', origin: 'custofinal' });
+  const list = { tables: parseTables(FIXTURE.replace('>Acme - Plus 8€/mês<', '>Roamy - Plus 8€/mês<')), source: src(POST) };
+  const notice = { tables: parseTables(NOTICE, { notice: true }), source: src(`https://${BLOG_HOST}/2026/11/notice.html`) };
+  const { posts, replaced } = applyNotices([list, notice]);
+  assert.deepEqual(replaced, [{ url: notice.source.url, labels: ['Roamy'] }]);
+  assert.ok(!posts[0].tables[0].rows.some(r => r.name === 'Roamy'), 'the list\'s Roamy @ Rede Mobi.E is gone');
+  assert.equal(posts[0].tables[0].rows.length, 3);
+  assert.deepEqual(posts[0].tables[1].rows.map(r => r.name), ['Roamy - Plus 8€/mês'], 'the subscription stays');
+  assert.equal(posts[1].tables, notice.tables);
+  // A notice about a provider the list doesn't have is a new kind of post.
+  const stranger = { tables: parseTables(NOTICE.replace('>Roamy<', '>Zappy<'), { notice: true }), source: notice.source };
+  assert.throws(() => applyNotices([list, stranger]), /"zappy" is not a pay-as-you-go offer/);
+  // A later notice can replace an earlier one's rows.
+  assert.equal(applyNotices([list, notice, { ...notice, source: src(`https://${BLOG_HOST}/2026/11/again.html`) }]).posts[1].tables[0].rows.length, 0);
 });
 
 test('parseTables: a merged cell in a price row stops the scrape', () => {
@@ -140,8 +197,41 @@ test('toOffers: scope from networks.json, walk-up, fees, unmapped and unknown la
 
 test('bandFor: the blog power bands', () => {
   const b = (kw, dc) => bandFor({ kw, dc });
-  assert.deepEqual([b(3.7, false), b(7.4, false), b(22, false), b(50, true), b(60, true), b(120, true), b(150, true), b(175, true), b(350, true), b(null, true)],
-    ['ac7', 'ac7', 'ac22', 'dc50', 'dc100', 'dc120', 'dc150', 'dc180', 'dcMax', null]);
+  assert.deepEqual([b(3.7, false), b(7.4, false), b(11, false), b(11.04, false), b(13.8, false), b(22, false), b(22.08, false), b(43, false), b(50, true), b(60, true), b(120, true), b(150, true), b(175, true), b(350, true), b(null, true)],
+    ['ac7', 'ac7', 'ac11', 'ac11', 'ac22', 'ac22', 'ac22', 'ac43', 'dc50', 'dc100', 'dc120', 'dc150', 'dc180', 'dcMax', null]);
+});
+
+test('bandPrice: the list\'s one AC column covers 11 and 43 kW; a notice\'s own bands win, even empty', () => {
+  const list = { ac7: 0.4, ac22: 0.42, dc50: 0.6 };
+  assert.deepEqual(['ac7', 'ac11', 'ac22', 'ac43', 'dc100'].map(b => bandPrice(list, b)), [0.4, 0.42, 0.42, 0.42, null]);
+  const notice = { ac7: 0.4, ac11: 0.42, ac22: null, ac43: null };
+  assert.deepEqual(['ac11', 'ac22', 'ac43'].map(b => bandPrice(notice, b)), [0.42, null, null]);
+  assert.equal(bandPrice({ all: 0.41 }, 'ac11'), 0.41);
+  assert.equal(bandPrice({ ac22: null, all: 0.41 }, 'ac22'), 0.41, 'as before: an empty band falls back to all');
+});
+
+test('Electroverse per minute: priced from manual.json where its rate was seen', () => {
+  const ev = (site, point, f = offersAt) => f(site, { dc: false, regime: 'mobie', ...point }).filter(x => x.offer.provider === 'Electroverse');
+  const row = (site, kw) => ev(site, { kw }).map(x => [x.offer.id, x.eurPerKwh, x.eurPerMin, x.offer.sessionEur]);
+  const galp = { operatorId: 'GLPP' }, emel = { operatorId: 'EMEL' }, atlante = { operatorId: 'ATLA' };
+  assert.deepEqual(row(galp, 22), [['electroverse-galp', 0.42, 0.05, 0.3]]);
+  assert.deepEqual(row(galp, 43), [['electroverse-galp', 0.6, 0.08, 0.3]]);
+  assert.deepEqual(row(galp, 11), [['electroverse-galp', 0.42, undefined, 0.3]]);
+  assert.deepEqual(row(emel, 22), [['electroverse-emel', 0.6, 0.25, 0.3]]);
+  // The notice's per-minute AC 22 wasn't seen at Atlante: plain kWh, no fee.
+  assert.deepEqual(row(atlante, 22), [['electroverse-atlante', 0.6, undefined, undefined]]);
+  assert.deepEqual([60, 150, 300].map(kw => offersAt(atlante, { kw, dc: true, regime: 'mobie' }).find(x => x.offer.id === 'electroverse-atlante').eurPerKwh), [0.6, 0.7, 0.7]);
+  // GLPG sites bill like the rest of MOBI.E.
+  assert.deepEqual(row({ operatorId: 'GLPG' }, 22), [['electroverse-outros-mobi-e', 0.42, undefined, 0.3]]);
+  for (const site of [galp, emel, atlante]) assert.deepEqual(ev(site, { kw: 22 }, perMinuteAt), []);
+});
+
+test('unpricedMinutes: per minute at a band without its rate means no price there', () => {
+  const offer = { perMinute: ['ac22', 'ac43'], minuteEur: { ac22: 0.05 } };
+  assert.equal(unpricedMinutes(offer, 'ac22'), false);
+  assert.equal(unpricedMinutes(offer, 'ac43'), true);
+  assert.equal(unpricedMinutes(offer, 'ac11'), false);
+  assert.equal(unpricedMinutes({ perMinute: [] }, 'ac22'), false, 'manual.json emptied it: priced per kWh');
 });
 
 test('mergeOffers: manual overrides fields and prices band by band, adds, disables', () => {
@@ -292,11 +382,24 @@ test('audience offers: hidden unless the driver claims the group; ids exist', ()
   assert.deepEqual(ids().filter(id => id !== 'powerdot-uber-driver-powerdot'), ids(['uber-driver']).filter(id => id !== 'powerdot-uber-driver-powerdot'));
 });
 
+test('minuteEur: a per-minute price for some bands, checked and added to the total', async () => {
+  const { directOptionsForTest } = await import('../src/quote.js');
+  assert.deepEqual(offerProblems({ minuteEur: { ac22: 0.05, ac43: 0.08 } }), []);
+  assert.equal(offerProblems({ minuteEur: { ac99: 0.05 } }).length, 1, 'not a band');
+  assert.equal(offerProblems({ minuteEur: { ac22: 5 } }).length, 1, 'a lost decimal comma');
+  const offer = { id: 'x', label: 'X', provider: 'X', prices: { ac22: 0.42 }, sessionEur: 0.3, checkedAt: '2026-11-23', origin: 'manual', source: 'https://example.com/' };
+  const [o] = directOptionsForTest([{ offer, eurPerKwh: 0.42, eurPerMin: 0.05 }], { kwh: 30, minutes: 100 }, 'pt', 'CONT', 120);
+  assert.equal(o.total, 18.9); // 30 × 0,42 + 120 min × 0,05 + 0,30: minutes plugged in, not charging
+  assert.equal(o.eurPerMin, 0.05);
+  assert.match(o.note, /0,05 € por minuto \(120 min\)/);
+  assert.match(o.note, /0,30 € por sessão/);
+});
+
 test('per-session fee: in the total, said in the note; staff offer is half of Electroverse', async () => {
   const { directOptionsForTest } = await import('../src/quote.js');
   const powerdot = { operatorId: 'HORZ' }, dc = { kw: 150, dc: true, regime: 'mobie' };
   const staff = offersAt(powerdot, dc, ['powerdot-staff']).find(x => x.offer.id === 'electroverse-powerdot-staff-powerdot');
-  const ev = offersAt(powerdot, dc).find(x => x.offer.id === 'electroverse-rede-mobi-e');
+  const ev = offersAt(powerdot, dc).find(x => x.offer.id === 'electroverse-outros-mobi-e');
   assert.equal(staff.eurPerKwh, ev.eurPerKwh / 2);
   const [o] = directOptionsForTest([staff], { kwh: 38.71 }, 'pt', 'CONT');
   assert.equal(o.total, 14.24); // 38,71 × 0,36 + 0,30

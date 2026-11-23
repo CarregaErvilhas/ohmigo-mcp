@@ -150,7 +150,7 @@ export function chargers(ds, key) {
       id: p.id, kw: p.kw, connector: p.connector, dc: p.dc, level: p.level, regime: p.regime,
       opc: plan(p.opc?.REGULAR), adhoc: plan(p.opc?.AD_HOC_PAYMENT), napPrice: p.napPrice ?? null,
       napFees: plan(napFeesPlan(p.napFees)),
-      offers: offersAt(s, p).map(x => ({ id: x.offer.id, label: x.offer.label, eurPerKwh: x.eurPerKwh })),
+      offers: offersAt(s, p).map(x => ({ id: x.offer.id, label: x.offer.label, eurPerKwh: x.eurPerKwh, ...(x.eurPerMin && { eurPerMin: x.eurPerMin }) })),
     })),
   }));
 }

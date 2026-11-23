@@ -25,7 +25,7 @@ import { clusterPlaces, directionLabel, onMotorway, PAIR_KM, sameStation, servic
 import { haversineKm } from './geo.js';
 import { pickLang, translator } from './i18n.js';
 import { napEurPerKwh } from './live.js';
-import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt, SOURCE } from './offers.js';
+import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt, perMinuteAt, SOURCE } from './offers.js';
 import { cardPayment, photoUrl, wheelchair } from './data.js';
 import { siteOpen } from './hours.js';
 import { bringsCable, chargerSpec, COMMON_CAR_VOLTS, forCarFields, gridOf, kwForCar, plugLabel } from './socket.js';
@@ -548,8 +548,14 @@ function siteCard(h, live, t, audiences = [], notes = [], carVolts) {
       ...(vatIn ? { napPriceWithVat: napPrice } : { napPriceExVat: napPrice }),
       napPriceType: napPrice != null ? t('price.outside') : undefined,
       ...(peak && napPrice != null && { napPriceIsPeak: true }),
-      direct: offersAt(site, p, audiences).map(({ offer, eurPerKwh }) => ({ label: offer.label, eurPerKwh, sessionEur: offer.sessionEur, audience: offer.audience, walkUp: !!offer.walkUp || undefined, subscription: !!offer.subscription || undefined })),
+      direct: [
+        ...offersAt(site, p, audiences).map(({ offer, eurPerKwh, eurPerMin }) => ({ label: offer.label, eurPerKwh, eurPerMin, sessionEur: offer.sessionEur, audience: offer.audience, walkUp: !!offer.walkUp || undefined, subscription: !!offer.subscription || undefined })),
+        // Billed per minute on top of the kWh at this power, at a rate no
+        // source publishes: named, never priced.
+        ...perMinuteAt(site, p, audiences).map(({ offer }) => ({ label: offer.label, perMinute: true, audience: offer.audience })),
+      ],
     };
+    if (card.direct.some(d => d.perMinute)) notes.push(t('note.directPerMinute'));
     const key = JSON.stringify(card);
     if (!groups.has(key)) groups.set(key, { ...card, count: 0, status: {}, pointIds: [] });
     const g = groups.get(key);

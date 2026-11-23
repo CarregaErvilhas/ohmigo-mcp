@@ -989,6 +989,34 @@
       }
     },
     {
+      "id": "electroverse-per-minute",
+      "why": "A direct offer that also bills per minute (offers minuteEur) is priced with its minutes and per-session fee: the reply must not quote the bare €/kWh as the whole price. Where nobody has the per-minute rate (perMinute without minuteEur) it's left out and named.",
+      "message": "Uso a app Electroverse. Quanto me custa carregar no posto AC de 22 kW da Galp PRT-00314, na Avenida Fernão Magalhães, no Porto? Renault Zoe ZE50 (52 kWh), estou com 30% e quero ir aos 80%.",
+      "requires": [
+        {
+          "site": "GLP-PRT-00314"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "site": "prt-00314|fern[ãa]o"
+            }
+          }
+        ],
+        "every": {
+          "args": {
+            "lang": "^pt"
+          }
+        },
+        "judge": [
+          "Does the reply's Electroverse cost at the 22 kW AC socket count the per-minute price (0,05 €/min) and the 0,30 € connection fee, or say they are included, rather than quoting only 0,42 €/kWh?"
+        ]
+      }
+    },
+    {
       "id": "remembered-audience",
       "why": "A group the app remembers counts as said: pass it without asking again.",
       "memory": "É motorista profissional TVDE com conta Uber Driver. Carro: Fiat 500e de 42 kWh (37 kWh úteis).",
@@ -1601,5 +1629,5 @@
         ]
       }
     }
-]
+  ]
 }
