@@ -32,7 +32,7 @@ socket, and nothing else.
    │  a new post every few weeks: final €/kWh with VAT, per power band
    ▼
  scripts/scrape-offers.mjs     (weekly, .github/workflows/offers.yml)
-   │  reads the newest post through Blogger's JSON feed
+   │  reads the newest price list (and any notice since) through Blogger's JSON feed
    │  maps each "Postos" label to NAP operator ids (offers/networks.json)
    ▼
  offers/custofinal.json        a pull request when it changes; a person merges it
@@ -48,9 +48,21 @@ final with VAT, one column per power band (AC ≤7.4, AC 11-22, DC ≤50,
 100, 120, 150, 180, >180). We credit it in every price we show: each
 direct option says `source: "custofinal"`, the answer names the blog once in
 `sources`, and the tool descriptions tell the assistant to credit it. The author publishes a **new post** for each update, so
-the scraper reads Blogger's feed and takes the most recently published post
-that has the price table, instead of a fixed URL. It goes by publication date,
-so an edit to an old post doesn't bring its old prices back.
+the scraper reads Blogger's feed and takes the most recently published price
+list (the post with the "Sem promoções ou subscrições pagas" table), instead of
+a fixed URL. It goes by publication date, so an edit to an old post doesn't
+bring its old prices back.
+
+Between two lists the author sometimes posts a **notice** about one provider:
+one table without a caption, the provider's name spanning its rows, AC split
+into 11 / 22 / 43 kW, and a "⚡️+🕘" cell where the provider bills per minute on
+top of the kWh. Every post with the blog's tables published after the list is
+read as a notice: its rows replace that provider's pay-as-you-go rows of the
+list (its subscriptions stay), and its offers name the notice as their source.
+A notice about a provider the list doesn't have stops the scrape: a person has
+to read it. The scrape log, which goes into the pull request, says which rows
+each notice replaced. See `pricePosts()` and `applyNotices()` in
+`src/offers-parse.js`.
 
 **The weekly job** (`.github/workflows/offers.yml`, Mondays, or by hand from
 the Actions tab):
@@ -65,9 +77,10 @@ the Actions tab):
    with no offer change to show them on, or the PR can't be opened, opens an
    **issue** saying which, and the old prices stay.
 
-The parser is strict on purpose. An unknown column header, a table without a
-caption, zero rows, a price cell that isn't a number, or a row with more cells
-than bands make it fail, rather than quietly publish prices in the wrong
+The parser is strict on purpose. An unknown column header, a price list table
+without a caption, zero rows, a price cell that isn't a number (other than a
+notice's "⚡️+🕘"), a merged cell (other than the provider's name spanning its
+rows), or a row with more cells than bands make it fail, rather than quietly publish prices in the wrong
 columns (an empty cell or a short row is fine: not offered at that power).
 
 On top of that comes a sanity check, `offerProblems()` in
@@ -204,15 +217,24 @@ It also lists stale entries.
 ## Run it yourself
 
 ```bash
-npm run offers:scrape -- --check   # parse the newest post, write nothing
+npm run offers:scrape -- --check   # parse the newest list and notices, write nothing
 npm run offers:scrape              # update offers/custofinal.json
 npm test                           # validates all three files
 ```
 
 ## Limits
 
-- Only per-kWh prices. An offer that charges per minute or per session
-  doesn't fit yet.
+- Per kWh, plus a per-session fee (`sessionEur`) and a per-minute price per
+  band (`minuteEur`), both from `manual.json`. Where an offer bills per minute
+  (`perMinute`, from a notice's "⚡️+🕘") the blog gives no rate: until
+  `manual.json` has its `minuteEur` for that band, it has no price there,
+  `lookup_charger` lists it with `perMinute: true`, and the cost tools leave
+  it out and say so in the assumptions. If someone checks and finds no time
+  price there, `manual.json` empties `perMinute` instead. The minutes counted
+  are the minutes plugged in, like an operator's time fee.
+- AC bands: the list has one column for all AC above 7.4 kW (`ac22`); a
+  notice splits it into `ac11`, `ac22` and `ac43`. An offer without `ac11` or
+  `ac43` uses its `ac22` price there (`bandPrice()`).
 - One price per power band for a whole network. Sites priced differently
   within one network can't be told apart.
 - "Alguns Mobi.E" offers are left out until someone knows which chargers

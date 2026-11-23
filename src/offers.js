@@ -19,10 +19,15 @@
 // id, or every MOBI.E charger).
 //
 // Prices are final (VAT included) per kWh, and depend on the charger's power:
-// see bandFor() in offers-parse.js.
+// see bandFor() in offers-parse.js. Where an offer also bills per minute
+// (`perMinute`, a list of bands) the blog gives no rate, so there it has no
+// price: perMinuteAt() names it instead, and the estimates say it's left out.
+// A rate someone read in the provider's app goes in manual.json as
+// `minuteEur: { <band>: €/min }`, for just the bands it was seen at; then
+// those bands are priced again, the minutes included.
 
 import { readFileSync } from 'node:fs';
-import { bandFor } from './offers-parse.js';
+import { bandFor, bandPrice } from './offers-parse.js';
 import { REGION_TZ } from './profile.js';
 
 export const STALE_DAYS = 90;
@@ -104,16 +109,34 @@ export const activeOn = (offer, day) => (!offer.from || day >= offer.from) && (!
 // and a provider's row for this specific network replaces its MOBI.E-wide
 // row (the blog lists "Electroverse @ Rede Mobi.E" AND "Electroverse @ Ionity").
 // Offers for an audience the driver didn't claim are left out.
+// Each with eurPerMin when it bills per minute at this power.
 export function offersAt(site, point, audiences = [], at = new Date()) {
   const band = bandFor(point);
-  if (!band) return [];
+  return candidates(site, point, audiences, at)
+    .filter(offer => !unpricedMinutes(offer, band))
+    .map(offer => ({ offer, eurPerKwh: bandPrice(offer.prices, band), ...(offer.minuteEur?.[band] && { eurPerMin: offer.minuteEur[band] }) }))
+    .filter(x => x.eurPerKwh != null);
+}
+
+// Billed per minute at this power, and nobody has given us the rate.
+export const unpricedMinutes = (offer, band) => !!offer.perMinute?.includes(band) && offer.minuteEur?.[band] == null;
+
+// The offers that apply here but bill per minute on top of the kWh at this
+// power, at a rate nobody publishes: [{ offer }]. Same rules as offersAt().
+export function perMinuteAt(site, point, audiences = [], at = new Date()) {
+  const band = bandFor(point);
+  return candidates(site, point, audiences, at)
+    .filter(offer => unpricedMinutes(offer, band))
+    .map(offer => ({ offer }));
+}
+
+function candidates(site, point, audiences, at) {
+  if (!bandFor(point)) return [];
   const day = civilDay(at, site.region);
   const own = (byOperator.get(site.operatorId) || []).filter(o => activeOn(o, day));
   const ownLabels = new Set(own.map(o => o.label));
   const wide = point.regime !== 'sem_ceme' ? mobieWide.filter(o => !ownLabels.has(o.label) && activeOn(o, day)) : [];
-  return [...own, ...wide]
-    .map(offer => ({ offer, eurPerKwh: offer.prices[band] ?? offer.prices.all ?? null }))
-    .filter(x => x.eurPerKwh != null && forAudiences(x.offer, audiences));
+  return [...own, ...wide].filter(o => forAudiences(o, audiences));
 }
 
 // Does the operator of this site have its own walk-up price here? Then that

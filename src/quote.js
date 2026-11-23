@@ -55,7 +55,7 @@ import { translator } from './i18n.js';
 import { limiter } from './limit.js';
 import { napEurPerKwh, napFeesPlan, napPlan } from './live.js';
 import { describePlan, opcCost, vatFor } from './opc.js';
-import { forAudiences, isStale, napNote, offersAt, ownWalkUp } from './offers.js';
+import { forAudiences, isStale, napNote, offersAt, ownWalkUp, perMinuteAt } from './offers.js';
 import { appliesToCustomers, promosHere, promoTips, unpricedHere, withPromos } from './promos.js';
 import { forCarFields, gridOf, plugLabel } from './socket.js';
 
@@ -340,19 +340,21 @@ function adhocOption(point, session, t, region, site, minutes = session.minutes)
 
 // Direct offers at this point: kWh x the offer's price for the point's power
 // band. A subscription's fee is listed, not added, since one fee covers every
-// session in the month/year; a per-session fee (sessionEur) is added. These prices are final with mainland VAT (23 %);
+// session in the month/year; a per-session fee (sessionEur) is added, and so
+// is a per-minute price (eurPerMin, manual.json minuteEur) for the minutes
+// plugged in, like an operator's time fee. These prices are final with mainland VAT (23 %);
 // on the islands (lower VAT) nobody tells us whether they change, so we show
 // them as they are and say so.
 // `mine`: the card keys of the user's tariff_ids. An offer whose
 // `cemeTariffs` (manual.json) names one of them is how that tariff is billed
 // here, so it's the user's own price: listed, like their CEME tariffs
 // (myAtlante's app has a flat price on DC, where its CEME tariff doesn't apply).
-function directOptions(direct, session, t, region, mine = new Set()) {
+function directOptions(direct, session, t, region, mine = new Set(), minutes = session.minutes) {
   const island = region && region !== 'CONT';
-  return direct.map(({ offer, eurPerKwh }) => ({
+  return direct.map(({ offer, eurPerKwh, eurPerMin }) => ({
     kind: 'direct', offerId: offer.id, label: offer.label, provider: offer.provider, ...(offer.audience && { audience: offer.audience }),
     ...(offer.cemeTariffs?.some(k => mine.has(k)) && { listed: true, viaTariff: true }),
-    total: r2(eurPerKwh * session.kwh + (offer.sessionEur || 0)), eurPerKwh, ...(offer.sessionEur && { sessionEur: offer.sessionEur }), walkUp: !!offer.walkUp, ...(offer.until && { until: offer.until }),
+    total: r2(eurPerKwh * session.kwh + (eurPerMin ? eurPerMin * minutes : 0) + (offer.sessionEur || 0)), eurPerKwh, ...(eurPerMin && { eurPerMin }), ...(offer.sessionEur && { sessionEur: offer.sessionEur }), walkUp: !!offer.walkUp, ...(offer.until && { until: offer.until }),
     subscription: offer.subscription ? { ...(offer.fee || {}), text: offer.fee ? t('option.fee', offer.fee) : t('option.feeUnknown') } : null,
     // What holds for every direct price (outside the CEME system, final with
     // VAT) is one note per answer (directNote), and the blog's name one entry
@@ -361,6 +363,7 @@ function directOptions(direct, session, t, region, mine = new Set()) {
     source: offer.origin === 'custofinal' ? 'custofinal' : offer.source, checked: offer.checkedAt,
     ...optionNote([
       offer.walkUp && t('option.walkUp'),
+      eurPerMin && t('option.minuteFee', { eur: eurPerMin, minutes: Math.round(minutes) }),
       offer.sessionEur && t('option.sessionFee', { eur: offer.sessionEur }),
       offer.until && t('option.until', { until: offer.until }),
       isStale(offer) && t('option.stale'),
@@ -379,7 +382,7 @@ const listed = o => ({ ...o, listed: true });
 // a price they can pay today, so it's never `best` (bestOption).
 const notYours = (o, t) => ({ ...o, notYours: true, note: [t(o.requiresOtherContract ? 'option.notYours.contract' : 'option.notYours'), o.note].filter(Boolean).join(' ') });
 
-export const directOptionsForTest = (direct, session, lang, region) => directOptions(direct, session, translator(lang), region);
+export const directOptionsForTest = (direct, session, lang, region, minutes) => directOptions(direct, session, translator(lang), region, undefined, minutes);
 
 // The part of a quote known before asking ceme-v2: the session and, for a socket
 // on MOBI.E, the key of the ceme-v2 call it shares with others of its speed.
@@ -495,8 +498,15 @@ export async function quotePoint(hit, car, opts = {}) {
   // An offer only a CEME tariff's holders get (manual.json `holdersOnly`, e.g.
   // myAtlante Business's DC price) is left out for everyone else.
   const mine = new Set((tariffIds || []).map(cardKey));
-  const direct = priv ? [] : offersAt(site, point, audiences, start)
-    .filter(x => !x.offer.holdersOnly || x.offer.cemeTariffs?.some(k => mine.has(k)));
+  const holds = x => !x.offer.holdersOnly || x.offer.cemeTariffs?.some(k => mine.has(k));
+  const direct = priv ? [] : offersAt(site, point, audiences, start).filter(holds);
+  // An offer that bills per minute here too has no rate to price it with:
+  // it's left out of the options, and the assumptions say so.
+  const perMinute = priv ? [] : perMinuteAt(site, point, audiences, start).filter(holds);
+  if (perMinute.length) base.assumptions.push(t('assume.directPerMinute', { labels: [...new Set(perMinute.map(x => x.offer.label))].join(', ') }));
+  // The same sentence as an operator's time fee (below): said once.
+  const minutesNote = plugged ? t('assume.perMinute.plugged', { at: base.session.unplugLocal }) : t('assume.perMinute');
+  if (direct.some(x => x.eurPerMin)) base.assumptions.push(minutesNote);
 
   if (point.regime === 'sem_ceme') {
     // Outside MOBI.E: no CEME, the operator bills directly. The NAP has one
@@ -516,7 +526,7 @@ export async function quotePoint(hit, car, opts = {}) {
     const note = napNote(site);
     const wrong = note && !note.vatIncluded && !note.timeOfUse;
     const walkUp = !!point.opc?.AD_HOC_PAYMENT;
-    base.options.push(...directOptions(direct, session, t, base.region));
+    base.options.push(...directOptions(direct, session, t, base.region, undefined, pluggedMinutes));
     if (nap != null && wrong) base.assumptions.push(t('assume.napWrong', { why: note.why }));
     else if (nap != null) {
       // A note's walkUp: the operator's card terminal charges the app price
@@ -569,7 +579,7 @@ export async function quotePoint(hit, car, opts = {}) {
     if (e.refused) base.cemeHeldBack = true;
     base.note = t(e.refused ? 'note.cemeBusy' : 'note.noCeme');
     base.driverNote = t(e.refused ? 'note.cemeBusy.driver' : 'note.noCeme.driver');
-    base.options.push(...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region));
+    base.options.push(...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region, undefined, pluggedMinutes));
     base.options.sort((a, b) => a.total - b.total);
     base.best = bestOption(base.options, null);
     return base;
@@ -585,7 +595,7 @@ export async function quotePoint(hit, car, opts = {}) {
   if (byCard) base.assumptions.push(t('assume.privateCard'));
   const picked = pickTariffs(quotes, point, tariffIds, shown);
   const ceme = picked.headline;
-  const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region, mine)];
+  const extras = [...(adhoc ? [adhoc] : []), ...directOptions(direct, session, t, base.region, mine, pluggedMinutes)];
   if (!ceme) {
     // None of the user's CEME tariffs prices this socket, but one of them may
     // bill it as a direct offer: then that's their total.
@@ -614,7 +624,7 @@ export async function quotePoint(hit, car, opts = {}) {
   if (source === 'napStatic') base.assumptions.push(t('assume.napFeeStatic'));
   if (type === 'nap') base.assumptions.push(t('assume.napMayIncludeEnergy'));
   if (opc.low !== opc.high) base.assumptions.push(t('assume.feeRange'));
-  if (plan?.time?.length) base.assumptions.push(plugged ? t('assume.perMinute.plugged', { at: base.session.unplugLocal }) : t('assume.perMinute'));
+  if (plan?.time?.length && !base.assumptions.includes(minutesNote)) base.assumptions.push(minutesNote);
 
   const ctx = { site, opc, vat, detail: want, tr: t, unplugLocal: base.session.unplugLocal, feeType: type };
   const shownOpts = picked.options.map(o => cemeOption(o, ctx)).map(o => tariffIds?.length ? listed(o) : o);

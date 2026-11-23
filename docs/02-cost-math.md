@@ -278,6 +278,8 @@ could change.
 **`direct`** — walk-up card terminal or QR, the operator's own app or
 subscription, or a roaming app ([04](04-operator-offers.md)): kWh × the
 offer's price for this charger's power band. Prices are final, with VAT.
+An offer that also bills per minute at this power, at a rate nobody publishes,
+is left out, and the assumptions name it ([04](04-operator-offers.md)).
 Subscription fees are listed next to the price, not added, because one monthly
 fee covers every session that month. If the charger's own operator has a
 walk-up offer priced for this band, it replaces MOBI.E's ad hoc price.

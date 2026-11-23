@@ -10,6 +10,19 @@ test('i18n: en and pt have the same keys', () => {
   assert.deepEqual(Object.keys(MESSAGES.pt).sort(), Object.keys(MESSAGES.en).sort());
 });
 
+// A key written twice in one language: the second silently replaces the first,
+// and every call written for the first gets the wrong sentence.
+test('i18n: no key is written twice in a language', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/i18n.js', import.meta.url), 'utf8');
+  const blocks = src.split(/^  pt: \{$/m);
+  assert.equal(blocks.length, 2);
+  for (const block of blocks) {
+    const keys = [...block.matchAll(/^    '([^']+)':/gm)].map(m => m[1]);
+    assert.deepEqual(keys.filter((k, i) => keys.indexOf(k) !== i), []);
+  }
+});
+
 test('i18n: pickLang maps any pt-* to pt, the rest to en, first hint wins', () => {
   assert.equal(pickLang('pt-PT'), 'pt');
   assert.equal(pickLang('pt-BR'), 'pt');
