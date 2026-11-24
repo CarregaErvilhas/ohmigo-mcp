@@ -38,7 +38,7 @@ import { SITE_URL } from './site.js';
 import { slim } from './slim.js';
 import { REPO_URL, VERSION } from './version.js';
 import { viewHtml } from './view.js';
-import { getFacts, getGuide, topics, VOLTARIA_AVAILABLE } from './voltaria.js';
+import { getFacts, getGuide, SKILLS, topics, VOLTARIA_AVAILABLE } from './voltaria.js';
 
 const VIEW_URI = 'ui://ohmigo/results.html';
 
@@ -1253,6 +1253,7 @@ export function createServer(getDataset, live) {
       return err(e.message, 'ev_rules_portugal', topics());
     }
   });
+  SKILLS?.attach(server);
 
   return server;
 }

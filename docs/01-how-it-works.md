@@ -84,6 +84,11 @@ it applies:
   budget, with the essentials in the first 512 characters; `test/budget.test.js`
   enforces it and each tool description's 2048. How to present a price lives
   in the two pricing tools' descriptions.
+- **Skills**: clients that support the MCP Skills extension also list the
+  Voltaria guides as skills (`skills/list`) and read each one as a resource,
+  `skill://voltaria/<topic>/SKILL.md`. `src/voltaria.js` builds that catalog
+  once at start-up and `createServer` attaches it. The skills carry the guides
+  only; the dated facts stay behind `ev_rules_portugal`.
 - **A tool's description, or an argument's `.describe()`**: what only that
   tool or argument needs. Clients that load tools on demand only read these
   when the tool is about to be used, so this text costs nothing until then.
@@ -157,6 +162,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/offers-parse.js` | Parses the custofinal blog's price tables |
 | `src/text.js` | `fold`: text matching without accents or case |
 | `src/view.js` | Builds the inline results page with the MCP Apps bridge |
+| `src/voltaria.js` | Reads the Voltaria guides and dated facts from the `voltaria/` submodule, for `ev_rules_portugal` and as MCP skills |
 | `src/dump.js` | The data behind the tools for people (`/dados`): CEME tariffs and promotions, direct offers, operators and their fees, per charger on demand |
 | `src/stats.js` | One log line per tool call, counters for `/healthz` |
 | `src/version.js` | The version, read from `package.json` |

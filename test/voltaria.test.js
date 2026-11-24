@@ -62,3 +62,40 @@ test('voltaria: the tools and topics the guides name in "no ohmigo" asides exist
     }
   }
 });
+
+// The guides as MCP skills (SEP-2640): what a client that supports the
+// extension sees, over an in-memory pair, no HTTP.
+test('voltaria: every guide is served as a skill whose SKILL.md matches its digest', { skip }, async () => {
+  const { createHash } = await import('node:crypto');
+  const { InMemoryTransport } = await import('@modelcontextprotocol/server');
+  const { Dataset } = await import('../src/data.js');
+  const { LiveStatus } = await import('../src/live.js');
+  const { createServer } = await import('../src/mcp.js');
+  const ds = new Dataset(JSON.parse(readFileSync(new URL('fixtures/chargers.json', import.meta.url), 'utf8')));
+  const server = createServer(() => ds, new LiveStatus());
+  const [client, side] = InMemoryTransport.createLinkedPair();
+  await server.connect(side);
+  const replies = new Map();
+  client.onmessage = m => { if (m.id !== undefined) replies.get(m.id)?.(m); };
+  let id = 0;
+  const rpc = (method, params = {}) => new Promise(resolve => { const n = ++id; replies.set(n, resolve); client.send({ jsonrpc: '2.0', id: n, method, params }); });
+  await client.start();
+  const init = await rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'skills', version: '0' } });
+  await client.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+  assert.ok(init.result.capabilities.extensions?.['io.modelcontextprotocol/skills'], 'skills extension not declared');
+
+  const { result } = await rpc('skills/list');
+  const names = topics().guides.map(g => g.topic);
+  assert.deepEqual(result.skills.map(s => s.frontmatter.name).sort(), names);
+  for (const s of result.skills) {
+    assert.equal(s.uri, `skill://voltaria/${s.frontmatter.name}/SKILL.md`);
+    const read = await rpc('resources/read', { uri: s.uri });
+    const text = read.result.contents[0].text;
+    assert.equal(text, getGuide(s.frontmatter.name).content);
+    const md = s.resources.find(r => r.uri === s.uri);
+    assert.equal(md.digest, 'sha256:' + createHash('sha256').update(text).digest('hex'));
+  }
+  const bad = await rpc('skills/get', { uri: 'skill://voltaria/../package/SKILL.md' });
+  assert.equal(bad.error?.code, -32602);
+  await server.close();
+});
