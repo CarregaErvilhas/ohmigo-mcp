@@ -3,11 +3,23 @@
 // and cached; topics are checked against what is on disk, never joined into a
 // path from user input.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { loadSkills } from '@modelcontextprotocol/server/ext/skills/node';
 
 const ROOT = new URL('../voltaria/', import.meta.url);
 const SAFE = /^[a-z0-9][a-z0-9-]*$/;
 
 export const VOLTARIA_AVAILABLE = existsSync(new URL('skills/', ROOT));
+
+// The same guides served as MCP skills (the Skills extension, SEP-2640):
+// clients that support it list them with skills/list and read each SKILL.md
+// as a resource, `skill://voltaria/<topic>/SKILL.md`. Clients that don't keep
+// using ev_rules_portugal, which also carries the dated facts the skills lack.
+// Built once per deploy (digests of every file), then attached to each
+// per-request server.
+export const SKILLS = VOLTARIA_AVAILABLE
+  ? await loadSkills(fileURLToPath(new URL('skills/', ROOT)), { prefix: 'voltaria' })
+  : null;
 
 // The skill's own "when to use me" line, from its frontmatter: what the
 // assistant needs to pick a topic. Values are JSON-quoted strings.
