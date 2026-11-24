@@ -351,11 +351,15 @@ function adhocOption(point, session, t, region, site, minutes = session.minutes)
 // (myAtlante's app has a flat price on DC, where its CEME tariff doesn't apply).
 function directOptions(direct, session, t, region, mine = new Set(), minutes = session.minutes) {
   const island = region && region !== 'CONT';
-  return direct.map(({ offer, eurPerKwh, eurPerMin }) => ({
+  return direct.map(({ offer, eurPerKwh, eurPerMin, cashback, signupFee }) => {
+    const total = r2(eurPerKwh * session.kwh + (eurPerMin ? eurPerMin * minutes : 0) + (offer.sessionEur || 0));
+    const back = cashback && { pct: cashback.pct, eur: r2(total * cashback.pct / 100), spendAt: cashback.spendAt, ...(cashback.until && { until: cashback.until }) };
+    return {
     kind: 'direct', offerId: offer.id, label: offer.label, provider: offer.provider, ...(offer.audience && { audience: offer.audience }),
     ...(offer.cemeTariffs?.some(k => mine.has(k)) && { listed: true, viaTariff: true }),
-    total: r2(eurPerKwh * session.kwh + (eurPerMin ? eurPerMin * minutes : 0) + (offer.sessionEur || 0)), eurPerKwh, ...(eurPerMin && { eurPerMin }), ...(offer.sessionEur && { sessionEur: offer.sessionEur }), walkUp: !!offer.walkUp, ...(offer.until && { until: offer.until }),
+    total, eurPerKwh, ...(eurPerMin && { eurPerMin }), ...(offer.sessionEur && { sessionEur: offer.sessionEur }), walkUp: !!offer.walkUp, ...(offer.until && { until: offer.until }),
     subscription: offer.subscription ? { ...(offer.fee || {}), text: offer.fee ? t('option.fee', offer.fee) : t('option.feeUnknown') } : null,
+    ...(back && { cashback: back }), ...(signupFee && { signupFee }),
     // What holds for every direct price (outside the CEME system, final with
     // VAT) is one note per answer (directNote), and the blog's name one entry
     // in `sources` (slim.js): here only the key, or the URL of a hand-checked
@@ -366,11 +370,14 @@ function directOptions(direct, session, t, region, mine = new Set(), minutes = s
       eurPerMin && t('option.minuteFee', { eur: eurPerMin, minutes: Math.round(minutes) }),
       offer.sessionEur && t('option.sessionFee', { eur: offer.sessionEur }),
       offer.until && t('option.until', { until: offer.until }),
+      back && t('option.cashback', back),
+      signupFee && t('option.signupFee', signupFee),
       isStale(offer) && t('option.stale'),
       island && t('option.islandVat'),
     ]),
     stale: isStale(offer), vatUnverified: island || undefined,
-  })).sort((a, b) => a.total - b.total);
+    };
+  }).sort((a, b) => a.total - b.total);
 }
 const optionNote = parts => { const note = parts.filter(Boolean).join(' '); return note ? { note } : {}; };
 

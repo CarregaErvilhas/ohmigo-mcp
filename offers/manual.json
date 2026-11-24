@@ -1,6 +1,6 @@
 {
   "about": "Hand-maintained corrections and additions to offers/custofinal.json (the scraped blog). An entry whose id exists there overrides the fields it lists; {\"id\": ..., \"disable\": true} removes it; {\"add\": true} adds a new offer (all fields required); an override or disable whose id is not in the scrape fails the tests. Every entry needs source and checkedAt, and the source host must be in sourceHosts (also for offers/nap-notes.json). Guide: docs/04-operator-offers.md.",
-  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com", "atlante.energy", "www.telpark.com", "electroverse.com", "www.ionity.eu"],
+  "sourceHosts": ["custofinal.blogspot.com", "fleetmagazine.pt", "adhoc.pwrdt.com", "www.tesla.com", "atlante.energy", "www.telpark.com", "electroverse.com", "www.ionity.eu", "www.facebook.com"],
   "offers": [
     {
       "id": "telpark-app-telpark-lancamento-telpark",
@@ -57,9 +57,30 @@
     {
       "id": "atlante-app-myatlante-rede-mobi-e",
       "cemeTariffs": ["atlante-myatlanteac"],
+      "cashback": [
+        { "network": "Atlante", "pct": 50, "from": "2026-11-27", "until": "2026-11-30", "spendAt": "Atlante" },
+        { "pct": 20, "from": "2026-11-27", "until": "2026-11-30", "spendAt": "Atlante" },
+        { "network": "Atlante", "pct": 25, "until": "2026-12-31", "spendAt": "Atlante" },
+        { "pct": 10, "until": "2026-12-31", "spendAt": "Atlante" }
+      ],
       "source": "https://atlante.energy/pt-pt/tarifas-de-energia/",
-      "checkedAt": "2026-10-31",
-      "why": "On DC the myAtlante app charges this flat price instead of its CEME tariff (energy + operator fee). myAtlante Business has its own DC price (atlante-app-myatlante-business-*)."
+      "checkedAt": "2026-11-24",
+      "why": "On DC the myAtlante app charges this flat price instead of its CEME tariff (energy + operator fee). myAtlante Business has its own DC price (atlante-app-myatlante-business-*). ChargeBack without Atlante Go: 25 GreenGems per euro paid at Atlante chargers (100 GreenGems = 1 euro of credit, spent automatically on the next charges at Atlante stations), campaign 1 Oct to 31 Dec (https://atlante.energy/pt-pt/myatlante-app/, 24 Nov 2026); 10 % outside Atlante's network is half of Atlante Go's 20 %, which is what Atlante's 27-30 Nov campaign (https://www.facebook.com/reel/1836246847518324) doubles to 50 % + 20 %. Nothing published says the ChargeBack covers AC sessions on the CEME tariff, so it's only on this DC price."
+    },
+    {
+      "id": "atlante-atlante-go-8-mes-rede-mobi-e",
+      "label": "Atlante - Atlante Go",
+      "fee": { "eur": 7.99, "per": "month" },
+      "signupFee": { "eur": 5.99, "per": "month", "from": "2026-11-27", "until": "2026-11-30", "locked": true },
+      "cashback": [
+        { "network": "Atlante", "pct": 100, "from": "2026-11-27", "until": "2026-11-30", "spendAt": "Atlante" },
+        { "pct": 40, "from": "2026-11-27", "until": "2026-11-30", "spendAt": "Atlante" },
+        { "network": "Atlante", "pct": 50, "until": "2026-12-31", "spendAt": "Atlante" },
+        { "pct": 20, "until": "2026-12-31", "spendAt": "Atlante" }
+      ],
+      "source": "https://www.facebook.com/reel/1836246847518324",
+      "checkedAt": "2026-11-24",
+      "why": "Atlante Go is 7,99 €/month, cancel any time, with 50 % ChargeBack on Atlante's network and 20 % outside it, 1 Oct to 31 Dec (https://atlante.energy/pt-pt/atlante-go/, 24 Nov 2026; the blog's label says 8 €). Atlante's 27-30 Nov 2026 campaign (the reel, and its poster: 'Atlante Go por 5,99€/mês válido apenas para novas adesões. Este valor é garantido enquanto a subscrição estiver ativa. Campanha válida de 27 a 30 de novembro 2026.') doubles the ChargeBack to 100 % + 40 % and lowers the fee for new sign-ups. atlante.energy didn't carry the campaign yet on 24 Nov: re-check it there. The 0,49 €/kWh is the blog's and Atlante's tariff page's."
     },
     {
       "id": "ionity-app-ionity",

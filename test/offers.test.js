@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { applyNotices, bandFor, bandPrice, BLOG_HOST, MAX_EUR_PER_KWH, MAX_LABEL_LENGTH, MIN_EUR_PER_KWH, offerProblems, parseTables, pricePosts, toOffers } from '../src/offers-parse.js';
+import { NETWORKS } from '../src/promos.js';
 import { activeOn, AUDIENCES, civilDay, gaps, isStale, mergeOffers, NAP_NOTES, noteFor, OFFERS, offersAt, ownWalkUp, perMinuteAt, unpricedMinutes } from '../src/offers.js';
 
 const HEAD = `<thead><tr><th rowspan="2">Operador - Plano</th><th rowspan="2">Postos</th><th colspan="2">AC</th><th colspan="6">DC</th></tr>
@@ -417,4 +418,35 @@ console.log(seen.join(' '));`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   assert.doesNotMatch(r.stdout, /promos|lookup/);
+});
+
+test('cashback and signupFee: checked, picked by the day and the network, never in the total', async () => {
+  const { directOptionsForTest } = await import('../src/quote.js');
+  assert.deepEqual(offerProblems({ cashback: [{ pct: 50, network: 'Atlante', until: '2026-12-31', spendAt: 'Atlante' }], signupFee: { eur: 5.99, per: 'month', from: '2026-11-27', until: '2026-11-30' } }), []);
+  assert.equal(offerProblems({ cashback: [{ pct: 150, spendAt: 'Atlante' }] }).length, 1, 'not a percentage');
+  assert.equal(offerProblems({ cashback: [{ pct: 10, spendAt: '<b>' }] }).length, 1, 'unsafe text');
+  assert.equal(offerProblems({ signupFee: { eur: 5.99, per: 'month', from: '2026-11-30', until: '2026-11-27' } }).length, 1, 'from after until');
+  for (const o of OFFERS) for (const c of o.cashback || []) if (c.network) assert.ok(NETWORKS[c.network], `${o.id}: unknown network ${c.network}`);
+
+  const atlante = { operatorId: 'ATLA', region: 'CONT' }, other = { operatorId: 'HORZ', region: 'CONT' }, dc = { kw: 150, dc: true, regime: 'mobie' };
+  const go = (site, day) => offersAt(site, dc, [], new Date(`${day}T12:00:00Z`)).find(x => x.offer.id === 'atlante-atlante-go-8-mes-rede-mobi-e');
+  // The campaign doubles the ChargeBack for four days, at Atlante's chargers and elsewhere.
+  assert.equal(go(atlante, '2026-11-28').cashback.pct, 100);
+  assert.equal(go(other, '2026-11-28').cashback.pct, 40);
+  assert.equal(go(atlante, '2026-12-05').cashback.pct, 50);
+  assert.equal(go(other, '2026-12-05').cashback.pct, 20);
+  assert.equal(go(atlante, '2027-01-02').cashback, undefined);
+  // The lower fee is for signing up by its last day.
+  assert.equal(go(atlante, '2026-11-30').signupFee.eur, 5.99);
+  assert.equal(go(atlante, '2026-12-01').signupFee, undefined);
+
+  const x = go(atlante, '2026-11-28');
+  const [o] = directOptionsForTest([x], { kwh: 40 }, 'pt', 'CONT');
+  assert.equal(o.total, 19.6); // 40 × 0,49: the credit comes back later, not off this charge
+  assert.deepEqual(o.cashback, { pct: 100, eur: 19.6, spendAt: 'Atlante', until: '2026-11-30' });
+  assert.equal(o.subscription.eur, 7.99);
+  assert.match(o.note, /Devolve 100 % \(19,60 €\) em crédito na app, para gastar em carregamentos seguintes nos postos Atlante \(não é dinheiro\), em carregamentos iniciados até 2026-11-30; não está descontado neste total\./);
+  assert.match(o.note, /Quem aderir entre 2026-11-27 e 2026-11-30 paga 5,99 €\/mês enquanto mantiver a subscrição, só para novas adesões\./);
+  const [en] = directOptionsForTest([x], { kwh: 40 }, 'en', 'CONT');
+  assert.match(en.note, /Gives back 100 % of it \(19.60 €\) as credit/);
 });

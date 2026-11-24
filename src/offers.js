@@ -29,6 +29,7 @@
 import { readFileSync } from 'node:fs';
 import { bandFor, bandPrice } from './offers-parse.js';
 import { REGION_TZ } from './profile.js';
+import { onNetwork } from './promos.js';
 
 export const STALE_DAYS = 90;
 
@@ -114,8 +115,30 @@ export function offersAt(site, point, audiences = [], at = new Date()) {
   const band = bandFor(point);
   return candidates(site, point, audiences, at)
     .filter(offer => !unpricedMinutes(offer, band))
-    .map(offer => ({ offer, eurPerKwh: bandPrice(offer.prices, band), ...(offer.minuteEur?.[band] && { eurPerMin: offer.minuteEur[band] }) }))
+    .map(offer => ({ offer, eurPerKwh: bandPrice(offer.prices, band), ...(offer.minuteEur?.[band] && { eurPerMin: offer.minuteEur[band] }), ...extras(offer, site, at) }))
     .filter(x => x.eurPerKwh != null);
+}
+
+// What an offer gives besides its price, on the day of the charge. Neither
+// changes the total, so each one comes with the sentence that says so.
+//   cashback   part of what you pay comes back as credit in the provider's
+//              app, to spend on later charges (Atlante's ChargeBack, paid in
+//              GreenGems). manual.json lists `cashback` as rows of { pct,
+//              network?, from?, until?, spendAt }: the first row active that
+//              day whose network (a label of networks.json, none = any
+//              charger) holds this site wins, so a campaign that doubles it
+//              for a few days goes first. Credit isn't money: you only get it
+//              back by charging there again, so it's never off the total.
+//   signupFee  a lower subscription fee for whoever signs up between `from`
+//              and `until` (`locked`: kept while the subscription stays on).
+//              Only a tip: the fee is never in the total, and the driver who
+//              already pays the regular one doesn't get it. Shown up to its
+//              last day.
+function extras(offer, site, at) {
+  const day = civilDay(at, site.region);
+  const cashback = (offer.cashback || []).find(c => activeOn(c, day) && onNetwork(site, c.network ?? null));
+  const signup = offer.signupFee && day <= offer.signupFee.until ? offer.signupFee : null;
+  return { ...(cashback && { cashback }), ...(signup && { signupFee: signup }) };
 }
 
 // Billed per minute at this power, and nobody has given us the rate.
