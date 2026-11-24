@@ -142,6 +142,25 @@ regular one with `from` the next day (Telpark's app). The option then says
 it's a promotion and until when (`until` on it), and a charge planned after
 that day gets the regular price.
 
+Two extras never change the total, so the option's note says what they are
+and that they're left out of it:
+
+- `"cashback"`: part of what you pay comes back as credit in the
+  provider's app for later charges (Atlante's ChargeBack, paid in
+  GreenGems). It's a list of rows `{ pct, network?, from?, until?, spendAt }`;
+  the first row active on the charge's day whose `network` (a label of
+  `networks.json`; none = any charger) holds the site wins, so put a short
+  campaign that raises it before the regular rows. `spendAt` names where the
+  credit can be spent. Credit isn't money, so it never comes off the total;
+  the option gets `cashback: { pct, eur, spendAt, until }`.
+- `"signupFee"`: `{ eur, per, from, until, locked }`, a lower subscription
+  fee for whoever signs up between `from` and `until` (`locked`: kept while
+  the subscription stays on). Shown on charges up to `until` as a tip for new
+  subscribers; `fee` stays the regular one.
+
+`offerProblems` (`src/offers-parse.js`) checks both shapes, and `npm test`
+checks that each `network` exists.
+
 An offer can also carry `"audience"`: an id from `offers/audiences.json`
 (`uber-driver`, `powerdot-staff`...) for a price only that group gets. It is
 hidden unless the driver says they belong to it (the tools' `audiences`

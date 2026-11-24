@@ -70,6 +70,22 @@ export function offerProblems(offer, hosts = [BLOG_HOST]) {
     if (!BAND_KEYS.has(band)) problems.push(`minuteEur: "${band}" is not a power band`);
     if (!(typeof eur === 'number' && eur > 0 && eur <= MAX_EUR_PER_MIN)) problems.push(`minuteEur.${band} ${eur} is not between 0 and ${MAX_EUR_PER_MIN} €/min`);
   }
+  // manual.json's extras (offers.js extras()): dates as YYYY-MM-DD, a
+  // percentage that is one, a fee that is one, and text safe to show.
+  const day = x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
+  if ('cashback' in offer) {
+    if (!Array.isArray(offer.cashback)) problems.push('cashback is not a list');
+    else for (const c of offer.cashback) {
+      if (!(typeof c.pct === 'number' && c.pct > 0 && c.pct <= 100)) problems.push(`cashback pct ${c.pct} is not between 0 and 100`);
+      if (typeof c.spendAt !== 'string' || !c.spendAt || UNSAFE_TEXT.test(c.spendAt) || c.spendAt.length > MAX_LABEL_LENGTH) problems.push(`cashback spendAt ${JSON.stringify(c.spendAt)} is not a short safe text`);
+      for (const k of ['from', 'until']) if (k in c && !day(c[k])) problems.push(`cashback ${k} ${c[k]} is not YYYY-MM-DD`);
+    }
+  }
+  if ('signupFee' in offer) {
+    const f = offer.signupFee;
+    if (!(typeof f?.eur === 'number' && f.eur > 0 && ['month', 'year'].includes(f.per))) problems.push(`signupFee ${JSON.stringify(f)} is not { eur, per: month|year }`);
+    else if (!(day(f.from) && day(f.until) && f.from <= f.until)) problems.push(`signupFee needs from <= until, both YYYY-MM-DD`);
+  }
   for (const [band, price] of Object.entries(offer.prices || {})) {
     if (price === null) continue;
     if (typeof price !== 'number' || !(price >= MIN_EUR_PER_KWH && price <= MAX_EUR_PER_KWH)) {

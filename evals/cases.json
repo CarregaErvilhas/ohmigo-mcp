@@ -1628,6 +1628,29 @@
           "Does the reply say how far the café is from the charger (about 120 m)?"
         ]
       }
+    },
+    {
+      "id": "cashback-not-off-total",
+      "why": "Cashback in an app's credit (offers manual.json cashback, Atlante's ChargeBack) comes back for later charges: it is never subtracted from the session's price.",
+      "message": "Tenho a app myAtlante. Quanto me custa carregar no HUB Videla da Atlante em Torres Novas? Tesla Model 3 Long Range, de 15% a 80%.",
+      "requires": [
+        {
+          "site": "ATL-TNV-00031"
+        }
+      ],
+      "expect": {
+        "calls": [
+          {
+            "tool": "estimate_charging_cost|lookup_charger",
+            "args": {
+              "*": "videla|TNV-0003|atlante"
+            }
+          }
+        ],
+        "judge": [
+          "If a tool result gives an option a cashback (credit back in the app), does the reply give that option's price without subtracting the cashback from it, and present the cashback, if at all, as credit for later charges rather than as a discount on this one? Answer n/a if no result has a cashback."
+        ]
+      }
     }
   ]
 }
