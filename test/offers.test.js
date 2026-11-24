@@ -445,7 +445,7 @@ test('cashback and signupFee: checked, picked by the day and the network, never 
   assert.equal(o.total, 19.6); // 40 × 0,49: the credit comes back later, not off this charge
   assert.deepEqual(o.cashback, { pct: 100, eur: 19.6, spendAt: 'Atlante', until: '2026-11-30' });
   assert.equal(o.subscription.eur, 7.99);
-  assert.match(o.note, /Devolve 100 % \(19,60 €\) em crédito na app, para gastar em carregamentos seguintes nos postos Atlante \(não é dinheiro\), em carregamentos iniciados até 2026-11-30; não está descontado neste total\./);
+  assert.match(o.note, /Devolve 100 % \(19,60 €\) em crédito na app, para gastar em carregamentos seguintes nos postos Atlante, em carregamentos iniciados até 2026-11-30\. Não é dinheiro e só vale se voltares a carregar lá: nunca o subtraias a este preço nem apresentes um custo líquido\./);
   assert.match(o.note, /Quem aderir entre 2026-11-27 e 2026-11-30 paga 5,99 €\/mês enquanto mantiver a subscrição, só para novas adesões\./);
   const [en] = directOptionsForTest([x], { kwh: 40 }, 'en', 'CONT');
   assert.match(en.note, /Gives back 100 % of it \(19.60 €\) as credit/);
