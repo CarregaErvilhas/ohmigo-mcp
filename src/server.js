@@ -25,7 +25,7 @@ import { Dataset, DatasetRefused } from './data.js';
 import { LiveStatus } from './live.js';
 import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
-import { GROUP_IMAGES, GROUP_PAGES, GROUP_PATHS, LEGAL, LEGAL_PAGES, LLMS_TXT, PAGES, SITEMAP, SITEMAP_URLS, SITE_URL } from './site.js';
+import { GROUP_IMAGES, GROUP_PAGES, GROUP_PATHS, LEGAL, LEGAL_PAGES, LLMS_TXT, MANIFEST, MARKDOWN, NOT_FOUND_HTML, PAGES, SITEMAP, SITEMAP_URLS, SITE_URL } from './site.js';
 import { INDEXNOW_KEY, indexNowSubmit } from './indexnow.js';
 import { statsSummary } from './stats.js';
 import { COMMIT, SOURCE_URL, VERSION } from './version.js';
@@ -101,7 +101,7 @@ const OG_IMAGE = readFileSync(new URL('../site/og.png', import.meta.url));
 // parent domain (ocarroeletrico.com), and its directory shows the icon URL
 // typed into the listing.
 const ICONS = Object.fromEntries([
-  ['/icon.svg', 'image/svg+xml'], ['/icon-512.png', 'image/png'],
+  ['/icon.svg', 'image/svg+xml'], ['/icon-512.png', 'image/png'], ['/icon-192.png', 'image/png'],
   ['/apple-touch-icon.png', 'image/png'], ['/favicon.ico', 'image/x-icon'],
 ].map(([path, type]) => [path, { type, body: readFileSync(new URL(`../site${path}`, import.meta.url)) }]));
 // The data dump: what the tools know, for people (src/dump.js). Public, but
@@ -255,6 +255,14 @@ function parseTarget(target) {
   } catch { return null; }
 }
 
+// An agent that asks for Markdown (and not HTML first) gets the page's words
+// without the markup. Caches must keep the two apart: Vary.
+const wantsMarkdown = req => /text\/markdown/.test(req.headers.accept || '') && !/^\s*text\/html/.test(req.headers.accept || '');
+const sendMarkdown = (req, res, path) => {
+  res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'public, max-age=300', vary: 'Accept', 'x-content-type-options': 'nosniff' });
+  return res.end(req.method === 'HEAD' ? undefined : MARKDOWN[path]);
+};
+
 async function handle(req, res) {
   const url = parseTarget(req.url);
   if (!url) {
@@ -275,7 +283,8 @@ async function handle(req, res) {
       res.writeHead(301, { location: (want === 'en' ? '/en' : '/') + url.search });
       return res.end();
     }
-    res.writeHead(200, LANDING_HEADERS);
+    if (wantsMarkdown(req)) return sendMarkdown(req, res, url.pathname);
+    res.writeHead(200, { ...LANDING_HEADERS, vary: 'Accept' });
     return res.end(req.method === 'HEAD' ? undefined : PAGES[url.pathname === '/en' ? 'en' : 'pt']);
   }
   if (url.pathname === '/og.png' && get) return sendImage(req, res, 'image/png', OG_IMAGE);
@@ -293,7 +302,8 @@ async function handle(req, res) {
       res.writeHead(301, { location: twin + url.search });
       return res.end();
     }
-    res.writeHead(200, group ? GROUP_HEADERS : LEGAL_HEADERS);
+    if (wantsMarkdown(req)) return sendMarkdown(req, res, url.pathname);
+    res.writeHead(200, { ...(group ? GROUP_HEADERS : LEGAL_HEADERS), vary: 'Accept' });
     return res.end(req.method === 'HEAD' ? undefined : (group ? GROUP_PAGES : LEGAL_PAGES)[url.pathname]);
   }
   if (url.pathname === '/dados' && (req.method === 'GET' || req.method === 'HEAD')) {
@@ -311,11 +321,18 @@ async function handle(req, res) {
       return send(res, 500, { error: 'dados unavailable' });
     }
   }
+  if (url.pathname === '/site.webmanifest' && get) return sendPublic(res, MANIFEST, 'application/manifest+json; charset=utf-8');
   if (url.pathname === '/robots.txt' && get) return sendPublic(res, `User-agent: *\nAllow: /\nDisallow: /mcp\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'text/plain; charset=utf-8');
   if (url.pathname === '/llms.txt' && get) return sendPublic(res, LLMS_TXT, 'text/plain; charset=utf-8');
   if (url.pathname === `/${INDEXNOW_KEY}.txt` && get) return sendPublic(res, INDEXNOW_KEY, 'text/plain; charset=utf-8');
   if (url.pathname === '/.well-known/security.txt' && get) return send(res, 200, securityTxt(), 'text/plain; charset=utf-8');
   if (url.pathname === '/.well-known/openai-apps-challenge' && get && OPENAI_APPS_CHALLENGE) return send(res, 200, OPENAI_APPS_CHALLENGE, 'text/plain; charset=utf-8');
+  // A browser on a dead link gets a page with the way home; MCP clients and
+  // scripts (which never put text/html first) keep the bare text.
+  if (url.pathname !== '/mcp' && get && /^\s*text\/html/.test(req.headers.accept || '') && !url.pathname.startsWith('/.well-known/')) {
+    res.writeHead(404, { ...SITE_HEADERS, 'content-security-policy': csp("'none'"), 'cache-control': 'no-store' });
+    return res.end(req.method === 'HEAD' ? undefined : NOT_FOUND_HTML);
+  }
   if (url.pathname !== '/mcp') return send(res, 404, 'not found\n', 'text/plain; charset=utf-8');
   // Someone pasted the MCP address into a browser. MCP clients never ask for
   // text/html, so send the person to the page that explains what to do.
