@@ -1011,6 +1011,32 @@ test('http: a charger with only CHAdeMO says so instead of "no such charger"', a
   }
 });
 
+test('http: markdown for agents, an HTML 404 for browsers, the manifest and the 192 icon', async () => {
+  const md = await fetch(`${base}/en`, { headers: { accept: 'text/markdown' } });
+  assert.equal(md.status, 200);
+  assert.match(md.headers.get('content-type'), /text\/markdown/);
+  assert.match(md.headers.get('vary'), /Accept/i);
+  const text = await md.text();
+  assert.match(text, /^# /m);
+  assert.doesNotMatch(text, /<\w+[^>]*>/);
+  const html = await fetch(`${base}/en`, { headers: { accept: 'text/html' } });
+  assert.match(html.headers.get('content-type'), /text\/html/);
+  const nf = await fetch(`${base}/nope`, { headers: { accept: 'text/html,application/xhtml+xml' } });
+  assert.equal(nf.status, 404);
+  assert.match(nf.headers.get('content-type'), /text\/html/);
+  assert.equal((await fetch(`${base}/.well-known/nope`, { headers: { accept: 'text/html' } })).headers.get('content-type').startsWith('text/plain'), true);
+  const man = await fetch(`${base}/site.webmanifest`);
+  assert.equal(man.status, 200);
+  assert.ok((await man.json()).icons.length >= 2);
+  assert.equal((await fetch(`${base}/icon-192.png`)).headers.get('content-type'), 'image/png');
+});
+
+test('site: the landing page ships WebSite and FAQPage JSON-LD', async () => {
+  const body = await (await fetch(`${base}/`)).text();
+  const types = [...body.matchAll(/<script type="application\/ld\+json">([^<]*)<\/script>/g)].map(m => JSON.parse(m[1])['@type']);
+  assert.deepEqual(types, ['WebApplication', 'WebSite', 'FAQPage']);
+});
+
 // Last: it stops the server.
 test('http: SIGTERM lets the process exit cleanly', async () => {
   server.kill('SIGTERM');

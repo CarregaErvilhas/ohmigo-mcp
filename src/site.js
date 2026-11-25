@@ -171,10 +171,28 @@ function head(lang) {
     areaServed: { '@type': 'Country', name: 'Portugal' },
     publisher: { '@type': 'Organization', name: 'O Carro Elétrico', url: 'https://ocarroeletrico.com' },
   };
+  const site = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'ohmigo',
+    url,
+    inLanguage: HTML_LANG[lang],
+  };
+  // The page's own FAQ, for rich results and for models that read the markup.
+  const faq = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    inLanguage: HTML_LANG[lang],
+    mainEntity: [...source.matchAll(/data-i="faq\.q(\d+)"/g)].map(([, n]) => ({
+      '@type': 'Question',
+      name: text(t[`faq.q${n}`]),
+      acceptedAnswer: { '@type': 'Answer', text: text(t[`faq.a${n}`].replace(/<\/(p|li)>/g, ' ')).replace(/\s+/g, ' ').trim() },
+    })),
+  };
   return [
     ...seo(lang, PATHS, text(t['meta.title']), text(t['meta.desc'])),
     // JSON in a script tag: "<" escaped so no string can close it.
-    `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>`,
+    ...[ld, site, faq].map(o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`),
   ].join('\n');
 }
 
@@ -279,12 +297,97 @@ export function renderGroup(lang) {
   return linkUp(html, lang, GROUP_PATHS);
 }
 
+// The same pages as Markdown, for agents that ask for it (Accept: text/markdown):
+// no scripts, styles or drawings, just the words and the links, which is all a
+// model needs and far fewer tokens than the HTML.
+const entities = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' };
+export function toMarkdown(html) {
+  const body = (html.match(/<body[^>]*>([\s\S]*)<\/body>/) || [, html])[1]
+    .replace(/<(script|style|svg|noscript|template)\b[\s\S]*?<\/\1>/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/g, (m, n, x) => `\n\n${'#'.repeat(n)} ${x}\n\n`)
+    .replace(/<a\b[^>]*\bhref="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (m, h, x) => {
+      const label = x.replace(/<[^>]+>/g, '').trim();
+      return label ? `[${label}](${h.startsWith('/') ? SITE_URL + h : h})` : '';
+    })
+    .replace(/<li\b[^>]*>/g, '\n- ')
+    .replace(/<\/(p|div|section|article|details|summary|ul|ol|header|footer|main|nav|pre)>|<br\s*\/?>/g, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(amp|lt|gt|quot|nbsp|#39);/g, m => entities[m]);
+  return body.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
 export const PAGES = { pt: Buffer.from(render('pt')), en: Buffer.from(render('en')) };
+
+// Every HTML page by URL, as Markdown (see toMarkdown).
+export const MARKDOWN = {};
+MARKDOWN['/'] = Buffer.from(toMarkdown(PAGES.pt.toString()));
+MARKDOWN['/en'] = Buffer.from(toMarkdown(PAGES.en.toString()));
 
 // URL -> its HTML: one copy per URL, rendered once at boot.
 export const LEGAL_PAGES = Object.fromEntries(Object.entries(LEGAL).flatMap(([page, { paths }]) =>
   Object.entries(paths).map(([lang, path]) => [path, Buffer.from(renderLegal(page, lang))])));
 export const GROUP_PAGES = Object.fromEntries(Object.entries(GROUP_PATHS).map(([lang, path]) => [path, Buffer.from(renderGroup(lang))]));
+
+for (const [path, html] of Object.entries(LEGAL_PAGES)) MARKDOWN[path] = Buffer.from(toMarkdown(html.toString()));
+for (const [path, html] of Object.entries(GROUP_PAGES)) MARKDOWN[path] = Buffer.from(toMarkdown(html.toString()));
+
+// Shown instead of the bare "not found" when a browser lands on a dead link.
+export const NOT_FOUND = {
+  pt: { title: 'Página não encontrada', p: 'Este endereço não existe. Podes voltar à página inicial ou ver as perguntas frequentes.', home: 'Ir para a página inicial', faq: 'Perguntas frequentes', lang: 'pt-PT' },
+  en: { title: 'Page not found', p: "This address doesn't exist. You can go back to the home page or read the FAQ.", home: 'Go to the home page', faq: 'FAQ', lang: 'en' },
+};
+// One page for both languages, in the visitor's: a script can't be assumed
+// (CSP allows none here), so the two texts sit side by side. Colours follow the
+// system theme, as the other pages do before a theme is saved.
+export const NOT_FOUND_HTML = Buffer.from(`<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<title>404 · ohmigo</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+  :root { color-scheme: light dark; --bg: #fbfaf5; --fg: #0f172a; --green: #15803d; --on: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0b1410; --fg: #e8f1ec; --green: #4ade80; --on: #052e16; } }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--fg); font: 18px/1.5 system-ui, sans-serif; padding: 24px; }
+  main { max-width: 520px; }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  section + section { margin-top: 28px; padding-top: 24px; border-top: 1px solid color-mix(in srgb, var(--fg) 20%, transparent); }
+  a.btn { display: inline-block; margin: 4px 12px 4px 0; padding: 12px 22px; min-height: 24px; border-radius: 999px; background: var(--green); color: var(--on); font-weight: 800; text-decoration: none; }
+  a.link { color: var(--green); font-weight: 700; }
+  :focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+${[['pt', '/', '/#faq'], ['en', '/en', '/en#faq']].map(([l, home, faq]) => `<section lang="${NOT_FOUND[l].lang}">
+<h1>${NOT_FOUND[l].title}</h1>
+<p>${NOT_FOUND[l].p}</p>
+<p><a class="btn" href="${home}">${NOT_FOUND[l].home}</a> <a class="link" href="${faq}">${NOT_FOUND[l].faq}</a></p>
+</section>`).join('\n')}
+</main>
+</body>
+</html>
+`);
+
+export const MANIFEST = JSON.stringify({
+  name: 'ohmigo',
+  short_name: 'ohmigo',
+  description: text(S.pt['meta.desc']),
+  lang: 'pt-PT',
+  start_url: '/',
+  display: 'browser',
+  background_color: '#fbfaf5',
+  theme_color: '#16a34a',
+  icons: [
+    { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+  ],
+});
 
 // Every page worth indexing, each with its other language.
 const sitemapEntry = (path, paths) =>
