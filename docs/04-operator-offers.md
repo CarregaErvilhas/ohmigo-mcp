@@ -1,29 +1,18 @@
 # 04 — Direct offers
 
-On MOBI.E the usual way to pay is a CEME card or app: the CEME's energy plus
-the operator's fee. But many chargers also take other ways to pay, and they're
-often cheaper:
+On MOBI.E the usual way to pay is a CEME card or app: the CEME's energy plus the operator's fee. But many chargers also take other ways to pay, and they're often cheaper:
 
 - a **walk-up** card terminal (TPA) or QR code at the charger, no account;
 - the **operator's own app or subscription** (IONITY Power, Atlante GO...);
-- **roaming apps (eMSPs)** like Electroverse, Elli or Electromaps, which work
-  on some networks at their own flat price.
+- **roaming apps (eMSPs)** like Electroverse, Elli or Electromaps, which work on some networks at their own flat price.
 
 In ohmigo these are options of kind `direct` ([02](02-cost-math.md)).
 
-A discount a **CEME** gives at one network (LUZiGÁS cheaper at Powerdot, miio
-one cutting Powerdot's fee) is not a direct offer: you still pay with the CEME
-card or app. Those live in ceme-v2, next to the tariffs (`PROMOS` in its
-`seed-data.js`), and only borrow `networks.json` from here to find the
-chargers ([02](02-cost-math.md), "CEME promotions").
+A discount a **CEME** gives at one network (LUZiGÁS cheaper at Powerdot, miio one cutting Powerdot's fee) is not a direct offer: you still pay with the CEME card or app. Those live in ceme-v2, next to the tariffs (`PROMOS` in its `seed-data.js`), and only borrow `networks.json` from here to find the chargers ([02](02-cost-math.md), "CEME promotions").
 
 ## Why not from the NAP?
 
-We checked. In the NAP, `brandsAccepted` is the same 54 CEME codes at every
-MOBI.E charger, and `brandsAcceptedText` is always empty. So the NAP only
-tells you whether a charger is on MOBI.E at all, not who else sells there or
-at what price. MOBI.E's tariff file has the ad hoc (bank card) price per
-socket, and nothing else.
+We checked. In the NAP, `brandsAccepted` is the same 54 CEME codes at every MOBI.E charger, and `brandsAcceptedText` is always empty. So the NAP only tells you whether a charger is on MOBI.E at all, not who else sells there or at what price. MOBI.E's tariff file has the ad hoc (bank card) price per socket, and nothing else.
 
 ## Where the prices come from
 
@@ -42,59 +31,22 @@ socket, and nothing else.
  src/offers.js                 loaded at boot
 ```
 
-**The blog** is the best public list we know: kept up to date by its author,
-Alexandre Moleiro, who lets us use it as long as we credit him. Prices are
-final with VAT, one column per power band (AC ≤7.4, AC 11-22, DC ≤50,
-100, 120, 150, 180, >180). We credit it in every price we show: each
-direct option says `source: "custofinal"`, the answer names the blog once in
-`sources`, and the tool descriptions tell the assistant to credit it. The author publishes a **new post** for each update, so
-the scraper reads Blogger's feed and takes the most recently published price
-list (the post with the "Sem promoções ou subscrições pagas" table), instead of
-a fixed URL. It goes by publication date, so an edit to an old post doesn't
-bring its old prices back.
+**The blog** is the best public list we know: kept up to date by its author, Alexandre Moleiro, who lets us use it as long as we credit him. Prices are final with VAT, one column per power band (AC ≤7.4, AC 11-22, DC ≤50, 100, 120, 150, 180, >180). We credit it in every price we show: each direct option says `source: "custofinal"`, the answer names the blog once in `sources`, and the tool descriptions tell the assistant to credit it. The author publishes a **new post** for each update, so the scraper reads Blogger's feed and takes the most recently published price list (the post with the "Sem promoções ou subscrições pagas" table), instead of a fixed URL. It goes by publication date, so an edit to an old post doesn't bring its old prices back.
 
-Between two lists the author sometimes posts a **notice** about one provider:
-one table without a caption, the provider's name spanning its rows, AC split
-into 11 / 22 / 43 kW, and a "⚡️+🕘" cell where the provider bills per minute on
-top of the kWh. Every post with the blog's tables published after the list is
-read as a notice: its rows replace that provider's pay-as-you-go rows of the
-list (its subscriptions stay), and its offers name the notice as their source.
-A notice about a provider the list doesn't have stops the scrape: a person has
-to read it. The scrape log, which goes into the pull request, says which rows
-each notice replaced. See `pricePosts()` and `applyNotices()` in
-`src/offers-parse.js`.
+Between two lists the author sometimes posts a **notice** about one provider: one table without a caption, the provider's name spanning its rows, AC split into 11 / 22 / 43 kW, and a "⚡️+🕘" cell where the provider bills per minute on top of the kWh. Every post with the blog's tables published after the list is read as a notice: its rows replace that provider's pay-as-you-go rows of the list (its subscriptions stay), and its offers name the notice as their source. A notice about a provider the list doesn't have stops the scrape: a person has to read it. The scrape log, which goes into the pull request, says which rows each notice replaced. See `pricePosts()` and `applyNotices()` in `src/offers-parse.js`.
 
-**The weekly job** (`.github/workflows/offers.yml`, Mondays, or by hand from
-the Actions tab):
+**The weekly job** (`.github/workflows/offers.yml`, Mondays, or by hand from the Actions tab):
 1. scrapes, then runs `npm test`, in a job with no secrets;
-2. if `offers/custofinal.json` changed, a second job on a fresh runner, which
-   runs nothing from the repo, takes just that file and opens a **pull
-   request** with the scrape log. Nothing reaches users until someone merges
-   it. It opens even if the tests failed: the body says so, and the required
-   `test` check fails on it, so it can't be merged until they're fixed. If an
-   open PR already has the same content, it does nothing;
-3. if the scrape fails (blog moved, layout changed, feed down), the tests fail
-   with no offer change to show them on, or the PR can't be opened, opens an
-   **issue** saying which, and the old prices stay.
+2. if `offers/custofinal.json` changed, a second job on a fresh runner, which runs nothing from the repo, takes just that file and opens a **pull request** with the scrape log. Nothing reaches users until someone merges it. It opens even if the tests failed: the body says so, and the required `test` check fails on it, so it can't be merged until they're fixed. If an open PR already has the same content, it does nothing;
+3. if the scrape fails (blog moved, layout changed, feed down), the tests fail with no offer change to show them on, or the PR can't be opened, opens an **issue** saying which, and the old prices stay.
 
-The parser is strict on purpose. An unknown column header, a price list table
-without a caption, zero rows, a price cell that isn't a number (other than a
-notice's "⚡️+🕘"), a merged cell (other than the provider's name spanning its
-rows), or a row with more cells than bands make it fail, rather than quietly publish prices in the wrong
-columns (an empty cell or a short row is fine: not offered at that power).
+The parser is strict on purpose. An unknown column header, a price list table without a caption, zero rows, a price cell that isn't a number (other than a notice's "⚡️+🕘"), a merged cell (other than the provider's name spanning its rows), or a row with more cells than bands make it fail, rather than quietly publish prices in the wrong columns (an empty cell or a short row is fine: not offered at that power).
 
-On top of that comes a sanity check, `offerProblems()` in
-`src/offers-parse.js`, whose limits are the constants at the top of that file.
-Every row's labels must be of a sane length, without control or format
-characters, angle brackets or leftover entities; every offer that ships must
-have its prices within bounds; the source must be https on the blog. A bad one
-fails the scrape. `npm test` runs the same check over everything in `offers/`.
+On top of that comes a sanity check, `offerProblems()` in `src/offers-parse.js`, whose limits are the constants at the top of that file. Every row's labels must be of a sane length, without control or format characters, angle brackets or leftover entities; every offer that ships must have its prices within bounds; the source must be https on the blog. A bad one fails the scrape. `npm test` runs the same check over everything in `offers/`.
 
 ## Matching offers to chargers: `offers/networks.json`
 
-The blog says where each offer works in its "Postos" column ("Ionity",
-"Iberdrola BP Pulse", "Rede Mobi.E"...). `networks.json` translates each label
-into NAP operator ids:
+The blog says where each offer works in its "Postos" column ("Ionity", "Iberdrola BP Pulse", "Rede Mobi.E"...). `networks.json` translates each label into NAP operator ids:
 
 ```json
 "Ionity":        { "operatorIds": ["IONY"] },
@@ -105,121 +57,58 @@ into NAP operator ids:
 
 - `scope: "mobie"`: every charger on MOBI.E.
 - `scope: "unknown"`: we can't tell which chargers, so the offer is left out.
-- A label the file doesn't know: the scrape still works, leaves those rows out,
-  and the pull request lists them as **unmapped**. `npm test` fails on any
-  unmapped label, so that PR can't be merged: add them (the operator id is in
-  `npm run offers:gaps` or the dataset) and run the scrape again.
+- A label the file doesn't know: the scrape still works, leaves those rows out, and the pull request lists them as **unmapped**. `npm test` fails on any unmapped label, so that PR can't be merged: add them (the operator id is in `npm run offers:gaps` or the dataset) and run the scrape again.
 
-When a provider has a row for a specific network AND a MOBI.E-wide row (the
-blog lists "Electroverse @ Rede Mobi.E" and "Electroverse @ Ionity"), the
-specific one wins at that network's chargers.
+When a provider has a row for a specific network AND a MOBI.E-wide row (the blog lists "Electroverse @ Rede Mobi.E" and "Electroverse @ Ionity"), the specific one wins at that network's chargers.
 
 ## Corrections and additions: `offers/manual.json`
 
-Never edit `custofinal.json` by hand: the next scrape would overwrite it.
-Use `manual.json`:
+Never edit `custofinal.json` by hand: the next scrape would overwrite it. Use `manual.json`:
 
 ```json
 { "id": "ionity-tpa-ionity", "prices": { "dcMax": 0.63 },
   "source": "https://...", "checkedAt": "2026-10-28", "why": "IONITY's own announcement" }
 ```
 
-- **Same `id` as a scraped offer**: overrides the fields you list. Prices
-  merge band by band, so you can fix one column. Ids look like
-  `provider-plan-network`; copy them from `custofinal.json`.
+- **Same `id` as a scraped offer**: overrides the fields you list. Prices merge band by band, so you can fix one column. Ids look like `provider-plan-network`; copy them from `custofinal.json`.
 - **`"disable": true`**: removes a scraped offer.
-- **`"add": true`** with a new `id`: adds an offer. Then every field is needed: `label`,
-  `provider`, `plan`, `network`, `scope`, `walkUp`, `subscription`, `fee`,
-  `prices`, `source`, `checkedAt`.
+- **`"add": true`** with a new `id`: adds an offer. Then every field is needed: `label`, `provider`, `plan`, `network`, `scope`, `walkUp`, `subscription`, `fee`, `prices`, `source`, `checkedAt`.
 
-`"sessionEur"` (optional): a fixed amount per session, VAT included, added
-to the total (a connection fee). A subscription's `fee` is not added.
+`"sessionEur"` (optional): a fixed amount per session, VAT included, added to the total (a connection fee). A subscription's `fee` is not added.
 
-`"until"` / `"from"` (optional, `YYYY-MM-DD`, both days included): when the
-offer applies, by the civil day the charge starts where the charger is. A
-launch promotion is two offers: the discounted price with `until`, the
-regular one with `from` the next day (Telpark's app). The option then says
-it's a promotion and until when (`until` on it), and a charge planned after
-that day gets the regular price.
+`"until"` / `"from"` (optional, `YYYY-MM-DD`, both days included): when the offer applies, by the civil day the charge starts where the charger is. A launch promotion is two offers: the discounted price with `until`, the regular one with `from` the next day (Telpark's app). The option then says it's a promotion and until when (`until` on it), and a charge planned after that day gets the regular price.
 
-Two extras never change the total, so the option's note says what they are
-and that they're left out of it:
+Two extras never change the total, so the option's note says what they are and that they're left out of it:
 
-- `"cashback"`: part of what you pay comes back as credit in the
-  provider's app for later charges (Atlante's ChargeBack, paid in
-  GreenGems). It's a list of rows `{ pct, network?, from?, until?, spendAt }`;
-  the first row active on the charge's day whose `network` (a label of
-  `networks.json`; none = any charger) holds the site wins, so put a short
-  campaign that raises it before the regular rows. `spendAt` names where the
-  credit can be spent. Credit isn't money, so it never comes off the total;
-  the option gets `cashback: { pct, eur, spendAt, until }`.
-- `"signupFee"`: `{ eur, per, from, until, locked }`, a lower subscription
-  fee for whoever signs up between `from` and `until` (`locked`: kept while
-  the subscription stays on). Shown on charges up to `until` as a tip for new
-  subscribers; `fee` stays the regular one.
+- `"cashback"`: part of what you pay comes back as credit in the provider's app for later charges (Atlante's ChargeBack, paid in GreenGems). It's a list of rows `{ pct, network?, from?, until?, spendAt }`; the first row active on the charge's day whose `network` (a label of `networks.json`; none = any charger) holds the site wins, so put a short campaign that raises it before the regular rows. `spendAt` names where the credit can be spent. Credit isn't money, so it never comes off the total; the option gets `cashback: { pct, eur, spendAt, until }`.
+- `"signupFee"`: `{ eur, per, from, until, locked }`, a lower subscription fee for whoever signs up between `from` and `until` (`locked`: kept while the subscription stays on). Shown on charges up to `until` as a tip for new subscribers; `fee` stays the regular one.
 
-`offerProblems` (`src/offers-parse.js`) checks both shapes, and `npm test`
-checks that each `network` exists.
+`offerProblems` (`src/offers-parse.js`) checks both shapes, and `npm test` checks that each `network` exists.
 
-An offer can also carry `"audience"`: an id from `offers/audiences.json`
-(`uber-driver`, `powerdot-staff`...) for a price only that group gets. It is
-hidden unless the driver says they belong to it (the tools' `audiences`
-argument), and the option shows the `audience` so the assistant says who
-it's for. CEME tariffs work the same way, with the `audience` that ceme-v2
-returns (EDP's employee tariff). A new group goes in `audiences.json` first;
-`npm test` fails on an offer naming one that isn't there.
+An offer can also carry `"audience"`: an id from `offers/audiences.json` (`uber-driver`, `powerdot-staff`...) for a price only that group gets. It is hidden unless the driver says they belong to it (the tools' `audiences` argument), and the option shows the `audience` so the assistant says who it's for. CEME tariffs work the same way, with the `audience` that ceme-v2 returns (EDP's employee tariff). A new group goes in `audiences.json` first; `npm test` fails on an offer naming one that isn't there.
 
-`"cemeTariffs"` (optional) ties an offer to CEME tariffs whose app bills
-it instead. myAtlante's CEME tariff only prices AC sockets (ceme-v2 marks
-it `AC_DC_FLAT`), and on DC the same app charges a flat price. When the
-driver's `tariff_ids` hold one of those tariffs, the offer is their own
-price: it's `listed` and `viaTariff`, and it becomes the total when none of
-their CEME tariffs applies at the socket. The entries are card keys, the
-tariff id without the voltage or cycle (`atlante-myatlanteac` for
-`atlante-mt-myatlanteac`); `npm test` checks that. Add `"holdersOnly": true`
-when only those tariffs' holders get the price (myAtlante Business on DC):
-the offer is then hidden from every other driver.
+`"cemeTariffs"` (optional) ties an offer to CEME tariffs whose app bills it instead. myAtlante's CEME tariff only prices AC sockets (ceme-v2 marks it `AC_DC_FLAT`), and on DC the same app charges a flat price. When the driver's `tariff_ids` hold one of those tariffs, the offer is their own price: it's `listed` and `viaTariff`, and it becomes the total when none of their CEME tariffs applies at the socket. The entries are card keys, the tariff id without the voltage or cycle (`atlante-myatlanteac` for `atlante-mt-myatlanteac`); `npm test` checks that. Add `"holdersOnly": true` when only those tariffs' holders get the price (myAtlante Business on DC): the offer is then hidden from every other driver.
 
-An override or `disable` whose `id` isn't in the scrape (a typo, or the blog
-renamed the slug) is skipped with a warning at boot, and `npm test` fails
-naming it.
+An override or `disable` whose `id` isn't in the scrape (a typo, or the blog renamed the slug) is skipped with a warning at boot, and `npm test` fails naming it.
 
-Every entry needs a `source` (https) and the `checkedAt` date you read it.
-The source's host must be in `sourceHosts` at the top of `manual.json`, or
-`npm test` fails: a new source is a line there too. After 90 days, users are
-told the price may be out of date.
+Every entry needs a `source` (https) and the `checkedAt` date you read it. The source's host must be in `sourceHosts` at the top of `manual.json`, or `npm test` fails: a new source is a line there too. After 90 days, users are told the price may be out of date.
 
 ## Notes on the NAP's own price: `offers/nap-notes.json`
 
-Outside MOBI.E (Continente, Tesla...) the NAP publishes one price per charger,
-and ohmigo shows it as the operator's price, ranked like any other. If you
-find that price is wrong for an operator or a site (the operator's own page
-says otherwise, say), add a note and that price is left out; the note's
-`why` goes into the quote's assumptions so the user knows why:
+Outside MOBI.E (Continente, Tesla...) the NAP publishes one price per charger, and ohmigo shows it as the operator's price, ranked like any other. If you find that price is wrong for an operator or a site (the operator's own page says otherwise, say), add a note and that price is left out; the note's `why` goes into the quote's assumptions so the user knows why:
 
 ```json
 { "scope": { "operatorIds": ["CONT"] }, "why": "the NAP shows 0.37 at every power; Continente's app charges more on DC",
   "source": "https://...", "checkedAt": "2026-10-29" }
 ```
 
-`scope` takes `operatorIds` (NAP operator ids) or `siteIds`. Every note needs
-`why`, `source` and `checkedAt`.
+`scope` takes `operatorIds` (NAP operator ids) or `siteIds`. Every note needs `why`, `source` and `checkedAt`.
 
-A note can also keep the price and say how to read it, instead of dropping
-it:
+A note can also keep the price and say how to read it, instead of dropping it:
 
-- `"vatIncluded": true`: the operator publishes its NAP price **with** VAT,
-  unlike the rest of the NAP. No VAT is added on top. Check it against the
-  operator's own app at one site before adding one (the note on Tesla in
-  the file says how it was checked).
-- `"timeOfUse": true`: the operator's price changes during the day and the
-  NAP only carries one fixed value, its highest (the DATEX II feed has no
-  way to publish hourly bands). The option gets `peakPrice`,
-  `lookup_charger` gets `napPriceIsPeak`, and both tell the user the price
-  is a ceiling and that only the operator's app has the price per hour.
-- `"walkUp": true`: a bank card at the charger's terminal pays the same
-  price, so the option's label names the app and the card. Don't use it to prefer the offers: a NAP
-price that differs from an offer isn't wrong by itself, both are shown.
+- `"vatIncluded": true`: the operator publishes its NAP price **with** VAT, unlike the rest of the NAP. No VAT is added on top. Check it against the operator's own app at one site before adding one (the note on Tesla in the file says how it was checked).
+- `"timeOfUse": true`: the operator's price changes during the day and the NAP only carries one fixed value, its highest (the DATEX II feed has no way to publish hourly bands). The option gets `peakPrice`, `lookup_charger` gets `napPriceIsPeak`, and both tell the user the price is a ceiling and that only the operator's app has the price per hour.
+- `"walkUp": true`: a bank card at the charger's terminal pays the same price, so the option's label names the app and the card. Don't use it to prefer the offers: a NAP price that differs from an offer isn't wrong by itself, both are shown.
 
 ## Finding what's missing
 
@@ -227,11 +116,7 @@ price that differs from an offer isn't wrong by itself, both are shown.
 npm run offers:gaps
 ```
 
-This lists operators whose sites show signs of selling directly, meaning the
-NAP lists card, NFC, pinpad or website payment, or MOBI.E has an ad hoc price,
-but no offer is scoped to them. Biggest first. Either add them to
-`manual.json` from the operator's own price page, or tell the blog's author.
-It also lists stale entries.
+This lists operators whose sites show signs of selling directly, meaning the NAP lists card, NFC, pinpad or website payment, or MOBI.E has an ad hoc price, but no offer is scoped to them. Biggest first. Either add them to `manual.json` from the operator's own price page, or tell the blog's author. It also lists stale entries.
 
 ## Run it yourself
 
@@ -243,26 +128,9 @@ npm test                           # validates all three files
 
 ## Limits
 
-- Per kWh, plus a per-session fee (`sessionEur`) and a per-minute price per
-  band (`minuteEur`), both from `manual.json`. Where an offer bills per minute
-  (`perMinute`, from a notice's "⚡️+🕘") the blog gives no rate: until
-  `manual.json` has its `minuteEur` for that band, it has no price there,
-  `lookup_charger` lists it with `perMinute: true`, and the cost tools leave
-  it out and say so in the assumptions. If someone checks and finds no time
-  price there, `manual.json` empties `perMinute` instead. The minutes counted
-  are the minutes plugged in, like an operator's time fee.
-- AC bands: the list has one column for all AC above 7.4 kW (`ac22`); a
-  notice splits it into `ac11`, `ac22` and `ac43`. An offer without `ac11` or
-  `ac43` uses its `ac22` price there (`bandPrice()`).
-- One price per power band for a whole network. Sites priced differently
-  within one network can't be told apart.
-- "Alguns Mobi.E" offers are left out until someone knows which chargers
-  they mean.
-- **Island VAT.** The blog's prices carry mainland VAT (23 %). Madeira and
-  the Azores have lower VAT, and nobody says whether these apps charge less
-  there. On island chargers each direct option keeps its price, gets
-  `vatUnverified: true`, and its note tells the user to confirm it. (The
-  NAP and MOBI.E prices don't have this problem: they come without VAT, so
-  `quote.js` adds the island's own rate.)
-- The blog is one person's work. If it stops, the weekly job keeps the last
-  prices and `isStale` starts warning users after 90 days.
+- Per kWh, plus a per-session fee (`sessionEur`) and a per-minute price per band (`minuteEur`), both from `manual.json`. Where an offer bills per minute (`perMinute`, from a notice's "⚡️+🕘") the blog gives no rate: until `manual.json` has its `minuteEur` for that band, it has no price there, `lookup_charger` lists it with `perMinute: true`, and the cost tools leave it out and say so in the assumptions. If someone checks and finds no time price there, `manual.json` empties `perMinute` instead. The minutes counted are the minutes plugged in, like an operator's time fee.
+- AC bands: the list has one column for all AC above 7.4 kW (`ac22`); a notice splits it into `ac11`, `ac22` and `ac43`. An offer without `ac11` or `ac43` uses its `ac22` price there (`bandPrice()`).
+- One price per power band for a whole network. Sites priced differently within one network can't be told apart.
+- "Alguns Mobi.E" offers are left out until someone knows which chargers they mean.
+- **Island VAT.** The blog's prices carry mainland VAT (23 %). Madeira and the Azores have lower VAT, and nobody says whether these apps charge less there. On island chargers each direct option keeps its price, gets `vatUnverified: true`, and its note tells the user to confirm it. (The NAP and MOBI.E prices don't have this problem: they come without VAT, so `quote.js` adds the island's own rate.)
+- The blog is one person's work. If it stops, the weekly job keeps the last prices and `isStale` starts warning users after 90 days.

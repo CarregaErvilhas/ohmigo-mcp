@@ -22,118 +22,42 @@ Words in **bold** are in the [glossary](00-glossary.md).
  JSON (+ an inline results page) back to the assistant, which answers the user
 ```
 
-ohmigo stores **nothing about the user**. No accounts, no logins, no
-database. The car, the battery size and the user's CEME cards live in the
-assistant's memory and arrive with every call. That keeps the server simple,
-cheap to run, and private by construction.
+ohmigo stores **nothing about the user**. No accounts, no logins, no database. The car, the battery size and the user's CEME cards live in the assistant's memory and arrive with every call. That keeps the server simple, cheap to run, and private by construction.
 
 ## A request, step by step
 
 Follow one `find_cheapest_charging` call through the code:
 
-1. **`src/server.js`** receives `POST /mcp`, creates a fresh MCP server
-   object for this request, and hands it the request.
-2. **`src/mcp.js`** validates the arguments against the zod schema, picks the
-   language (`lang`), and turns "Leiria" into coordinates
-   (`Dataset.resolvePlace`).
-3. **`src/live.js`** makes sure the live status is recent. A copy past its TTL
-   but still usable answers at once, flagged, while the NAP feed downloads
-   behind it; with no usable copy the user waits and sees a progress message
-   ([03](03-live-status.md)).
-4. **`src/data.js`** finds every site within the radius, or along the route,
-   and keeps the plugs that pass the filters. `mcp.js` keeps one plug per
-   kind per site (ten identical T2s price the same) and, on a wide search,
-   only the nearest sites up to a cap; the result says `truncated` when that
-   bit.
+1. **`src/server.js`** receives `POST /mcp`, creates a fresh MCP server object for this request, and hands it the request.
+2. **`src/mcp.js`** validates the arguments against the zod schema, picks the language (`lang`), and turns "Leiria" into coordinates (`Dataset.resolvePlace`).
+3. **`src/live.js`** makes sure the live status is recent. A copy past its TTL but still usable answers at once, flagged, while the NAP feed downloads behind it; with no usable copy the user waits and sees a progress message ([03](03-live-status.md)).
+4. **`src/data.js`** finds every site within the radius, or along the route, and keeps the plugs that pass the filters. `mcp.js` keeps one plug per kind per site (ten identical T2s price the same) and, on a wide search, only the nearest sites up to a cap; the result says `truncated` when that bit.
 5. **`src/quote.js`** prices every plug:
-   - **`src/charging.js`**: how many kWh the meter will count, and how long it takes;
-   - **`src/profile.js`**: when each of those kWh goes in, cut into quarter-hours;
-   - **`src/ceme.js`**: one call to ceme-v2 for every CEME tariff's energy price,
-     each quarter at its own off-peak/peak period and OMIE price;
-   - **`src/opc.js`**: the operator's fee for that energy and time;
-   - **`src/offers.js`**: walk-up, app, eMSP and subscription prices that apply here;
-   - **`src/promos.js`**: the CEME promotions (from ceme-v2) that hold at this charger's network.
+- **`src/charging.js`**: how many kWh the meter will count, and how long it takes;
+- **`src/profile.js`**: when each of those kWh goes in, cut into quarter-hours;
+- **`src/ceme.js`**: one call to ceme-v2 for every CEME tariff's energy price, each quarter at its own off-peak/peak period and OMIE price;
+- **`src/opc.js`**: the operator's fee for that energy and time;
+- **`src/offers.js`**: walk-up, app, eMSP and subscription prices that apply here;
+- **`src/promos.js`**: the CEME promotions (from ceme-v2) that hold at this charger's network.
 
-   Each way to pay becomes one entry in `options` ([02](02-cost-math.md)).
-6. Still in `quote.js`, `rank` drops busy or broken chargers, keeps the
-   cheapest plug per site, and sorts sites by `best`: the cheapest option
-   the user can use or, with `tariff_ids`, a tariff the user listed, and never
-   a CEME tariff they didn't list.
-   If ceme-v2 doesn't answer, plugs on MOBI.E come back without a CEME total
-   (`cemeUnavailable`) and the other ways to pay still rank.
-7. `mcp.js` returns the top results as `structuredContent`, and the same
-   JSON as text (after a few summary lines) for clients that only pass the
-   text to the model. Chat apps that
-   support **MCP Apps** also load `ui/results.html` (built by `src/view.js`)
-   and show it inline.
+Each way to pay becomes one entry in `options` ([02](02-cost-math.md)).
+6. Still in `quote.js`, `rank` drops busy or broken chargers, keeps the cheapest plug per site, and sorts sites by `best`: the cheapest option the user can use or, with `tariff_ids`, a tariff the user listed, and never a CEME tariff they didn't list. If ceme-v2 doesn't answer, plugs on MOBI.E come back without a CEME total (`cemeUnavailable`) and the other ways to pay still rank.
+7. `mcp.js` returns the top results as `structuredContent`, and the same JSON as text (after a few summary lines) for clients that only pass the text to the model. Chat apps that support **MCP Apps** also load `ui/results.html` (built by `src/view.js`) and show it inline.
 
 ## What the assistant reads
 
-Before it calls anything, the assistant gets the server's `INSTRUCTIONS` and
-the tool list (names, descriptions, argument schemas), all in `src/mcp.js`.
-Both sit in its context in every conversation where ohmigo is connected,
-whether the user asks about charging or not, and some clients cut the
-instructions short. So you put each piece of guidance in the narrowest place
-it applies:
+Before it calls anything, the assistant gets the server's `INSTRUCTIONS` and the tool list (names, descriptions, argument schemas), all in `src/mcp.js`. Both sit in its context in every conversation where ohmigo is connected, whether the user asks about charging or not, and some clients cut the instructions short. So you put each piece of guidance in the narrowest place it applies:
 
-- **`INSTRUCTIONS`**: only what holds across tools (who's who on MOBI.E, never
-  ask for a charger id, what to look up yourself), plus which questions go to
-  `ev_rules_portugal` (the Voltaria guides). That routing has to live here: clients that load tools on demand
-  (Claude Code's tool search) show only tool names until one is loaded, and
-  the instructions are the one text they always show. `INSTRUCTIONS_MAX` is its
-  budget, with the essentials in the first 512 characters; `test/budget.test.js`
-  enforces it and each tool description's 2048. How to present a price lives
-  in the two pricing tools' descriptions.
-- **Skills**: clients that support the MCP Skills extension also list the
-  Voltaria guides as skills (`skills/list`) and read each one as a resource,
-  `skill://voltaria/<topic>/SKILL.md`. `src/voltaria.js` builds that catalog
-  once at start-up and `createServer` attaches it. The skills carry the guides
-  only; the dated facts stay behind `ev_rules_portugal`.
-- **A tool's description, or an argument's `.describe()`**: what only that
-  tool or argument needs. Clients that load tools on demand only read these
-  when the tool is about to be used, so this text costs nothing until then.
-  Each description names the domain ("EV", "Portugal"), because that's what
-  those clients search to find the tool.
-- **The result** (`assumptions`, `notes`, an option's `note`, through
-  `src/i18n.js`): what holds only for some answers (a peak price, a promotion
-  for new customers, a missing direction). It shows up exactly when it
-  applies, and every client passes it on. `ui/results.html` puts some of these
-  in front of the driver with no assistant in between: the `assumptions`, each
-  result's `note`, the `note` of the non-CEME options, and each promotion's
-  `note`. Where a result's or a promotion's `note` is written for the
-  assistant, `quote.js` also writes a `driverNote`, and the page shows that
-  instead. The top-level `notes` list isn't shown there, so it's free to give
-  the assistant orders. A note it has to act on works better as an order ("tell
-  the user…") than as a statement of fact. The summary lines above the JSON
-  in the text are what the assistant reads first and quotes, so a fact about
-  one charger that the answer must carry goes on that charger's line too (the
-  walk-up price, the blog behind a price, an inferred operator, a socket with
-  no cable).
+- **`INSTRUCTIONS`**: only what holds across tools (who's who on MOBI.E, never ask for a charger id, what to look up yourself), plus which questions go to `ev_rules_portugal` (the Voltaria guides). That routing has to live here: clients that load tools on demand (Claude Code's tool search) show only tool names until one is loaded, and the instructions are the one text they always show. `INSTRUCTIONS_MAX` is its budget, with the essentials in the first 512 characters; `test/budget.test.js` enforces it and each tool description's 2048. How to present a price lives in the two pricing tools' descriptions.
+- **Skills**: clients that support the MCP Skills extension also list the Voltaria guides as skills (`skills/list`) and read each one as a resource, `skill://voltaria/<topic>/SKILL.md`. `src/voltaria.js` builds that catalog once at start-up and `createServer` attaches it. The skills carry the guides only; the dated facts stay behind `ev_rules_portugal`.
+- **A tool's description, or an argument's `.describe()`**: what only that tool or argument needs. Clients that load tools on demand only read these when the tool is about to be used, so this text costs nothing until then. Each description names the domain ("EV", "Portugal"), because that's what those clients search to find the tool.
+- **The result** (`assumptions`, `notes`, an option's `note`, through `src/i18n.js`): what holds only for some answers (a peak price, a promotion for new customers, a missing direction). It shows up exactly when it applies, and every client passes it on. `ui/results.html` puts some of these in front of the driver with no assistant in between: the `assumptions`, each result's `note`, the `note` of the non-CEME options, and each promotion's `note`. Where a result's or a promotion's `note` is written for the assistant, `quote.js` also writes a `driverNote`, and the page shows that instead. The top-level `notes` list isn't shown there, so it's free to give the assistant orders. A note it has to act on works better as an order ("tell the user…") than as a statement of fact. The summary lines above the JSON in the text are what the assistant reads first and quotes, so a fact about one charger that the answer must carry goes on that charger's line too (the walk-up price, the blog behind a price, an inferred operator, a socket with no cable).
 
-Before a pricing answer goes out, `src/slim.js` takes the repetition out of
-it, because the whole result stays in the assistant's context for the rest of
-the conversation. The same car and start time give every charger the same
-assumptions, so those go once into a top-level `assumptions`. A promotion that
-shows up at several chargers keeps its id, label and what differs (`total`,
-`saving`) in each result, and the rest goes once into a top-level `promos`, by
-id. The blog's name goes once into `sources` (each direct option says
-`source: "custofinal"`). `best` is said once: the option it is leaves
-`options`, which then lists the other ways to pay, and a `headline` that isn't
-`best` is named by `headlineTariffId`. A CEME option keeps its `label`
-("CEME · tariff") without `ceme` and `name`, and flags that are false are
-left out, except `requiresOtherContract`, which always says whether the driver
-can use that price. The `driverNote`s go into the result's `_meta`
-(`driverNotes`, by point), which the page receives and the assistant doesn't
-read. With one result, its assumptions stay where they are. The page puts the
-pieces back together, so the driver sees each charger whole.
+Before a pricing answer goes out, `src/slim.js` takes the repetition out of it, because the whole result stays in the assistant's context for the rest of the conversation. The same car and start time give every charger the same assumptions, so those go once into a top-level `assumptions`. A promotion that shows up at several chargers keeps its id, label and what differs (`total`, `saving`) in each result, and the rest goes once into a top-level `promos`, by id. The blog's name goes once into `sources` (each direct option says `source: "custofinal"`). `best` is said once: the option it is leaves `options`, which then lists the other ways to pay, and a `headline` that isn't `best` is named by `headlineTariffId`. A CEME option keeps its `label` ("CEME · tariff") without `ceme` and `name`, and flags that are false are left out, except `requiresOtherContract`, which always says whether the driver can use that price. The `driverNote`s go into the result's `_meta` (`driverNotes`, by point), which the page receives and the assistant doesn't read. With one result, its assumptions stay where they are. The page puts the pieces back together, so the driver sees each charger whole.
 
-The tool list has a budget too (`TOOLS_MAX_CHARS` in `test/http.test.js`).
-When it bites, trim before you raise it, and prefer one more argument on an
-existing tool over a new tool that does almost the same thing.
+The tool list has a budget too (`TOOLS_MAX_CHARS` in `test/http.test.js`). When it bites, trim before you raise it, and prefer one more argument on an existing tool over a new tool that does almost the same thing.
 
-Whether a model actually follows all this is what `evals/` checks: a model
-plays the assistant against a local server, and its tool calls and replies are
-graded ([evals/README.md](../evals/README.md)).
+Whether a model actually follows all this is what `evals/` checks: a model plays the assistant against a local server, and its tool calls and replies are graded ([evals/README.md](../evals/README.md)).
 
 ## Files
 
@@ -186,149 +110,46 @@ graded ([evals/README.md](../evals/README.md)).
 
 ## Finding the charger the user means
 
-Nobody knows a charger's id. People say "the Continente in Leiria", "IONITY
-Mealhada", "the Lidl in Coimbra", or read the code off the sticker
-("LRA-00156"). `lookup_charger` takes those words (`src/lookup.js`):
+Nobody knows a charger's id. People say "the Continente in Leiria", "IONITY Mealhada", "the Lidl in Coimbra", or read the code off the sticker ("LRA-00156"). `lookup_charger` takes those words (`src/lookup.js`):
 
-- **A code** finds its site however it's written: with or without the
-  operator prefix (`GLP-LRA-00156`), MOBI.E's (`MOBI-LRA-00156`), the leading
-  zeros, or the socket number (`LRA-00156-02`). Ids that aren't MOBI.E codes
-  (Tesla's UUIDs, Continente's `0001PL0002`) match whole.
-- An **old code** a site had before (OpenStreetMap's `old_ref`, the sticker
-  of a charger that changed operator) finds the site it is now, with a note
-  that the operator changed.
-- **Words** must all appear in what the site is known by: the NAP's operator,
-  the network labels in `offers/networks.json` ("Powerdot" for `HORZ`), the
-  `osm` block from nap-dashboard (OpenStreetMap's name, brand, operator:
-  often the chargers' owner or the shop they're at, and the chargers' make
-  and model, without their bare numbers), town and address. A word matches the start of a
-  site word, and longer words forgive one typo. Words like "posto", "area de
-  servico" or "near" are ignored.
-- A **town** in the words orders the matches by distance to it, so "IONITY
-  Mealhada" lists the IONITY sites nearest Mealhada when there's none in it.
-  When no site has every word, each result says which words it lacks
-  (`missing`), and the assistant is told not to pass it off as the one.
-  When the sites that came back matched only the town or street, the missing
-  words name a place the data doesn't know (a shopping centre, a car park),
-  and the assistant is told so, and to search by lat/lon or ask for the
-  address instead of saying the place has no charger. A place is findable
-  by name only when OpenStreetMap carries its name on the charger.
+- **A code** finds its site however it's written: with or without the operator prefix (`GLP-LRA-00156`), MOBI.E's (`MOBI-LRA-00156`), the leading zeros, or the socket number (`LRA-00156-02`). Ids that aren't MOBI.E codes (Tesla's UUIDs, Continente's `0001PL0002`) match whole.
+- An **old code** a site had before (OpenStreetMap's `old_ref`, the sticker of a charger that changed operator) finds the site it is now, with a note that the operator changed.
+- **Words** must all appear in what the site is known by: the NAP's operator, the network labels in `offers/networks.json` ("Powerdot" for `HORZ`), the `osm` block from nap-dashboard (OpenStreetMap's name, brand, operator: often the chargers' owner or the shop they're at, and the chargers' make and model, without their bare numbers), town and address. A word matches the start of a site word, and longer words forgive one typo. Words like "posto", "area de servico" or "near" are ignored.
+- A **town** in the words orders the matches by distance to it, so "IONITY Mealhada" lists the IONITY sites nearest Mealhada when there's none in it. When no site has every word, each result says which words it lacks (`missing`), and the assistant is told not to pass it off as the one. When the sites that came back matched only the town or street, the missing words name a place the data doesn't know (a shopping centre, a car park), and the assistant is told so, and to search by lat/lon or ask for the address instead of saying the place has no charger. A place is findable by name only when OpenStreetMap carries its name on the charger.
 
-`find_chargers` lists many sites, so it groups a site's identical sockets
-(one entry with a `count` and a live `status` count) and puts at a glance on
-each site the sockets free now (`available`, `total`) and, for networks
-outside MOBI.E (Tesla...), the NAP price (`napPriceWithVat` / `napPriceExVat`).
-MOBI.E sites carry no price there: it depends on the driver's CEME.
+`find_chargers` lists many sites, so it groups a site's identical sockets (one entry with a `count` and a live `status` count) and puts at a glance on each site the sockets free now (`available`, `total`) and, for networks outside MOBI.E (Tesla...), the NAP price (`napPriceWithVat` / `napPriceExVat`). MOBI.E sites carry no price there: it depends on the driver's CEME.
 
-`estimate_charging_cost` takes the same text as `site`. Several NAP sites in
-one spot (a motorway service area often has one per charger) are one place to
-the driver and are priced together; matches in different places come back as
-a question for the user. The other two search tools take the words as `query`,
-a filter on top of the place or route ("Continente" near Leiria).
+`estimate_charging_cost` takes the same text as `site`. Several NAP sites in one spot (a motorway service area often has one per charger) are one place to the driver and are priced together; matches in different places come back as a question for the user. The other two search tools take the words as `query`, a filter on top of the place or route ("Continente" near Leiria).
 
-**Who operates vs who owns.** The NAP's operator is the OPC that runs the
-charger and bills its fee. The owner can be someone else: Lidl's chargers are
-owned by Lidl and operated by Galp, so the NAP says Galp and OSM's brand says
-Lidl. Both are right, and both are searchable.
+**Who operates vs who owns.** The NAP's operator is the OPC that runs the charger and bills its fee. The owner can be someone else: Lidl's chargers are owned by Lidl and operated by Galp, so the NAP says Galp and OSM's brand says Lidl. Both are right, and both are searchable.
 
-**Sites the NAP leaves nameless.** Some operators publish part of their sites
-with neither `operator` nor `operatorId` (Continente's `CNT-0001PL0002`). When
-you load a dataset, `lendOperators` (`src/lookup.js`) gives such a site the
-operator of its id prefix, if the named sites with that prefix all have one
-operator, and marks it `operatorInferred`. From there on it's that operator's
-site for search, offers, promotions, labels, `list_operators` and `/dados`;
-the answers say the operator was inferred (`assume.operatorInferred`). A site
-with nobody to lend it a name stays nameless: on `/dados` those share one row.
+**Sites the NAP leaves nameless.** Some operators publish part of their sites with neither `operator` nor `operatorId` (Continente's `CNT-0001PL0002`). When you load a dataset, `lendOperators` (`src/lookup.js`) gives such a site the operator of its id prefix, if the named sites with that prefix all have one operator, and marks it `operatorInferred`. From there on it's that operator's site for search, offers, promotions, labels, `list_operators` and `/dados`; the answers say the operator was inferred (`assume.operatorInferred`). A site with nobody to lend it a name stays nameless: on `/dados` those share one row.
 
 ## Motorways: which side of the road
 
-A motorway service area usually has a charger site on each side of the road,
-and a driver can only reach the one on their side. Both often share a name
-and even an address in the NAP, so what tells them apart is where the driver
-is heading (`src/direction.js`):
+A motorway service area usually has a charger site on each side of the road, and a driver can only reach the one on their side. Both often share a name and even an address in the NAP, so what tells them apart is where the driver is heading (`src/direction.js`):
 
-- **Without a direction**, `estimate_charging_cost` doesn't guess: it answers
-  with the sides and tells the assistant to ask the user which way they're
-  going, then call again with `towards` (a town or lat/lon).
-  `lookup_charger` flags the pair (`directionNeeded`, `otherSide`).
-- **In a search near a place** (`find_chargers`, `find_cheapest_charging`),
-  each side carries the direction it says it serves (`direction`, as
-  published) and the side across the road (`otherSide`), and the other side
-  comes along even when the limit cut it. When the search centre is a few km
-  away, a note names the side a driver coming from there reaches (`markSides`
-  in `src/mcp.js`).
-- **With a direction**, the side is the one whose published direction
-  agrees, in the OSM name, the NAP name or the NAP address: compass points
-  ("N/S", "sentido Norte-Sul"), "sentido" and a town or two ("sentido
-  Lisboa", "sentido Marateca - Caia"), or two towns in brackets ("(LIS/POR)",
-  "(OLH-VRA)"). The towns are often road-sign abbreviations: a three-letter
-  one is first read as the municipality of the MOBI.E codes, then as a place
-  name (`resolveSignTown` in `src/data.js`), and a label that can't be placed
-  still reaches the driver as written. Compass letters count in capitals
-  only, and "S/N" in an address only when that address is on a motorway:
-  elsewhere it means sem número. Without one, the **right-hand rule**: Portugal drives on the right,
-  so the service area to the right of the travel direction. That's a guess
-  from coordinates, so it only decides when one side is clearly to the right,
-  and the result carries an assumption telling the user to check the signs.
-  When it can't decide, both sides are priced.
-- **On a route**, the far side is dropped only when the sites publish their
-  direction. Routes are often a few waypoints, too coarse for twins a hundred
-  metres apart.
+- **Without a direction**, `estimate_charging_cost` doesn't guess: it answers with the sides and tells the assistant to ask the user which way they're going, then call again with `towards` (a town or lat/lon). `lookup_charger` flags the pair (`directionNeeded`, `otherSide`).
+- **In a search near a place** (`find_chargers`, `find_cheapest_charging`), each side carries the direction it says it serves (`direction`, as published) and the side across the road (`otherSide`), and the other side comes along even when the limit cut it. When the search centre is a few km away, a note names the side a driver coming from there reaches (`markSides` in `src/mcp.js`).
+- **With a direction**, the side is the one whose published direction agrees, in the OSM name, the NAP name or the NAP address: compass points ("N/S", "sentido Norte-Sul"), "sentido" and a town or two ("sentido Lisboa", "sentido Marateca - Caia"), or two towns in brackets ("(LIS/POR)", "(OLH-VRA)"). The towns are often road-sign abbreviations: a three-letter one is first read as the municipality of the MOBI.E codes, then as a place name (`resolveSignTown` in `src/data.js`), and a label that can't be placed still reaches the driver as written. Compass letters count in capitals only, and "S/N" in an address only when that address is on a motorway: elsewhere it means sem número. Without one, the **right-hand rule**: Portugal drives on the right, so the service area to the right of the travel direction. That's a guess from coordinates, so it only decides when one side is clearly to the right, and the result carries an assumption telling the user to check the signs. When it can't decide, both sides are priced.
+- **On a route**, the far side is dropped only when the sites publish their direction. Routes are often a few waypoints, too coarse for twins a hundred metres apart.
 
-The rule is checked against every pair the data labels
-(`test/direction.test.js`). Because twins can stand closer together than two
-chargers of one car park, motorway sites only count as one place when their
-labels agree or they're a few dozen metres apart (`samePlace`).
+The rule is checked against every pair the data labels (`test/direction.test.js`). Because twins can stand closer together than two chargers of one car park, motorway sites only count as one place when their labels agree or they're a few dozen metres apart (`samePlace`).
 
 ## Design decisions worth knowing
 
-**Why not compute the energy price here?** ceme-v2 already does it, with
-indexed tariffs, time zones, daylight saving and island VAT. Doing it twice
-means two places to fix every bug, so ohmigo calls its API.
+**Why not compute the energy price here?** ceme-v2 already does it, with indexed tariffs, time zones, daylight saving and island VAT. Doing it twice means two places to fix every bug, so ohmigo calls its API.
 
-**Why no auth?** The data is public and nothing linked to a user is kept. A login would only
-add friction for people trying it in a chat app. If ohmigo ever stores
-something per user, that changes.
+**Why no auth?** The data is public and nothing linked to a user is kept. A login would only add friction for people trying it in a chat app. If ohmigo ever stores something per user, that changes.
 
-**Why fetch live status on demand instead of polling?** Traffic is low, and a
-poller would download the whole feed every few minutes for nobody ([03](03-live-status.md)).
+**Why fetch live status on demand instead of polling?** Traffic is low, and a poller would download the whole feed every few minutes for nobody ([03](03-live-status.md)).
 
-**Why one JSON file for the dataset, not a database?** The sites fit in
-memory, and filtering them for a search is a few milliseconds of looping (only
-grouping the hits into places buckets them, `mapSquares` in `src/direction.js`).
-A database would be one more service to run, for no gain.
+**Why one JSON file for the dataset, not a database?** The sites fit in memory, and filtering them for a search is a few milliseconds of looping (only grouping the hits into places buckets them, `mapSquares` in `src/direction.js`). A database would be one more service to run, for no gain.
 
-**Why are CHAdeMO sockets hidden by default?** Only some cars have that port,
-and which port a car has depends on its exact version, not just the model
-(the Nissan Leaf had CHAdeMO until the 2026 one, which has CCS2). Send any other
-driver to a CHAdeMO socket and they can't charge. So the driver tools leave
-CHAdeMO out unless the assistant lists `CHADEMO` in `connectors` (`filterOf` in
-`mcp.js`): the car has the port, or the user asked. If the words name a charger
-that only has CHAdeMO, the answer says that instead of "no such charger".
-`list_operators` counts every socket: it describes the network, not one car.
-Where it counts sockets on MOBI.E with no operator fee in MOBI.E's file
-(regime `mobie_sem_tarifa`), it also names those sites in `noOpcTariffSites`,
-so the assistant can look one up instead of only reporting a number.
+**Why are CHAdeMO sockets hidden by default?** Only some cars have that port, and which port a car has depends on its exact version, not just the model (the Nissan Leaf had CHAdeMO until the 2026 one, which has CCS2). Send any other driver to a CHAdeMO socket and they can't charge. So the driver tools leave CHAdeMO out unless the assistant lists `CHADEMO` in `connectors` (`filterOf` in `mcp.js`): the car has the port, or the user asked. If the words name a charger that only has CHAdeMO, the answer says that instead of "no such charger". `list_operators` counts every socket: it describes the network, not one car. Where it counts sockets on MOBI.E with no operator fee in MOBI.E's file (regime `mobie_sem_tarifa`), it also names those sites in `noOpcTariffSites`, so the assistant can look one up instead of only reporting a number.
 
-**Why does every socket carry `plug` and `tar`?** The driver has to know which
-plug to grab (and whether to bring a cable), and at a MOBI.E charger whether it
-hangs from low (BT) or medium voltage (MT), which picks the TAR inside the CEME
-price. Both come from `src/socket.js`, in the user's language.
+**Why does every socket carry `plug` and `tar`?** The driver has to know which plug to grab (and whether to bring a cable), and at a MOBI.E charger whether it hangs from low (BT) or medium voltage (MT), which picks the TAR inside the CEME price. Both come from `src/socket.js`, in the user's language.
 
-**Why does a DC socket sometimes carry `kwAt400V` or `kwForCar`?** Its `kw` is
-what it gives at the top of its voltage range, and most cars have a 400 V
-battery: what they get is the socket's amps × their volts, often far less (a
-400 kW, 600 A socket gives a 400 V car 240 kW). So every DC socket whose amps
-cap it below `kw` says what a 400 V car gets (`kwAt400V`). When the assistant
-passes `car_voltage`, it says what that car gets instead (`kwForCar`), and
-`min_kw`, the whole-country order of `find_chargers` ("the most powerful
-chargers for my 400 V car") and the session's duration use that figure.
-Without `car_voltage`, filters, order and duration stay on `kw`: we don't
-guess the car. Both carry `ampsSource`: `osm` when OpenStreetMap saw that
-current on the charger, `nap` when it's only the operator's declaration
-([05](05-dataset.md)).
+**Why does a DC socket sometimes carry `kwAt400V` or `kwForCar`?** Its `kw` is what it gives at the top of its voltage range, and most cars have a 400 V battery: what they get is the socket's amps × their volts, often far less (a 400 kW, 600 A socket gives a 400 V car 240 kW). So every DC socket whose amps cap it below `kw` says what a 400 V car gets (`kwAt400V`). When the assistant passes `car_voltage`, it says what that car gets instead (`kwForCar`), and `min_kw`, the whole-country order of `find_chargers` ("the most powerful chargers for my 400 V car") and the session's duration use that figure. Without `car_voltage`, filters, order and duration stay on `kw`: we don't guess the car. Both carry `ampsSource`: `osm` when OpenStreetMap saw that current on the charger, `nap` when it's only the operator's declaration ([05](05-dataset.md)).
 
-**Why does the assistant send `lang`?** Some of our text reaches the user
-almost word for word (assumptions, payment labels, the progress message, the
-inline page). We write it in Portuguese and English; for any other language
-the assistant translates it.
+**Why does the assistant send `lang`?** Some of our text reaches the user almost word for word (assumptions, payment labels, the progress message, the inline page). We write it in Portuguese and English; for any other language the assistant translates it.

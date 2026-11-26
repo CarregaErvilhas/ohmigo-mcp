@@ -10,9 +10,7 @@ npm test
 npm start                 # http://127.0.0.1:3002/mcp
 ```
 
-Without `data/chargers.json` the server downloads the dataset from Pages
-([05](05-dataset.md)). On boot it also starts one download of the live NAP
-feed, which takes ~20 s; requests made during that time wait for it.
+Without `data/chargers.json` the server downloads the dataset from Pages ([05](05-dataset.md)). On boot it also starts one download of the live NAP feed, which takes ~20 s; requests made during that time wait for it.
 
 Call a tool from the terminal:
 
@@ -22,88 +20,34 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
 
 Progress messages go to stderr, the JSON result to stdout.
 
-`GET /` is the landing page for people, in Portuguese, and `GET /en` the same
-page in English: what ohmigo is and how to add it to each assistant.
-`src/site.js` renders `site/index.html` once at boot, one copy per language with
-the text already in the HTML, so restart the server to see edits. The language
-comes from the URL, not from the browser, and an old `?lang=` link redirects to
-the right URL. The flag links go to the other URL; on `/` a browser that picked
-English before is sent to `/en` (the page's script, `localStorage`). The
-sentences live in the `#strings` block at the bottom, both languages with the
-same keys (`test/site.test.js` checks). The hero's topic buttons swap the
-card's question, answer and source with the `topic.<name>.*` strings. The
-tips and guide topics restate what the Voltaria skills say, so check them when
-a skill changes. The theme button in the header saves `ohmigo.theme` in
-`localStorage`; a small script in `<head>` applies it before the first paint,
-and with nothing saved the page follows the system's light or dark setting.
-The privacy, support and terms pages get the same `<head>` script, so the
-choice holds there too. A browser that opens `/mcp` is sent to
-`/#instalar`, since people paste the address there by mistake; MCP clients
-never ask for HTML, so they're unaffected.
+`GET /` is the landing page for people, in Portuguese, and `GET /en` the same page in English: what ohmigo is and how to add it to each assistant. `src/site.js` renders `site/index.html` once at boot, one copy per language with the text already in the HTML, so restart the server to see edits. The language comes from the URL, not from the browser, and an old `?lang=` link redirects to the right URL. The flag links go to the other URL; on `/` a browser that picked English before is sent to `/en` (the page's script, `localStorage`). The sentences live in the `#strings` block at the bottom, both languages with the same keys (`test/site.test.js` checks). The hero's topic buttons swap the card's question, answer and source with the `topic.<name>.*` strings. The tips and guide topics restate what the Voltaria skills say, so check them when a skill changes. The theme button in the header saves `ohmigo.theme` in `localStorage`; a small script in `<head>` applies it before the first paint, and with nothing saved the page follows the system's light or dark setting. The privacy, support and terms pages get the same `<head>` script, so the choice holds there too. A browser that opens `/mcp` is sent to `/#instalar`, since people paste the address there by mistake; MCP clients never ask for HTML, so they're unaffected.
 
-`GET /privacidade`, `GET /suporte` and `GET /termos` are the privacy, support and
-terms pages that the assistants' directories ask for, in Portuguese;
-`GET /privacy`, `GET /support` and `GET /terms` are their English copies. They work the same way: one source,
-`site/legal.html`, with the same two-language strings block and parity test, and
-`src/site.js` renders one copy per URL at boot (`LEGAL` lists each page's
-sections). Their only script is the landing page's theme script
-(`THEME_SCRIPT` in `src/site.js`), and their CSP allows that one by its hash:
-the language buttons are plain links, an old `?lang=` link redirects too, and the links home
-carry `?lang=` so the landing page's script saves the language being read. If
-the server starts keeping or sending
-anything new about the user, update the privacy page first.
+`GET /privacidade`, `GET /suporte` and `GET /termos` are the privacy, support and terms pages that the assistants' directories ask for, in Portuguese; `GET /privacy`, `GET /support` and `GET /terms` are their English copies. They work the same way: one source, `site/legal.html`, with the same two-language strings block and parity test, and `src/site.js` renders one copy per URL at boot (`LEGAL` lists each page's sections). Their only script is the landing page's theme script (`THEME_SCRIPT` in `src/site.js`), and their CSP allows that one by its hash: the language buttons are plain links, an old `?lang=` link redirects too, and the links home carry `?lang=` so the landing page's script saves the language being read. If the server starts keeping or sending anything new about the user, update the privacy page first.
 
-`GET /grupo` and `GET /group` are the group page: the sites of the same
-community, in the order `GROUP` in `src/site.js` lists them, with ohmigo
-marked "you are here". It's built like the legal pages (its own source,
-`site/grupo.html`, the theme script as its only script, one copy per URL at
-boot). The mascots are local files in `site/grupo/`, served at
-`/grupo/<id>.svg`, so the page asks no other host for anything. The other
-sites have the same page in their own style; when a description changes on
-one, bring the others in step.
+`GET /grupo` and `GET /group` are the group page: the sites of the same community, in the order `GROUP` in `src/site.js` lists them, with ohmigo marked "you are here". It's built like the legal pages (its own source, `site/grupo.html`, the theme script as its only script, one copy per URL at boot). The mascots are local files in `site/grupo/`, served at `/grupo/<id>.svg`, so the page asks no other host for anything. The other sites have the same page in their own style; when a description changes on one, bring the others in step.
 
-`GET /.well-known/security.txt` is the RFC 9116 file with the contact for
-reporting a security problem. It's generated per request (`securityTxt` in
-`src/server.js`), so `Expires` is always ahead of today.
+`GET /.well-known/security.txt` is the RFC 9116 file with the contact for reporting a security problem. It's generated per request (`securityTxt` in `src/server.js`), so `Expires` is always ahead of today.
 
 `GET /llms.txt` is a short plain-text summary for AI crawlers, in English only on purpose: edit `LLMS_TXT` in `src/site.js`.
 
-`GET /healthz` shows how the server is doing: `status` is `ok`, or
-`degraded` with the reasons in `problems` (the last live feed refresh failed,
-ceme-v2 isn't answering, the dataset missed its weekly rebuild, the last
-downloaded dataset was refused as broken: see [05](05-dataset.md)). It answers 200
-either way, so the platform doesn't restart a container over an outage
-elsewhere; point a monitor at `status`. Anyone can read that summary, plus
-`version`, `commit`, `source`, `dataAsOf` and `dataAgeHours`; `problems` names what's wrong, never
-the raw error. Send the `x-healthz-token` header with the value of
-`HEALTHZ_TOKEN` and the same answer adds the live feed (`publishedAt`, `fresh`,
-`failures`, `retryAt`, `bytesLast`, the last `error`), why the last dataset was refused (`datasetRefused`, when one was), the ceme-v2 breaker,
-per-tool counters (`calls`, `errors`, `avgMs`, `maxMs`, `maxChars`) and memory:
+`GET /healthz` shows how the server is doing: `status` is `ok`, or `degraded` with the reasons in `problems` (the last live feed refresh failed, ceme-v2 isn't answering, the dataset missed its weekly rebuild, the last downloaded dataset was refused as broken: see [05](05-dataset.md)). It answers 200 either way, so the platform doesn't restart a container over an outage elsewhere; point a monitor at `status`. Anyone can read that summary, plus `version`, `commit`, `source`, `dataAsOf` and `dataAgeHours`; `problems` names what's wrong, never the raw error. Send the `x-healthz-token` header with the value of `HEALTHZ_TOKEN` and the same answer adds the live feed (`publishedAt`, `fresh`, `failures`, `retryAt`, `bytesLast`, the last `error`), why the last dataset was refused (`datasetRefused`, when one was), the ceme-v2 breaker, per-tool counters (`calls`, `errors`, `avgMs`, `maxMs`, `maxChars`) and memory:
 
 ```bash
 curl -H "x-healthz-token: $HEALTHZ_TOKEN" http://127.0.0.1:3002/healthz
 ```
 
-With `HEALTHZ_TOKEN` unset, nobody gets the detail. A wrong token isn't an
-error: you get the summary and a 200.
+With `HEALTHZ_TOKEN` unset, nobody gets the detail. A wrong token isn't an error: you get the summary and a 200.
 
-Every tool call logs one JSON line (`tool`, `ms`, `isError`, `code`,
-`chars`, the length of the result's text). Never the arguments: they carry the user's location, car and
-tariffs. Results carry `version`, to match a report with a deploy.
+Every tool call logs one JSON line (`tool`, `ms`, `isError`, `code`, `chars`, the length of the result's text). Never the arguments: they carry the user's location, car and tariffs. Results carry `version`, to match a report with a deploy.
 
 ## Connect an AI assistant
 
 The server speaks MCP over HTTP ("Streamable HTTP") at `/mcp`, with no auth.
 
 - **Claude Code**: `claude mcp add --transport http ohmigo http://127.0.0.1:3002/mcp`
-- **Claude (web/desktop)**: Settings → Connectors → Add custom connector →
-  `https://ohmigo.ocarroeletrico.com/mcp`.
-- **ChatGPT** (browser, desktop or mobile — not the mobile app): left
-  sidebar → Plugins → Add (top right) → Custom → name it, paste
-  `https://ohmigo.ocarroeletrico.com/mcp`, switch authentication to
-  "No authentication", tick the trust box, and create.
-- **MCP Inspector**, for poking at it: `npx @modelcontextprotocol/inspector`,
-  then connect to the URL.
+- **Claude (web/desktop)**: Settings → Connectors → Add custom connector → `https://ohmigo.ocarroeletrico.com/mcp`.
+- **ChatGPT** (browser, desktop or mobile — not the mobile app): left sidebar → Plugins → Add (top right) → Custom → name it, paste `https://ohmigo.ocarroeletrico.com/mcp`, switch authentication to "No authentication", tick the trust box, and create.
+- **MCP Inspector**, for poking at it: `npx @modelcontextprotocol/inspector`, then connect to the URL.
 
 Chat apps need a public HTTPS URL, so they only work once it's deployed.
 
@@ -133,8 +77,7 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `ARCHIVE_STATUS_URL` | unset | AmpereArchive's `v1/PT/status.json.gz`: read first, the NAP stays the fallback ([03](03-live-status.md)) |
 | `ARCHIVE_MAX_AGE_SECONDS` | `900` | an archive status published longer ago than this counts as stalled and the NAP is used |
 
-Secrets (`CEME_API_KEY`, `HEALTHZ_TOKEN`) go in the hosting platform's secret variables, never
-in the repo.
+Secrets (`CEME_API_KEY`, `HEALTHZ_TOKEN`) go in the hosting platform's secret variables, never in the repo.
 
 ## Deploy (Zerops + Cloudflare)
 
@@ -142,38 +85,18 @@ in the repo.
 assistant ──► Cloudflare (proxy, TLS) ──► Zerops L7 balancer ──► service `mcp` (Node.js)
 ```
 
-Production is `https://ohmigo.ocarroeletrico.com/mcp`, Zerops project
-`ohmigo-mcp`, one service called `mcp`.
+Production is `https://ohmigo.ocarroeletrico.com/mcp`, Zerops project `ohmigo-mcp`, one service called `mcp`.
 
-- **`zerops.yml`** is the build and runtime: `deployFiles` lists what ships
-  (`src`, `ui`, `site`, `offers`, `node_modules`, `package.json`). Anything the code
-  reads at runtime must be in that list, or the process dies on boot and the
-  deploy fails with "connection refused" on `/healthz`.
-- **`zerops-import.yaml`** creates the service (`zcli project service-import`).
-  It sets `HOST=0.0.0.0` and `PORT=3002`.
-- `CEME_API_KEY`: the same value as ceme-v2's `CEME_API_KEY`. On ceme-v2, also
-  set `CEME_API_KEY_RATE_LIMIT` (requests per minute for that key; see
-  ceme-v2's `docs/04-api-auth.md`). A secret: set it on the service in the
-  Zerops console.
-- `HEALTHZ_TOKEN`: a long random value (`openssl rand -hex 32`), also a secret.
-  A monitor only needs it to read `live`, `ceme`, `tools` or `memoryMb`.
+- **`zerops.yml`** is the build and runtime: `deployFiles` lists what ships (`src`, `ui`, `site`, `offers`, `node_modules`, `package.json`). Anything the code reads at runtime must be in that list, or the process dies on boot and the deploy fails with "connection refused" on `/healthz`.
+- **`zerops-import.yaml`** creates the service (`zcli project service-import`). It sets `HOST=0.0.0.0` and `PORT=3002`.
+- `CEME_API_KEY`: the same value as ceme-v2's `CEME_API_KEY`. On ceme-v2, also set `CEME_API_KEY_RATE_LIMIT` (requests per minute for that key; see ceme-v2's `docs/04-api-auth.md`). A secret: set it on the service in the Zerops console.
+- `HEALTHZ_TOKEN`: a long random value (`openssl rand -hex 32`), also a secret. A monitor only needs it to read `live`, `ceme`, `tools` or `memoryMb`.
 
-The readiness check is `/healthz`, which only needs the 200 of the summary. Boot loads the dataset (a few seconds) and
-answers before the live feed finishes downloading. If the dataset download
-fails, or the file is refused as broken (too big, under `MIN_SITES` sites;
-[05](05-dataset.md)), boot retries for a while, inside the readiness timeout
-(`loadDataset` in `src/server.js`; keep the two in step), then exits, so the
-previous version keeps serving. On `SIGTERM` (a deploy), the server stops
-taking connections and lets the requests in flight finish, with a cap.
+The readiness check is `/healthz`, which only needs the 200 of the summary. Boot loads the dataset (a few seconds) and answers before the live feed finishes downloading. If the dataset download fails, or the file is refused as broken (too big, under `MIN_SITES` sites; [05](05-dataset.md)), boot retries for a while, inside the readiness timeout (`loadDataset` in `src/server.js`; keep the two in step), then exits, so the previous version keeps serving. On `SIGTERM` (a deploy), the server stops taking connections and lets the requests in flight finish, with a cap.
 
 ### Shipping a new version
 
-Open a pull request into `main` and merge it (direct pushes are blocked by
-the `main` ruleset, and the `test` check must pass). Zerops is connected to this repo (service `mcp` → Build,
-Deploy, Run Pipeline Settings: push to `main`, setup `mcp`) and builds and
-deploys on every merge, in about two minutes. No Zerops credential lives in
-GitHub. A deploy that fails its readiness check is dropped and the previous
-version keeps serving.
+Open a pull request into `main` and merge it (direct pushes are blocked by the `main` ruleset, and the `test` check must pass). Zerops is connected to this repo (service `mcp` → Build, Deploy, Run Pipeline Settings: push to `main`, setup `mcp`) and builds and deploys on every merge, in about two minutes. No Zerops credential lives in GitHub. A deploy that fails its readiness check is dropped and the previous version keeps serving.
 
 By hand, only as a last resort, from a clean copy of `main`:
 
@@ -186,90 +109,28 @@ cd /some/empty/dir && zcli push <service-id> -P <project-id> --setup mcp --no-gi
 
 The same setup as ceme-v2 (its `infra.md`, section 3, has the API calls):
 
-1. Zerops: a public HTTP routing for `ohmigo.ocarroeletrico.com` → `mcp`
-   port 3002, with SSL, then sync the project's routing.
-2. Cloudflare: **one `AAAA` record** to the project's dedicated IPv6, **proxy
-   on**. No `A` record: the shared IPv4 can't route a proxied domain.
+1. Zerops: a public HTTP routing for `ohmigo.ocarroeletrico.com` → `mcp` port 3002, with SSL, then sync the project's routing.
+2. Cloudflare: **one `AAAA` record** to the project's dedicated IPv6, **proxy on**. No `A` record: the shared IPv4 can't route a proxied domain.
 3. Zerops: trigger the DNS check; the Let's Encrypt certificate follows.
 
-**The origin IP is never written in this repo.** Read it from the Zerops
-API (`GET /project/<id>` → `publicIpV6`) or the Cloudflare record.
+**The origin IP is never written in this repo.** Read it from the Zerops API (`GET /project/<id>` → `publicIpV6`) or the Cloudflare record.
 
-The routing's `accessPolicy` only accepts Cloudflare: `defaultPolicy: deny`,
-`cidr` = the lists at `https://www.cloudflare.com/ips-v4` and `ips-v6`.
-Leave **`setRealIpFrom` empty**: with it set, the balancer swaps in the
-user's IP from `X-Forwarded-For`, that IP isn't Cloudflare's, and every
-request gets 403. Direct requests to the origin must answer 403; through
-Cloudflare, 200.
+The routing's `accessPolicy` only accepts Cloudflare: `defaultPolicy: deny`, `cidr` = the lists at `https://www.cloudflare.com/ips-v4` and `ips-v6`. Leave **`setRealIpFrom` empty**: with it set, the balancer swaps in the user's IP from `X-Forwarded-For`, that IP isn't Cloudflare's, and every request gets 403. Direct requests to the origin must answer 403; through Cloudflare, 200.
 
 ## Rate limiting and load
 
-There's no per-client limit, on purpose. Calls from ChatGPT and Claude come from
-their servers, not from the user's device, so a per-IP limit would throttle all
-of a platform's users as one. What the server protects instead is the ceme-v2
-key everyone shares, and its own process.
+There's no per-client limit, on purpose. Calls from ChatGPT and Claude come from their servers, not from the user's device, so a per-IP limit would throttle all of a platform's users as one. What the server protects instead is the ceme-v2 key everyone shares, and its own process.
 
-**The key.** The expensive part is the ceme-v2 call, so `src/ceme.js` keeps it
-from running away:
+**The key.** The expensive part is the ceme-v2 call, so `src/ceme.js` keeps it from running away:
 
-- *Cache.* Replies are kept for `TTL_MS`, capped by entries and by total bytes
-  (`MAX_CACHE_*`); `detail` replies past `MAX_DETAIL_CACHE_BYTES` aren't kept.
-  What counts as the same answer depends on the call. Without a slice profile
-  (only `/dados` and empty sessions): the same kWh to 0.1 and the same
-  quarter-hour. With one, which is every tool: exactly the same slices. So sockets
-  of one charging speed share a call inside a ranking, but a session starting a
-  minute later shares nothing with the last one. The cache mostly saves repeats
-  and the work inside a ranking, not calls between different users.
-- *Quota.* A 429 isn't an outage: it stays out of the breaker. No call goes out
-  until `Retry-After` has passed (bounded, `RETRY_AFTER_*`). Meanwhile a call
-  whose exact key was answered within `STALE_MS` gets that last good answer, and
-  so does one the line refuses: a
-  quote built on it says how old it is, and `/dados` is marked `partial` with
-  `staleSince`. Any other call fails as unavailable, and the tools say this server
-  held the call back, not that the pricing service didn't answer. Since a session
-  starts at the current minute, a repeat of a "now" question has a new key after a
-  minute, so the last good answer mostly helps questions with a fixed `at`,
-  `/dados` and the tariff list.
-- *Outages.* After a few 5xx or timeouts in a row the client stops calling for a
-  while (`BREAKER_*`) and the tools answer without CEME prices.
-- *Concurrency.* Every call goes through one line per process: `MAX_CONCURRENT`
-  at once, `MAX_QUEUED` waiting, first come first served, for at most
-  `MAX_WAIT_MS` (`src/limit.js`), so a slow but living ceme-v2 gets a quick honest
-  answer. The line fits every call the running rankings can make, plus room for
-  estimates. Past that a call fails as unavailable, which doesn't touch the
-  breaker, with the same wording as above. With `month_kwh`, a tariff list that
-  can't be had leaves the free kWh out of the total, and the result says so.
-- *One ranking's share.* `max_minutes` and `available_only` apply first, since
-  duration and status are known before any call. Then a ranking makes one call
-  per distinct charging speed, nearest first, up to `MAX_SIMS_PER_CALL` calls that
-  really go out; what the cache covers is free. Past the cap only the sockets
-  needing a new call are left out: sites outside MOBI.E and speeds already
-  fetched stay. `note.truncated` says how many were left out, and so does
-  `socketsLeftOut` in the result. The first calls always go out, so the cap can't
-  empty a ranking. While the breaker is open or the quota spent the cap is off:
-  those calls are refused here and cost nothing, so the sockets stay listed on
-  their other prices. The speeds past it aren't priced from the nearest one: that
-  reply is for other kWh, so it would need math that belongs to ceme-v2.
+- *Cache.* Replies are kept for `TTL_MS`, capped by entries and by total bytes (`MAX_CACHE_*`); `detail` replies past `MAX_DETAIL_CACHE_BYTES` aren't kept. What counts as the same answer depends on the call. Without a slice profile (only `/dados` and empty sessions): the same kWh to 0.1 and the same quarter-hour. With one, which is every tool: exactly the same slices. So sockets of one charging speed share a call inside a ranking, but a session starting a minute later shares nothing with the last one. The cache mostly saves repeats and the work inside a ranking, not calls between different users.
+- *Quota.* A 429 isn't an outage: it stays out of the breaker. No call goes out until `Retry-After` has passed (bounded, `RETRY_AFTER_*`). Meanwhile a call whose exact key was answered within `STALE_MS` gets that last good answer, and so does one the line refuses: a quote built on it says how old it is, and `/dados` is marked `partial` with `staleSince`. Any other call fails as unavailable, and the tools say this server held the call back, not that the pricing service didn't answer. Since a session starts at the current minute, a repeat of a "now" question has a new key after a minute, so the last good answer mostly helps questions with a fixed `at`, `/dados` and the tariff list.
+- *Outages.* After a few 5xx or timeouts in a row the client stops calling for a while (`BREAKER_*`) and the tools answer without CEME prices.
+- *Concurrency.* Every call goes through one line per process: `MAX_CONCURRENT` at once, `MAX_QUEUED` waiting, first come first served, for at most `MAX_WAIT_MS` (`src/limit.js`), so a slow but living ceme-v2 gets a quick honest answer. The line fits every call the running rankings can make, plus room for estimates. Past that a call fails as unavailable, which doesn't touch the breaker, with the same wording as above. With `month_kwh`, a tariff list that can't be had leaves the free kWh out of the total, and the result says so.
+- *One ranking's share.* `max_minutes` and `available_only` apply first, since duration and status are known before any call. Then a ranking makes one call per distinct charging speed, nearest first, up to `MAX_SIMS_PER_CALL` calls that really go out; what the cache covers is free. Past the cap only the sockets needing a new call are left out: sites outside MOBI.E and speeds already fetched stay. `note.truncated` says how many were left out, and so does `socketsLeftOut` in the result. The first calls always go out, so the cap can't empty a ranking. While the breaker is open or the quota spent the cap is off: those calls are refused here and cost nothing, so the sockets stay listed on their other prices. The speeds past it aren't priced from the nearest one: that reply is for other kWh, so it would need math that belongs to ceme-v2.
 
-**The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets
-(`src/mcp.js`) on the event loop. The tool takes a place before it searches:
-`MAX_RANKINGS` run at once and `MAX_RANKINGS_QUEUED` wait, and past that it says
-to try again in a few seconds. `rank()` in `src/quote.js` first works out the
-sessions, then fires the calls together and waits for them, then prices in chunks
-of `RANK_CHUNK` with a turn for the event loop between them, so `/healthz` keeps
-answering. A request that's abandoned, in either tool, leaves the line and stops
-at the next chunk; its calls still waiting are dropped unless another request
-is waiting on the same one. All of these limits are per process and
-shared by everyone: a burst from one client still slows the others, and can get
-them refused.
+**The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets (`src/mcp.js`) on the event loop. The tool takes a place before it searches: `MAX_RANKINGS` run at once and `MAX_RANKINGS_QUEUED` wait, and past that it says to try again in a few seconds. `rank()` in `src/quote.js` first works out the sessions, then fires the calls together and waits for them, then prices in chunks of `RANK_CHUNK` with a turn for the event loop between them, so `/healthz` keeps answering. A request that's abandoned, in either tool, leaves the line and stops at the next chunk; its calls still waiting are dropped unless another request is waiting on the same one. All of these limits are per process and shared by everyone: a burst from one client still slows the others, and can get them refused.
 
-**What this doesn't do.** None of it stops anyone from sending requests, or
-keeps one client from spending the shared quota. For that you need a limit at the
-edge: a Cloudflare rate limiting rule on `POST /mcp`, set high enough to pass a
-whole platform's traffic. That rule isn't in this repo and isn't set up by a
-deploy; it's the maintainer's to add in the Cloudflare dashboard. Cloudflare's
-DDoS protection is in front either way.
+**What this doesn't do.** None of it stops anyone from sending requests, or keeps one client from spending the shared quota. For that you need a limit at the edge: a Cloudflare rate limiting rule on `POST /mcp`, set high enough to pass a whole platform's traffic. That rule isn't in this repo and isn't set up by a deploy; it's the maintainer's to add in the Cloudflare dashboard. Cloudflare's DDoS protection is in front either way.
 
-While the quota is spent, `/healthz` is `degraded` with `ceme-v2: rate limited`
-in `problems`. With the token, `ceme` shows `rateLimitedUntil` and the size of the
-cache.
+While the quota is spent, `/healthz` is `degraded` with `ceme-v2: rate limited` in `problems`. With the token, `ceme` shows `rateLimitedUntil` and the size of the cache.

@@ -14,7 +14,4 @@
 | Corrections (`offers/manual.json`) | Each entry's `source` URL | Public price pages | Named in the option's `note` |
 | EV guides and dated facts (`voltaria/`, served by `ev_rules_portugal`) | [Voltaria](https://github.com/CarregaErvilhas/voltaria) | Content [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | The landing page's footer and `llms.txt` |
 
-None of this data is covered by the project's license ([LICENSE](LICENSE),
-AGPL-3.0-only): each source keeps its own terms. Alexandre Moleiro has allowed
-public use of the data in `offers/custofinal.json` with no restrictions; please
-keep the attribution to his blog.
+None of this data is covered by the project's license ([LICENSE](LICENSE), AGPL-3.0-only): each source keeps its own terms. Alexandre Moleiro has allowed public use of the data in `offers/custofinal.json` with no restrictions; please keep the attribution to his blog.

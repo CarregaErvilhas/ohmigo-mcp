@@ -1,157 +1,61 @@
 # 02 — The cost math
 
-How ohmigo turns "77 kWh battery, 15 % → 80 %, this charger" into euros. The
-code is in `src/charging.js`, `src/opc.js` and `src/quote.js`. Prices are never
-copied into this doc. They live in the data, in ceme-v2, or in `offers/`.
+How ohmigo turns "77 kWh battery, 15 % → 80 %, this charger" into euros. The code is in `src/charging.js`, `src/opc.js` and `src/quote.js`. Prices are never copied into this doc. They live in the data, in ceme-v2, or in `offers/`.
 
 ## 1. Energy and time (`charging.js`)
 
-**Energy into the battery** = capacity × (target % − start %).
-For example, 77 kWh × (80 − 15) % = 50 kWh.
+**Energy into the battery** = capacity × (target % − start %). For example, 77 kWh × (80 − 15) % = 50 kWh.
 
-**Energy the meter counts** is more than that, because some of it turns into
-heat (losses). We divide by an efficiency, a bit lower on AC than on DC (see
-`DEFAULTS` in `charging.js`). You pay for what the meter counts.
+**Energy the meter counts** is more than that, because some of it turns into heat (losses). We divide by an efficiency, a bit lower on AC than on DC (see `DEFAULTS` in `charging.js`). You pay for what the meter counts.
 
-**Time** matters because some operators charge per minute. The session runs
-at the slower of car and charger. How we estimate it depends on what the
-assistant found out about the car:
+**Time** matters because some operators charge per minute. The session runs at the slower of car and charger. How we estimate it depends on what the assistant found out about the car:
 
-1. **Charging curve** (kW at each SoC): we walk it 1 % at a time, capped by
-   the charger. This is the best case. Without it, a DC estimate carries a
-   note pointing the assistant to ev-database.org and evkx.net, where the
-   curves are published.
-   The charger's power is OpenStreetMap's where it differs from the NAP's
-   ([05](05-dataset.md)), and the estimate says so in its assumptions.
-   On DC, with the car's battery voltage (`car_voltage`), "the charger" is
-   what the socket can give that car: its max current × the car's volts (or
-   the socket's own max volts, if lower), when that's below its kW. A 400 V
-   car at a 400 kW, 600 A socket is capped at 240 kW. When the socket's
-   charger model is known (the site's `models`, [05](05-dataset.md)), the
-   manufacturer's own figure for a car of that voltage counts too, and the
-   lowest of the three wins. That's `kwForCar` in `src/socket.js`; it
-   applies to all three cases below, and the estimate says so when it, not
-   the car, is the limit. When the model says a second car on the same
-   charger gets less, the estimate adds that as an assumption: it prices the
-   socket alone.
-2. **10-80 % time**: 70 % of the battery charged in that many minutes gives
-   the car's real average speed below 80 %, at the battery. The meter counts
-   the losses too, so that speed is scaled up to the meter's side, and a
-   session from 10 to 80 % on a fast enough charger takes the published time.
-   Above 80 % we assume it drops.
-3. **Nothing**: a share of the peak power below 80 % and a smaller share
-   above. A rough guess.
+1. **Charging curve** (kW at each SoC): we walk it 1 % at a time, capped by the charger. This is the best case. Without it, a DC estimate carries a note pointing the assistant to ev-database.org and evkx.net, where the curves are published. The charger's power is OpenStreetMap's where it differs from the NAP's ([05](05-dataset.md)), and the estimate says so in its assumptions. On DC, with the car's battery voltage (`car_voltage`), "the charger" is what the socket can give that car: its max current × the car's volts (or the socket's own max volts, if lower), when that's below its kW. A 400 V car at a 400 kW, 600 A socket is capped at 240 kW. When the socket's charger model is known (the site's `models`, [05](05-dataset.md)), the manufacturer's own figure for a car of that voltage counts too, and the lowest of the three wins. That's `kwForCar` in `src/socket.js`; it applies to all three cases below, and the estimate says so when it, not the car, is the limit. When the model says a second car on the same charger gets less, the estimate adds that as an assumption: it prices the socket alone.
+2. **10-80 % time**: 70 % of the battery charged in that many minutes gives the car's real average speed below 80 %, at the battery. The meter counts the losses too, so that speed is scaled up to the meter's side, and a session from 10 to 80 % on a fast enough charger takes the published time. Above 80 % we assume it drops.
+3. **Nothing**: a share of the peak power below 80 % and a smaller share above. A rough guess.
 
-AC sessions are simpler: the power stays nearly flat until the end, so we take
-a fixed share of the peak.
+AC sessions are simpler: the power stays nearly flat until the end, so we take a fixed share of the peak.
 
-Every guess goes into `assumptions`, in the user's language, so the assistant
-can say things like "this assumes 7 % losses and a 28-minute 10-80 % time".
+Every guess goes into `assumptions`, in the user's language, so the assistant can say things like "this assumes 7 % losses and a 28-minute 10-80 % time".
 
 ## 1b. When each kWh goes in (`profile.js`)
 
-A session takes minutes to hours, and the energy price can change while it
-runs:
+A session takes minutes to hours, and the energy price can change while it runs:
 
-- a **bi-hourly** tariff has an off-peak price ("vazio", nights and weekends)
-  and a peak one ("fora de vazio"). Plug in at 21:30 on a slow AC charger and
-  the first half hour is peak, the rest off-peak;
-- an **indexed** tariff follows the wholesale price (OMIE), which changes
-  every 15 minutes;
-- a session past midnight can land on a day with a new grid fee (TAR), and
-  one on the last Sunday of March or October crosses a clock change.
+- a **bi-hourly** tariff has an off-peak price ("vazio", nights and weekends) and a peak one ("fora de vazio"). Plug in at 21:30 on a slow AC charger and the first half hour is peak, the rest off-peak;
+- an **indexed** tariff follows the wholesale price (OMIE), which changes every 15 minutes;
+- a session past midnight can land on a day with a new grid fee (TAR), and one on the last Sunday of March or October crosses a clock change.
 
-So `charging.js` also returns the session as `segments`: stretches of
-constant power, back to back (one per 1 % with a curve; below and above 80 %
-on DC; one on AC). `profile.js` lays them out from the start time (`at`,
-default now, rounded down to the minute) and cuts them at every quarter-hour
-(:00, :15, :30, :45 UTC), giving the kWh delivered in each quarter. That list
-goes to ceme-v2 as `profile`, and **ceme-v2 prices each slice** at its own
-period, OMIE quarter, losses and TAR day. ohmigo never works out a period or
-an OMIE price itself; that math stays in ceme-v2, with its tests for the
-clock changes, Saturdays and the islands.
+So `charging.js` also returns the session as `segments`: stretches of constant power, back to back (one per 1 % with a curve; below and above 80 % on DC; one on AC). `profile.js` lays them out from the start time (`at`, default now, rounded down to the minute) and cuts them at every quarter-hour (:00, :15, :30, :45 UTC), giving the kWh delivered in each quarter. That list goes to ceme-v2 as `profile`, and **ceme-v2 prices each slice** at its own period, OMIE quarter, losses and TAR day. ohmigo never works out a period or an OMIE price itself; that math stays in ceme-v2, with its tests for the clock changes, Saturdays and the islands.
 
-There's a limit on how long a session can run (`MAX_SESSION_HOURS` in
-`profile.js`), because every quarter-hour is one more slice. A socket that
-would take longer gets no quote: it's left out with a note, or, if that's every
-socket, you get a `tooLong` error. A socket whose data says 0 kW has its power
-blanked when the dataset loads (`data.js`), so it counts as unknown power, like
-one with no figure at all.
+There's a limit on how long a session can run (`MAX_SESSION_HOURS` in `profile.js`), because every quarter-hour is one more slice. A socket that would take longer gets no quote: it's left out with a note, or, if that's every socket, you get a `tooLong` error. A socket whose data says 0 kW has its power blanked when the dataset loads (`data.js`), so it counts as unknown power, like one with no figure at all.
 
-Everything is in UTC instants, so the clock changes need no special case:
-in October the 01:00-02:00 hour happens twice, and a 60-minute session that
-spans it still has four quarters. Local times are only for showing
-(`session.startLocal`/`endLocal`, and the `utcOffset` on each run of the
-timeline, which also starts a new run, so the repeated hour isn't ambiguous).
+Everything is in UTC instants, so the clock changes need no special case: in October the 01:00-02:00 hour happens twice, and a 60-minute session that spans it still has four quarters. Local times are only for showing (`session.startLocal`/`endLocal`, and the `utcOffset` on each run of the timeline, which also starts a new run, so the repeated hour isn't ambiguous).
 
 What the driver gets:
 
-- always: the window (`session.start`/`end`, and the local times), an
-  assumption saying the energy was priced quarter by quarter in that window,
-  and `kwhByPeriod` on each CEME option whose session crossed periods (each
-  tariff has its own cycle, so one can cross and another not);
-- with `detail: true` on the tool: `timeline`, when the kWh go in, and for
-  each CEME tariff shown, the period, price (excl. VAT) and OMIE over the
-  session (`omieSpot: false` means that quarter's OMIE wasn't published yet,
-  so ceme-v2 used the period's average). Quarters that look the same (same
-  power, or same period, price and OMIE) are merged into runs with `from`,
-  `to`, `quarters` and `kwh`, so a long AC session at one price is one line.
-  Each CEME option also gets `components`, the CEME's bill line by line as
-  ceme-v2 rounds it (`energyTar`, split into `energy` and `tar` when known,
-  `iec`, `activation` (EGME), `support`, `base`, `vatEur`, `total`); the
-  operator fee is in `opc.parts`. With a promotion in the total they describe
-  the tariff without it (`promoApplied`).
-  In `find_cheapest_charging` only the first few results carry both;
-- in QA mode (`OHMIGO_QA=1`, [06](06-run-and-deploy.md)): the timeline on
-  every result, plus `debug` with the segments, the profile sent and what
-  ceme-v2 said about it.
+- always: the window (`session.start`/`end`, and the local times), an assumption saying the energy was priced quarter by quarter in that window, and `kwhByPeriod` on each CEME option whose session crossed periods (each tariff has its own cycle, so one can cross and another not);
+- with `detail: true` on the tool: `timeline`, when the kWh go in, and for each CEME tariff shown, the period, price (excl. VAT) and OMIE over the session (`omieSpot: false` means that quarter's OMIE wasn't published yet, so ceme-v2 used the period's average). Quarters that look the same (same power, or same period, price and OMIE) are merged into runs with `from`, `to`, `quarters` and `kwh`, so a long AC session at one price is one line. Each CEME option also gets `components`, the CEME's bill line by line as ceme-v2 rounds it (`energyTar`, split into `energy` and `tar` when known, `iec`, `activation` (EGME), `support`, `base`, `vatEur`, `total`); the operator fee is in `opc.parts`. With a promotion in the total they describe the tariff without it (`promoApplied`). In `find_cheapest_charging` only the first few results carry both;
+- in QA mode (`OHMIGO_QA=1`, [06](06-run-and-deploy.md)): the timeline on every result, plus `debug` with the segments, the profile sent and what ceme-v2 said about it.
 
-If ceme-v2 answers without a `profile` field (a version that doesn't know
-it), the session was priced at its start; the assumption says so.
+If ceme-v2 answers without a `profile` field (a version that doesn't know it), the session was priced at its start; the assumption says so.
 
 ### Tariffs billed by the session's average OMIE
 
-Pricing each kWh at the OMIE of its quarter (the **load curve**) is what the
-section above does, and it's what the electricity really cost. Not every
-CEME bills that way. LUZiGÁS takes the hourly OMIE price of **every hour the
-car is plugged in**, start to end, averages them (each hour counts the same,
-whatever the car drew in it) and charges that one OMIE on every kWh. The TAR
-still follows each kWh's period. So charging at noon with OMIE at zero and
-leaving the car plugged in overnight pays the night's average.
+Pricing each kWh at the OMIE of its quarter (the **load curve**) is what the section above does, and it's what the electricity really cost. Not every CEME bills that way. LUZiGÁS takes the hourly OMIE price of **every hour the car is plugged in**, start to end, averages them (each hour counts the same, whatever the car drew in it) and charges that one OMIE on every kWh. The TAR still follows each kWh's period. So charging at noon with OMIE at zero and leaving the car plugged in overnight pays the night's average.
 
-Which tariffs bill like this is ceme-v2's call (`billing` in its seed), and
-so is the math: its reply for them has `totalEur` by the session average
-(the bill), `sessionOmie` (the average and the hours it covers) and `curve`,
-the same session by the load curve. `cemeOption` (`quote.js`) keeps
-ceme-v2's total, so these tariffs rank by what they bill, and adds:
+Which tariffs bill like this is ceme-v2's call (`billing` in its seed), and so is the math: its reply for them has `totalEur` by the session average (the bill), `sessionOmie` (the average and the hours it covers) and `curve`, the same session by the load curve. `cemeOption` (`quote.js`) keeps ceme-v2's total, so these tariffs rank by what they bill, and adds:
 
-- `billing: "sessionAverage"`, `sessionOmieEurKwh`, and a `note` that names
-  the method and says how long it counted: until you unplug, if you said
-  when, or else assuming you unplug when charging ends;
-- with `detail: true`, `byLoadCurve` (`{ total, energyEur }`, same operator
-  fee and promotions), and the note gives that total too.
+- `billing: "sessionAverage"`, `sessionOmieEurKwh`, and a `note` that names the method and says how long it counted: until you unplug, if you said when, or else assuming you unplug when charging ends;
+- with `detail: true`, `byLoadCurve` (`{ total, energyEur }`, same operator fee and promotions), and the note gives that total too.
 
 ### Leaving the car plugged in (`unplug_at`)
 
-`estimate_charging_cost` takes `unplug_at`, for a car left plugged in after
-it's full (overnight at home, a day at work). `planSession` adds the idle
-quarter-hours after the charge as 0 kWh slices (`idleSlices` in
-`profile.js`), up to `MAX_SESSION_HOURS` from the start. They cost nothing
-by the load curve, but a tariff billed by the session average counts those
-hours too. Per-minute operator fees run until you unplug as well, and the
-opening-hours check looks at the whole stay. `session` gains `unplug`,
-`unplugLocal` and `pluggedMinutes`, and an assumption says how long the car
-sat idle. An `unplug_at` before the charge ends is ignored, and an
-assumption says so.
+`estimate_charging_cost` takes `unplug_at`, for a car left plugged in after it's full (overnight at home, a day at work). `planSession` adds the idle quarter-hours after the charge as 0 kWh slices (`idleSlices` in `profile.js`), up to `MAX_SESSION_HOURS` from the start. They cost nothing by the load curve, but a tariff billed by the session average counts those hours too. Per-minute operator fees run until you unplug as well, and the opening-hours check looks at the whole stay. `session` gains `unplug`, `unplugLocal` and `pluggedMinutes`, and an assumption says how long the car sat idle. An `unplug_at` before the charge ends is ignored, and an assumption says so.
 
-When ceme-v2 lacks the OMIE of one of those hours (not published yet), it
-prices the load curve instead and sends no `curve`. The option then says
-the bill can differ (`option.sessionAverage.unknown`).
+When ceme-v2 lacks the OMIE of one of those hours (not published yet), it prices the load curve instead and sends no `curve`. The option then says the bill can differ (`option.sessionAverage.unknown`).
 
-Limits: the start time is a guess unless the user gives one, OMIE for
-tomorrow only exists after the day-ahead market publishes (early afternoon),
-and the operator fee doesn't depend on the clock (MOBI.E's tariff file has no
-time-of-day fees).
+Limits: the start time is a guess unless the user gives one, OMIE for tomorrow only exists after the day-ahead market publishes (early afternoon), and the operator fee doesn't depend on the clock (MOBI.E's tariff file has no time-of-day fees).
 
 ## 2. The operator fee (`opc.js`)
 
@@ -163,181 +67,65 @@ MOBI.E publishes each socket's OPC fee as components:
 | energy | `€ 0.10 /kWh` | × kWh counted by the meter |
 | time | `€ 0.18 /min após 30 min` | per minute, in tiers |
 
-**Tiers work like tax brackets.** "0 €/min" plus "0.18 €/min after 30 min"
-means the first 30 minutes are free and you pay 0.18 € for each minute after
-that. `timeCost` cuts the session at every tier boundary and prices each
-slice.
+**Tiers work like tax brackets.** "0 €/min" plus "0.18 €/min after 30 min" means the first 30 minutes are free and you pay 0.18 € for each minute after that. `timeCost` cuts the session at every tier boundary and prices each slice.
 
-**Some sockets publish two values for one component**, with nothing to say
-which one is right. We return both ends as `low` / `high` and say so.
+**Some sockets publish two values for one component**, with nothing to say which one is right. We return both ends as `low` / `high` and say so.
 
-**These fees come without VAT.** So does every price MOBI.E and the NAP
-publish: the ad hoc price and the NAP's price for chargers outside MOBI.E
-too (the NAP confirmed it, and the numbers agree: MOBI.E's ad hoc price at
-IONITY × 1.23 is IONITY's own walk-up price). VAT applies to the whole
-invoice, so `quote.js` multiplies each of them by the VAT of the charger's
-region: ceme-v2's `vat` for the operator fee next to a CEME tariff,
-`REGION_VAT` in `opc.js` (a copy of ceme-v2's table) for the prices that
-don't go through ceme-v2. That's what makes these prices right on Madeira
-and the Azores, where VAT is lower.
+**These fees come without VAT.** So does every price MOBI.E and the NAP publish: the ad hoc price and the NAP's price for chargers outside MOBI.E too (the NAP confirmed it, and the numbers agree: MOBI.E's ad hoc price at IONITY × 1.23 is IONITY's own walk-up price). VAT applies to the whole invoice, so `quote.js` multiplies each of them by the VAT of the charger's region: ceme-v2's `vat` for the operator fee next to a CEME tariff, `REGION_VAT` in `opc.js` (a copy of ceme-v2's table) for the prices that don't go through ceme-v2. That's what makes these prices right on Madeira and the Azores, where VAT is lower.
 
-**Three kinds of price, never mixed.** Each one says which it is
-(`priceType`, `priceLabel`, `includesEnergy`; labels in `src/i18n.js`,
-`price.*`), and none is averaged with another:
-- `opc_fee`: the operator's fee, `opc.REGULAR`. No energy in it: it goes on
-  top of a CEME's energy, and is never a total on its own.
-- `adhoc`: the no-contract price, `opc.AD_HOC_PAYMENT`. Energy in it: its
-  own option, never added to a CEME.
-- `outside`: the NAP's `napPrice` outside MOBI.E (`sem_ceme`). One €/kWh,
-  energy in.
+**Three kinds of price, never mixed.** Each one says which it is (`priceType`, `priceLabel`, `includesEnergy`; labels in `src/i18n.js`, `price.*`), and none is averaged with another:
+- `opc_fee`: the operator's fee, `opc.REGULAR`. No energy in it: it goes on top of a CEME's energy, and is never a total on its own.
+- `adhoc`: the no-contract price, `opc.AD_HOC_PAYMENT`. Energy in it: its own option, never added to a CEME.
+- `outside`: the NAP's `napPrice` outside MOBI.E (`sem_ceme`). One €/kWh, energy in.
 
-A fourth number fills a gap: on a MOBI.E socket with no tariff in MOBI.E's
-file (`mobie_sem_tarifa`) the NAP has a price, but doesn't say whether it is
-the operator's fee or a price with the energy in it (real values fall
-between the two). It's `nap`, `includesEnergy: null`: added to the CEME's
-energy like a fee, so the total is the dearest reading, and flagged
-(`total.mayCountEnergyTwice`, plus an assumption saying so).
+A fourth number fills a gap: on a MOBI.E socket with no tariff in MOBI.E's file (`mobie_sem_tarifa`) the NAP has a price, but doesn't say whether it is the operator's fee or a price with the energy in it (real values fall between the two). It's `nap`, `includesEnergy: null`: added to the CEME's energy like a fee, so the total is the dearest reading, and flagged (`total.mayCountEnergyTwice`, plus an assumption saying so).
 
 Where the fee comes from, in order (`feePlan` in `quote.js`):
 1. MOBI.E's tariff file (in the dataset), which has the per-minute tiers;
-2. a socket with only an ad hoc price in MOBI.E's file: no fee. The NAP's
-   €/kWh there is that ad hoc price, energy in, so it's not used as a fee;
-3. the NAP live feed, which is rounded to the cent and has no tiers, but
-   covers chargers missing from the file (`nap`);
-4. the dataset's copy of the NAP's fees (`napFees`), when the live feed has
-   nothing for the socket (`nap` too);
-5. none: the total is energy only, marked `complete: false`, and ranked
-   after the complete ones.
+2. a socket with only an ad hoc price in MOBI.E's file: no fee. The NAP's €/kWh there is that ad hoc price, energy in, so it's not used as a fee;
+3. the NAP live feed, which is rounded to the cent and has no tiers, but covers chargers missing from the file (`nap`);
+4. the dataset's copy of the NAP's fees (`napFees`), when the live feed has nothing for the socket (`nap` too);
+5. none: the total is energy only, marked `complete: false`, and ranked after the complete ones.
 
 ## 3. Every way to pay (`quote.js`)
 
 Each plug gets `options`, one entry per way to pay:
 
-**`ceme`** — total = ceme-v2's total for that tariff (energy + TAR + IEC +
-EGME + VAT) + OPC fee × VAT. ceme-v2 quotes every tariff in one call, and we
-keep the ones that fit this plug:
+**`ceme`** — total = ceme-v2's total for that tariff (energy + TAR + IEC + EGME + VAT) + OPC fee × VAT. ceme-v2 quotes every tariff in one call, and we keep the ones that fit this plug:
 - the right voltage version (BT or MT, from the charger's grid voltage level; every answer shows it in `tar`);
 - no AC-only tariffs on DC chargers (Atlante's "(AC)" tariffs);
-- if the user gave their `tariff_ids`, only those; otherwise the top 3 (or
-  `tariffs_shown`) of ceme-v2's "popular" list. A card's other billing cycles
-  count as the user's too (`edp-bt-cartoedp-8` is the Bi-Horário of
-  `edp-bt-cartoedp`), but not its numbered versions with a condition: the
-  price for the CEME's electricity clients, a fleet or staff price, one only
-  for new sign-ups. Those count only when the user names that exact id, or
-  belongs to the audience (`audiences`).
+- if the user gave their `tariff_ids`, only those; otherwise the top 3 (or `tariffs_shown`) of ceme-v2's "popular" list. A card's other billing cycles count as the user's too (`edp-bt-cartoedp-8` is the Bi-Horário of `edp-bt-cartoedp`), but not its numbered versions with a condition: the price for the CEME's electricity clients, a fleet or staff price, one only for new sign-ups. Those count only when the user names that exact id, or belongs to the audience (`audiences`).
 
-**CEME promotions** (`promos.js`) — some CEMEs give a discount only at one
-network: cheaper energy at Powerdot chargers, a subscription that cuts the
-operator's fee there, an all-in price on the CEME's own network. A few hold
-at any charger (free kWh every month). They're CEME offers, so they live in
-ceme-v2 (`PROMOS` in its `seed-data.js`, served with every tariff by
-`/v1/simulate`), tagged with a network label that `offers/networks.json` maps
-to operator ids (no label: any MOBI.E charger). At each charger you keep the
-ones that hold there. Each has a `target`:
-- `ENERGIA`: ceme-v2's discounted `totalEur` replaces the energy part (it's
-  energy math, so ceme-v2 does it);
-- `OPC`: `pct` off the operator fee, applied here, since `opc.js` computes
-  that fee (the option carries `opcDiscountPct`);
-- `FINAL`: ceme-v2's `totalEur` is the whole session, operator fee
-  included, and replaces the sum (`opcIncluded`, `energyEur: null`). It's
-  what you're billed, so it applies even where the sum would be lower;
-- `KWH_GRATIS`: the first kWh of each month are free. The server stores
-  nothing, so the assistant counts what the user charged this month and
-  sends it as `month_kwh` (`{ tariff_id: kWh }`); `ceme.js expandMonthKwh`
-  copies each count to the tariff's other voltage variant, and ceme-v2 puts
-  the free kWh still left at the start of the session. Without a count it
-  can't be applied, and it's a tip priced as if none were used yet.
+**CEME promotions** (`promos.js`) — some CEMEs give a discount only at one network: cheaper energy at Powerdot chargers, a subscription that cuts the operator's fee there, an all-in price on the CEME's own network. A few hold at any charger (free kWh every month). They're CEME offers, so they live in ceme-v2 (`PROMOS` in its `seed-data.js`, served with every tariff by `/v1/simulate`), tagged with a network label that `offers/networks.json` maps to operator ids (no label: any MOBI.E charger). At each charger you keep the ones that hold there. Each has a `target`:
+- `ENERGIA`: ceme-v2's discounted `totalEur` replaces the energy part (it's energy math, so ceme-v2 does it);
+- `OPC`: `pct` off the operator fee, applied here, since `opc.js` computes that fee (the option carries `opcDiscountPct`);
+- `FINAL`: ceme-v2's `totalEur` is the whole session, operator fee included, and replaces the sum (`opcIncluded`, `energyEur: null`). It's what you're billed, so it applies even where the sum would be lower;
+- `KWH_GRATIS`: the first kWh of each month are free. The server stores nothing, so the assistant counts what the user charged this month and sends it as `month_kwh` (`{ tariff_id: kWh }`); `ceme.js expandMonthKwh` copies each count to the tariff's other voltage variant, and ceme-v2 puts the free kWh still left at the start of the session. Without a count it can't be applied, and it's a tip priced as if none were used yet.
 
 Then:
-- a promotion for **every customer** of the tariff goes into that option's
-  total (free kWh only with a count). Promotions on one tariff don't all
-  add up: two on the energy don't stack (the lowest total wins), two on the
-  operator fee neither (the biggest wins), and `FINAL` replaces the rest. The
-  option's `promos` and the assumptions name only the ones that took effect.
-  With a promotion in, another of the user's tariffs can become the headline;
-- a promotion for **new customers only** never changes a price: almost
-  nobody who asks qualifies. It goes in the plug's `promos` list as a tip,
-  with what this session would cost with it (`total`) and the `saving`.
+- a promotion for **every customer** of the tariff goes into that option's total (free kWh only with a count). Promotions on one tariff don't all add up: two on the energy don't stack (the lowest total wins), two on the operator fee neither (the biggest wins), and `FINAL` replaces the rest. The option's `promos` and the assumptions name only the ones that took effect. With a promotion in, another of the user's tariffs can become the headline;
+- a promotion for **new customers only** never changes a price: almost nobody who asks qualifies. It goes in the plug's `promos` list as a tip, with what this session would cost with it (`total`) and the `saving`.
 
-`promos` on the plug lists every promotion that holds here for any tariff
-that fits the socket and saves something, one row each, with `applied`
-saying whether it took effect in a shown total (those are always listed, even
-when they cost more, so the user sees why, as are free kWh run out on a shown
-tariff, with `applied: false`). An applied row's `total` is the option's price
-and its `saving` what that promotion alone takes off, so stacked rows add up.
-A promotion that doesn't add to what's already in its tariff's price (it lost,
-or a new-customer tip wouldn't stack with it) stays listed, unapplied, with
-that price as `total`, `saving: 0` and a note saying so. The list is absent
-when there are none. A `target` this code doesn't know is skipped, with one
-warning in the log per target and an assumption on each option whose total it
-could change.
+`promos` on the plug lists every promotion that holds here for any tariff that fits the socket and saves something, one row each, with `applied` saying whether it took effect in a shown total (those are always listed, even when they cost more, so the user sees why, as are free kWh run out on a shown tariff, with `applied: false`). An applied row's `total` is the option's price and its `saving` what that promotion alone takes off, so stacked rows add up. A promotion that doesn't add to what's already in its tariff's price (it lost, or a new-customer tip wouldn't stack with it) stays listed, unapplied, with that price as `total`, `saving: 0` and a note saying so. The list is absent when there are none. A `target` this code doesn't know is skipped, with one warning in the log per target and an assumption on each option whose total it could change.
 
-**`adhoc`** — bank card / QR at the charger: MOBI.E's `AD_HOC_PAYMENT` price
-× the region's VAT (MOBI.E publishes it without VAT, like the operator fee).
+**`adhoc`** — bank card / QR at the charger: MOBI.E's `AD_HOC_PAYMENT` price × the region's VAT (MOBI.E publishes it without VAT, like the operator fee).
 
-**`direct`** — walk-up card terminal or QR, the operator's own app or
-subscription, or a roaming app ([04](04-operator-offers.md)): kWh × the
-offer's price for this charger's power band. Prices are final, with VAT.
-An offer that also bills per minute at this power, at a rate nobody publishes,
-is left out, and the assumptions name it ([04](04-operator-offers.md)).
-Subscription fees are listed next to the price, not added, because one monthly
-fee covers every session that month. If the charger's own operator has a
-walk-up offer priced for this band, it replaces MOBI.E's ad hoc price.
+**`direct`** — walk-up card terminal or QR, the operator's own app or subscription, or a roaming app ([04](04-operator-offers.md)): kWh × the offer's price for this charger's power band. Prices are final, with VAT. An offer that also bills per minute at this power, at a rate nobody publishes, is left out, and the assumptions name it ([04](04-operator-offers.md)). Subscription fees are listed next to the price, not added, because one monthly fee covers every session that month. If the charger's own operator has a walk-up offer priced for this band, it replaces MOBI.E's ad hoc price.
 
-**`opc_direct`** — chargers outside MOBI.E (Continente, Tesla...): the NAP's
-price for that site × the region's VAT × kWh, paid to the operator
-(`eurPerKwhExVat` is the NAP's number, `eurPerKwh` has the VAT in). The NAP
-doesn't say whether the price covers anything besides the kWh; we take it as
-the whole price and say so in the assumptions, with the VAT rate added. It's listed
-next to the network's `direct` offers, not instead of them: an offer is one
-price for the whole network, the NAP's is this site's. It's left out only
-when `offers/nap-notes.json` has a note saying the NAP's price for that
-operator or site is wrong (the note's why goes into the assumptions). A
-note can also say the operator publishes it **with VAT in** (`vatIncluded`,
-Tesla): then no VAT is added and the option carries `napVatIncluded`; and
-that its price **changes with the time of day** (`timeOfUse`) while the NAP
-has one fixed value, the day's highest (Tesla): the option gets `peakPrice`,
-its total is a ceiling, and an assumption says so and that only the
-operator's app has the price per hour (no public source does);
-and that a bank card at the terminal pays the same (`walkUp`), which the
-label then says.
-Some of these chargers also have an `AD_HOC_PAYMENT` price in MOBI.E's file
-(HighGreenPower): it's the same walk-up price, so the label says you pay by
-bank card / QR, and when there's no NAP price per kWh (the live entry lists
-only time or flat fees, or nothing is known) the `adhoc` option takes its
-place. The dataset's price stands in when the live feed is down or its entry
-has no fees.
+**`opc_direct`** — chargers outside MOBI.E (Continente, Tesla...): the NAP's price for that site × the region's VAT × kWh, paid to the operator (`eurPerKwhExVat` is the NAP's number, `eurPerKwh` has the VAT in). The NAP doesn't say whether the price covers anything besides the kWh; we take it as the whole price and say so in the assumptions, with the VAT rate added. It's listed next to the network's `direct` offers, not instead of them: an offer is one price for the whole network, the NAP's is this site's. It's left out only when `offers/nap-notes.json` has a note saying the NAP's price for that operator or site is wrong (the note's why goes into the assumptions). A note can also say the operator publishes it **with VAT in** (`vatIncluded`, Tesla): then no VAT is added and the option carries `napVatIncluded`; and that its price **changes with the time of day** (`timeOfUse`) while the NAP has one fixed value, the day's highest (Tesla): the option gets `peakPrice`, its total is a ceiling, and an assumption says so and that only the operator's app has the price per hour (no public source does); and that a bank card at the terminal pays the same (`walkUp`), which the label then says. Some of these chargers also have an `AD_HOC_PAYMENT` price in MOBI.E's file (HighGreenPower): it's the same walk-up price, so the label says you pay by bank card / QR, and when there's no NAP price per kWh (the live entry lists only time or flat fees, or nothing is known) the `adhoc` option takes its place. The dataset's price stands in when the live feed is down or its entry has no fees.
 
 Two summary fields:
-- **`headline`**: the first CEME option (the user's cheapest tariff, or the
-  cheapest popular one that needs no other contract). The answer leaves it out
-  when it's `best`, and otherwise names it by `headlineTariffId`
-  (`src/slim.js`);
-- **`best`**: the cheapest option the user can use right now, meaning no
-  subscription and no other contract. With `tariff_ids`, a tariff the user
-  listed counts even with conditions (`listed`: they have it), and a cheaper
-  CEME tariff they didn't list is never `best`: it stays in `options` as a tip
-  (`cheaperElsewhere`, `notYours`) with a note saying so. Direct offers aren't
-  affected, since `tariff_ids` says nothing about which apps the user has.
-  **The ranking sorts by `best`.** That's how an IONITY whose own app beats
-  every CEME ends up where it belongs.
+- **`headline`**: the first CEME option (the user's cheapest tariff, or the cheapest popular one that needs no other contract). The answer leaves it out when it's `best`, and otherwise names it by `headlineTariffId` (`src/slim.js`);
+- **`best`**: the cheapest option the user can use right now, meaning no subscription and no other contract. With `tariff_ids`, a tariff the user listed counts even with conditions (`listed`: they have it), and a cheaper CEME tariff they didn't list is never `best`: it stays in `options` as a tip (`cheaperElsewhere`, `notYours`) with a note saying so. Direct offers aren't affected, since `tariff_ids` says nothing about which apps the user has. **The ranking sorts by `best`.** That's how an IONITY whose own app beats every CEME ends up where it belongs.
 
-Without `tariff_ids` you only see the popular tariffs, plus the cheapest of
-all as a tip. **`unlistedCheaper`** counts the other ones left out that would
-cost less than the headline (one per card, never new-sign-up-only ones). It's
-a count, not a list: many of those tariffs need another contract or are
-closed to new sign-ups, so the point is to make the driver say which card
-they hold. The `note.unlisted` note tells the assistant to ask once, and the
-results view shows "+N cheaper tariffs not listed" under the options.
+Without `tariff_ids` you only see the popular tariffs, plus the cheapest of all as a tip. **`unlistedCheaper`** counts the other ones left out that would cost less than the headline (one per card, never new-sign-up-only ones). It's a count, not a list: many of those tariffs need another contract or are closed to new sign-ups, so the point is to make the driver say which card they hold. The `note.unlisted` note tells the assistant to ask once, and the results view shows "+N cheaper tariffs not listed" under the options.
 
 ## 4. Ranking (`quote.js`, `rank`)
 
 1. Price every plug of every site in range.
-2. Drop sessions longer than `max_minutes`, and plugs the live feed reports
-   as in use, out of order or blocked (`available_only`).
+2. Drop sessions longer than `max_minutes`, and plugs the live feed reports as in use, out of order or blocked (`available_only`).
 3. Keep the cheapest plug per site.
-4. Sort by `best`. MOBI.E and the networks outside it share one list: no
-   network is preferred, the price decides.
+4. Sort by `best`. MOBI.E and the networks outside it share one list: no network is preferred, the price decides.
 
 ## What can be wrong, and how the user finds out
 

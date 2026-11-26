@@ -2,26 +2,16 @@
 
 Your charging amigo: "ohm" + "amigo".
 
-An MCP server that answers two questions about every public EV charger in
-Portugal, on every network published on the National Access Point (NAP):
-MOBI.E and the ones outside it (Tesla, Continente...). From inside ChatGPT,
-Claude or any other AI assistant:
+An MCP server that answers two questions about every public EV charger in Portugal, on every network published on the National Access Point (NAP): MOBI.E and the ones outside it (Tesla, Continente...). From inside ChatGPT, Claude or any other AI assistant:
 
 - **How much will this charge cost?**
 - **Where's the cheapest place to charge near me, or on my way?**
 
-You tell your assistant where you are and what you drive. It looks up the
-car's battery and charging speed, asks your battery %, and calls ohmigo.
-ohmigo answers with the total cost and duration at each charger, for every
-way you could pay there: your CEME card, a bank card at the charger, or the
-operator's own app or subscription. Chat apps that support MCP Apps also show
-the results as a small inline page.
+You tell your assistant where you are and what you drive. It looks up the car's battery and charging speed, asks your battery %, and calls ohmigo. ohmigo answers with the total cost and duration at each charger, for every way you could pay there: your CEME card, a bank card at the charger, or the operator's own app or subscription. Chat apps that support MCP Apps also show the results as a small inline page.
 
-ohmigo keeps nothing linked to you. Your assistant remembers your car and cards
-and sends them with each question.
+ohmigo keeps nothing linked to you. Your assistant remembers your car and cards and sends them with each question.
 
-**New to EV charging in Portugal?** Read the [glossary](docs/00-glossary.md)
-first: CEME, OPC, MOBI.E, NAP and the rest.
+**New to EV charging in Portugal?** Read the [glossary](docs/00-glossary.md) first: CEME, OPC, MOBI.E, NAP and the rest.
 
 ## What the price includes
 
@@ -34,8 +24,7 @@ first: CEME, OPC, MOBI.E, NAP and the rest.
 | Whether the charger is free right now | the NAP live feed |
 | Energy and duration of your session | estimated from your car's specs ([02](docs/02-cost-math.md)) |
 
-Everything is an estimate, and every assumption comes back with the price so
-the assistant can tell you.
+Everything is an estimate, and every assumption comes back with the price so the assistant can tell you.
 
 ## Docs
 
@@ -71,47 +60,25 @@ node scripts/call.mjs find_cheapest_charging '{"place":"Leiria","battery_kwh":58
 
 ## Known limits
 
-- **The energy price follows the clock.** Each quarter-hour of the session
-  is priced at its own off-peak/peak period and OMIE price, from the start
-  time the assistant passes (default now). Ask for `detail` to see it
-  quarter by quarter ([02](docs/02-cost-math.md)).
-- **Durations are modelled**, not measured. Without the car's curve or 10-80 %
-  time, they're rough.
-- **Live data can be old.** A recent copy of the feed answers at once while a
-  newer one downloads, up to the age set by `LIVE_MAX_STALE_SECONDS`, and the
-  answer says how old it is. Only the first question after a long quiet spell
-  waits for the download ([03](docs/03-live-status.md)).
-- **Some MOBI.E chargers publish no operator fee anywhere.** Their price is
-  energy only, shown as "≥".
-- **Chargers outside MOBI.E** (Continente, Tesla) are priced from the NAP's
-  per-site price plus the region's VAT (the NAP publishes prices without
-  VAT), next to any offers for that network. `offers/nap-notes.json` drops a
-  NAP price known to be wrong.
-- **Direct offers come from one public price list.** Each one shows its
-  source and date; `npm run offers:gaps` shows operators with no offer yet.
+- **The energy price follows the clock.** Each quarter-hour of the session is priced at its own off-peak/peak period and OMIE price, from the start time the assistant passes (default now). Ask for `detail` to see it quarter by quarter ([02](docs/02-cost-math.md)).
+- **Durations are modelled**, not measured. Without the car's curve or 10-80 % time, they're rough.
+- **Live data can be old.** A recent copy of the feed answers at once while a newer one downloads, up to the age set by `LIVE_MAX_STALE_SECONDS`, and the answer says how old it is. Only the first question after a long quiet spell waits for the download ([03](docs/03-live-status.md)).
+- **Some MOBI.E chargers publish no operator fee anywhere.** Their price is energy only, shown as "≥".
+- **Chargers outside MOBI.E** (Continente, Tesla) are priced from the NAP's per-site price plus the region's VAT (the NAP publishes prices without VAT), next to any offers for that network. `offers/nap-notes.json` drops a NAP price known to be wrong.
+- **Direct offers come from one public price list.** Each one shows its source and date; `npm run offers:gaps` shows operators with no offer yet.
 
 ## License
 
-The code, docs and evals are licensed under the [GNU Affero General Public
-License v3.0 only](LICENSE) (AGPL-3.0-only). If you run a modified version
-for others over a network, you must offer them its source (section 13).
+The code, docs and evals are licensed under the [GNU Affero General Public License v3.0 only](LICENSE) (AGPL-3.0-only). If you run a modified version for others over a network, you must offer them its source (section 13).
 
 Copyright (C) 2026 Fernando Miguel and contributors.
 
-The repository is the Corresponding Source for what runs at ohmigo.pt:
-[github.com/CarregaErvilhas/ohmigo-mcp](https://github.com/CarregaErvilhas/ohmigo-mcp).
+The repository is the Corresponding Source for what runs at ohmigo.pt: [github.com/CarregaErvilhas/ohmigo-mcp](https://github.com/CarregaErvilhas/ohmigo-mcp).
 
 Not covered by that license:
 
-- **Third-party data**, which keeps its own terms: OpenStreetMap data is
-  ODbL, and `offers/custofinal.json` is Alexandre Moleiro's, who allows its
-  public use with no restrictions. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
-- **The name and the art**: "ohmigo", its mascot and icons, and "O Carro
-  Elétrico". A fork needs its own name.
-- **The other sites' mascots** in `site/grupo/` (the group page) belong to
-  their own sites (O Carro Elétrico, Voltaria, the CEME comparator, Postos PT,
-  olh'o'posto, AmpereArchive) and are outside these licenses. `pano.svg` is
-  the Panoramax logo, the Panoramax project's.
+- **Third-party data**, which keeps its own terms: OpenStreetMap data is ODbL, and `offers/custofinal.json` is Alexandre Moleiro's, who allows its public use with no restrictions. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+- **The name and the art**: "ohmigo", its mascot and icons, and "O Carro Elétrico". A fork needs its own name.
+- **The other sites' mascots** in `site/grupo/` (the group page) belong to their own sites (O Carro Elétrico, Voltaria, the CEME comparator, Postos PT, olh'o'posto, AmpereArchive) and are outside these licenses. `pano.svg` is the Panoramax logo, the Panoramax project's.
 
-Contributions need the [Contributor License Agreement](CLA.md), signed once
-by a comment on the first pull request ([CONTRIBUTING.md](CONTRIBUTING.md)).
+Contributions need the [Contributor License Agreement](CLA.md), signed once by a comment on the first pull request ([CONTRIBUTING.md](CONTRIBUTING.md)).
