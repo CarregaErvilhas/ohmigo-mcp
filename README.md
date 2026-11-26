@@ -110,7 +110,8 @@ Not covered by that license:
   Elétrico". A fork needs its own name.
 - **The other sites' mascots** in `site/grupo/` (the group page) belong to
   their own sites (O Carro Elétrico, Voltaria, the CEME comparator, Postos PT,
-  AmpereArchive) and are outside these licenses.
+  olh'o'posto, AmpereArchive) and are outside these licenses. `pano.svg` is
+  the Panoramax logo, the Panoramax project's.
 
 Contributions need the [Contributor License Agreement](CLA.md), signed once
 by a comment on the first pull request ([CONTRIBUTING.md](CONTRIBUTING.md)).
