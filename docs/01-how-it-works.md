@@ -149,6 +149,7 @@ graded ([evals/README.md](../evals/README.md)).
 | `src/lookup.js` | Finds a charger by what the user calls it: code, operator or brand, OSM name, town, address |
 | `src/direction.js` | Motorway service areas: which side the driver can reach, from where they're heading |
 | `src/live.js` | Live status from the NAP: on-demand download, cache, parser |
+| `src/usage.js` | Each site's usage history (nap-dashboard's hourly per-site files): fetched on demand for `lookup_charger`, summarised per site, cached an hour |
 | `src/quote.js` | Prices one plug for every way to pay; ranks plugs |
 | `src/slim.js` | Says once what every result of a pricing answer shares; moves the driver's notes to `_meta` for the page |
 | `src/socket.js` | What the driver must know about a socket: which plug to use (`plug`), on MOBI.E the grid it's on (`tar`: BT or MT), and on DC the power it gives a 400 V car or the user's at its battery voltage (`kwAt400V`, `kwForCar`) |

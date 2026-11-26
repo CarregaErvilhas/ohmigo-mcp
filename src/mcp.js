@@ -326,18 +326,20 @@ function chargerModels(site) {
 // on that kind of day, with the quietest hours between 7 and 23. Local time of
 // the site's region.
 const TZ = { CONT: 'Europe/Lisbon', MAD: 'Atlantic/Madeira', AZO: 'Atlantic/Azores' };
-function localHour(region, at) {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: TZ[region] ?? TZ.CONT, hour: 'numeric', hourCycle: 'h23', weekday: 'short' }).formatToParts(at);
+function localHour(region, at, tz) {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz ?? TZ[region] ?? TZ.CONT, hour: 'numeric', hourCycle: 'h23', weekday: 'short' }).formatToParts(at);
   const get = k => parts.find(x => x.type === k)?.value;
   return { hour: Number(get('hour')), weekend: ['Sat', 'Sun'].includes(get('weekday')) };
 }
-export function siteHistory(site, at = new Date()) {
-  const h = site.history;
+// `usage` is the site's summary from the hourly per-site files (src/usage.js),
+// which replaces the dataset's weekly one when lookup_charger has it.
+export function siteHistory(site, at = new Date(), usage) {
+  const h = usage ?? site.history;
   if (!h) return undefined;
   const out = { days: Math.round(h.days) };
   if (h.down !== undefined) out.outOfOrderPct = h.down;
   if (h.busy) {
-    const { hour, weekend } = localHour(site.region, at);
+    const { hour, weekend } = localHour(site.region, at, h.tz);
     const row = weekend ? h.busy.we : h.busy.wd;
     // The hour asked (`at`, now by default), local, and its kind of day.
     out.atHour = hour;
@@ -396,7 +398,7 @@ function sitePhotos(site) {
 // What a driver wants to know about the site before going, and the notes it
 // needs: opening hours (and whether it's open at `at`), where it is in the car
 // park, whether a bank card works, who to call. Each fact says its source.
-function siteFacts(site, t, at = new Date()) {
+function siteFacts(site, t, at = new Date(), usage) {
   const hours = siteOpen(site, at);
   const card = cardPayment(site);
   const notes = [];
@@ -410,7 +412,8 @@ function siteFacts(site, t, at = new Date()) {
   // Said once per answer (the tools drop repeated notes), however many sites.
   if (site.models) notes.push(t('note.chargerModels'));
   if (site.underground) notes.push(t('note.underground', { site: site.id }));
-  if (site.history) notes.push(t('note.history'));
+  const history = siteHistory(site, at, usage);
+  if (history) notes.push(t('note.history'));
   if (site.nearby) notes.push(t('note.nearby'));
   if (site.photos?.some(p => p.src) || site.models?.some(m => m.photo)) notes.push(t('note.photos'));
   const phone = site.phone ?? site.osm?.phone;
@@ -432,7 +435,7 @@ function siteFacts(site, t, at = new Date()) {
       underground: site.underground ? true : undefined,
       checkedOnSite: site.osm?.checkDate,
       nearby: site.nearby,
-      history: siteHistory(site, at),
+      history,
       support: phone || site.osm?.email ? { phone, email: site.osm?.email } : undefined,
     },
     notes,
@@ -517,9 +520,9 @@ function placeError(ds, name, t) {
 // Everything the data says about one site, for lookup_charger. Sockets that
 // are the same (power, plug, fee) are grouped, with a count per live status:
 // a car park with 10 identical T2s reads as one line, not ten.
-function siteCard(h, live, t, audiences = [], notes = [], carVolts) {
+function siteCard(h, live, t, audiences = [], notes = [], carVolts, usage) {
   const { site } = h;
-  const { facts, notes: siteNotes } = siteFacts(site, t);
+  const { facts, notes: siteNotes } = siteFacts(site, t, new Date(), usage?.get(site.id));
   notes.push(...siteNotes);
   if (h.points.some(fromOsm)) notes.push(t('note.osmSockets'));
   const units = chargerUnits(site, live);
@@ -872,7 +875,7 @@ async function privateCost(a, ctx, lang, t) {
 
 // `getDataset` instead of the dataset itself: server.js swaps in a fresh copy
 // every few hours, and each request should see the current one.
-export function createServer(getDataset, live) {
+export function createServer(getDataset, live, usage) {
   const server = new McpServer({ name: 'ohmigo', title: 'Ohmigo: EV charging costs in Portugal', version: VERSION, websiteUrl: SITE_URL,
     icons: [{ src: 'https://raw.githubusercontent.com/CarregaErvilhas/ohmigo-mcp/main/site/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }, { src: 'https://raw.githubusercontent.com/CarregaErvilhas/ohmigo-mcp/main/site/icon.svg', mimeType: 'image/svg+xml', sizes: ['any'] }] },
   { instructions: INSTRUCTIONS + (QA ? QA_NOTE : '') });
@@ -976,9 +979,14 @@ export function createServer(getDataset, live) {
       // the town's, however far from it.
       if (results.every(h => h.matched.every(f => f === 'city' || f === 'address'))) notes.unshift(t('note.placeUnknown', { words: results[0].missing.join(', ') }));
     }
-    const status = await withLive(live, ctx, t);
+    // The usage history of the sites shown comes with the live status, never
+    // in its way: a file that fails or is slow just leaves `history` out.
+    const [status, used] = await Promise.all([
+      withLive(live, ctx, t),
+      usage ? usage.get(results.slice(0, a.limit).map(h => h.site.id)).catch(() => undefined) : undefined,
+    ]);
     notes.push(...liveNotes(status, t));
-    const cards = results.slice(0, a.limit).map(h => siteCard(h, status, t, a.audiences, notes, a.car_voltage));
+    const cards = results.slice(0, a.limit).map(h => siteCard(h, status, t, a.audiences, notes, a.car_voltage, used));
     notes.push(...kwForCarNote(results.slice(0, a.limit).flatMap(h => h.points), a, t));
     // CHAdeMO left out (filterOf) at a site shown: a note for the assistant
     // only, so a CHAdeMO driver's assistant knows to ask again with CHADEMO.
