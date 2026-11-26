@@ -219,7 +219,9 @@ Monday.
   local hour on weekdays and weekends (null with too little data).
   `siteHistory` in `src/mcp.js` turns it into `outOfOrderPct`,
   `busyPctAtHour` (at the hour asked) and `quietestHours` (7 to 23).
-  Top-level `historySource` has the window.
+  Top-level `historySource` has the window. `lookup_charger` reads the same
+  figures, rebuilt every hour, from the per-site usage files (below), and
+  falls back to this field only when they don't answer.
 - A DC socket's `unit`: which charger of the site it is on (an OpenStreetMap
   post with several sockets). `chargerUnits` in `src/mcp.js` groups them with
   the live status: on a charger with a car on it, each gets the model's
@@ -270,3 +272,27 @@ The builder needs pandas, hence nap-dashboard's venv.
 
 With `data/chargers.json` present, the server uses it instead of the Pages
 copy.
+
+## Per-site usage files
+
+nap-dashboard also publishes, next to the dataset, how each site has been used:
+`data/sites/<xx>.json.gz` on the same host, 256 gzip files rebuilt every hour
+from the AmpereArchive (`scripts/site_history.py` there, which documents the
+format). A site's file is the FNV-1a hash of its NAP id, mod 256
+(`shardOf` in `src/usage.js`). Per socket it has buckets
+`[cells, charging, available, down]` per hour, local day, local month and
+weekday x hour of the last 4 weeks; a cell is one socket in one hour with a
+status read, and the other three count hundredths of a cell, so buckets of
+different sockets add up.
+
+`lookup_charger` fetches the files of the sites it shows (`src/usage.js`),
+turns each into one small summary per site in the shape of `history` above
+(4 weeks: days with a read, % of the time down, % charging per hour on
+weekdays and weekends, the site's time zone) and drops the file. Summaries
+stay for an hour, as long as the files take to change. A file that fails or
+is slow leaves `history` out of the answer, never the answer itself.
+
+The states are what the operator declares, not measured. Where one charger has
+two plugs (CCS + CHAdeMO), many operators report the idle plug `outOfOrder`
+while the other charges, so `outOfOrderPct` reads high at those sites.
+

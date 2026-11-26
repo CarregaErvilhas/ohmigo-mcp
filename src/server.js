@@ -25,6 +25,7 @@ import { Dataset, DatasetRefused } from './data.js';
 import { LiveStatus } from './live.js';
 import { chargers, dump, forgetDump } from './dump.js';
 import { createServer, QA } from './mcp.js';
+import { SiteUsage } from './usage.js';
 import { GROUP_IMAGES, GROUP_PAGES, GROUP_PATHS, LEGAL, LEGAL_PAGES, LLMS_TXT, MANIFEST, MARKDOWN, NOT_FOUND_HTML, PAGES, SITEMAP, SITEMAP_URLS, SITE_URL } from './site.js';
 import { INDEXNOW_KEY, indexNowSubmit } from './indexnow.js';
 import { statsSummary } from './stats.js';
@@ -55,6 +56,8 @@ let datasetRefused = null;
 console.log(`[ohmigo] ${ds.sites.length} sites, data as of ${ds.generatedAt}`);
 
 const live = new LiveStatus();
+// Each site's usage history (src/usage.js), read on demand by lookup_charger.
+const usage = new SiteUsage();
 // Jittered, so two instances booting together don't both pull the whole feed
 // at the same second. A request before then just triggers it itself.
 if (process.env.LIVE_WARMUP !== '0') setTimeout(() => live.refresh(), Math.random() * 20_000).unref();
@@ -358,7 +361,7 @@ async function handle(req, res) {
   if (Array.isArray(body)) return send(res, 400, { jsonrpc: '2.0', error: { code: -32600, message: 'Invalid Request: JSON-RPC batches are not supported' }, id: null });
   // QA mode logs every call, so a tester can see what the client actually sent.
   if (QA) console.log('[ohmigo] qa:', body?.method, body?.params?.name ?? '', JSON.stringify(body?.params?.arguments ?? {}));
-  const server = createServer(() => ds, live);
+  const server = createServer(() => ds, live, usage);
   // Responses go out as a stream (SSE), not one JSON blob, so a progress
   // message can reach the user while a tool waits for the live feed.
   const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });

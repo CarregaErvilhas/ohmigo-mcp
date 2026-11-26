@@ -26,7 +26,7 @@ async function boot(env) {
     env: {
       ...process.env, PORT: '0', HOST: '127.0.0.1', DATASET_PATH: 'test/fixtures/chargers.json',
       CEME_API_URL: `http://127.0.0.1:${ceme.address().port}`, CEME_API_KEY: 'k',
-      NAP_STATUS_URL: 'http://127.0.0.1:9/live', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1', HEALTHZ_TOKEN: '', ...env,
+      NAP_STATUS_URL: 'http://127.0.0.1:9/live', SITE_USAGE_URL: 'http://127.0.0.1:9/sites/', LIVE_WARMUP: '0', LIVE_WAIT_SECONDS: '1', HEALTHZ_TOKEN: '', ...env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
