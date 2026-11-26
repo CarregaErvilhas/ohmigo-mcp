@@ -9,29 +9,29 @@ What's **not** in it: live status (changes by the minute, see [03](03-live-statu
 ## Where it comes from
 
 ```
- Monday 06:00 UTC, nap-dashboard's refresh.yml
+ 02:49, 08:49, 14:49 and 20:49 UTC, nap-dashboard's refresh.yml
    │  downloads the NAP static XML and MOBI.E's tariff CSV
    │  runs its pipeline (including the OpenStreetMap dump), then scripts/ohmigo_dataset.py
-   │  uploads the result as the "ohmigo-dataset" Actions artifact
+   │  checks it, and uploads it with the site's data as the "network" Actions artifact
    ▼
  nap-dashboard's pages.yml
-   │  copies the newest one next to the dashboard
+   │  publishes the newest one with the dashboard
    ▼
  https://nap.ocarroeletrico.com/ohmigo/chargers.json      (GitHub Pages, a CDN)
    │
    ▼
- ohmigo: loaded at boot, re-checked every 6 hours
+ ohmigo: loaded at boot, re-checked every hour
 ```
 
-The builder lives in nap-dashboard because that's where the raw files and the weekly job already are. ohmigo only downloads the result.
+The builder lives in nap-dashboard because that's where the raw files and the pipeline already are. ohmigo only downloads the result. The file also carries `planned`, the sites under construction that olh'o'posto reads; ohmigo ignores it.
 
-## Why "every 6 hours" if it changes once a week?
+## Checking every hour
 
-The server can run for weeks without a restart, so it needs a way to notice Monday's new file. Every 6 hours (`DATASET_CHECK_HOURS`) it asks Pages "has this changed?", sending the `ETag` of the copy it has:
+The server can run for weeks without a restart, so it needs a way to notice a new file. Every hour (`DATASET_CHECK_HOURS`) it asks Pages "has this changed?", sending the `ETag` of the copy it has:
 
 - **Unchanged** (most checks): Pages answers `304 Not Modified`, a few hundred bytes, and nothing else happens.
-- **Changed** (once a week): the server downloads the new file, checks it, and swaps it in. Requests already running finish on the old copy.
-- **Failed** (Pages down, bad file): the server keeps the copy it has and tries again 6 hours later.
+- **Changed** (up to four times a day): the server downloads the new file, checks it, and swaps it in. Requests already running finish on the old copy.
+- **Failed** (Pages down, bad file): the server keeps the copy it has and tries again an hour later.
 - **Refused** (a file that downloaded fine but looks broken): the server keeps the copy it has, logs why, and `/healthz` lists `dataset: last update refused` until a later file passes.
 
 ### What counts as a broken file
@@ -44,7 +44,7 @@ A downloaded file replaces a good one with nobody looking, so `Dataset.load` (`s
 
 A local file (`DATASET_PATH`, `data/chargers.json`) skips the floor and the ratio: tests and development use small ones on purpose.
 
-So the new data shows up at most 6 hours after Monday's refresh, for almost no traffic. A shorter interval would be fine too. Longer would just mean a later Monday.
+So new data shows up at most an hour after each refresh, for almost no traffic: most checks are a 304. `/healthz` reports `dataset: older than 2 days` when the refreshes have stopped.
 
 ## The format
 

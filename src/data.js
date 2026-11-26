@@ -2,7 +2,7 @@
 //
 // "The dataset" is the part of the network that changes slowly: where each
 // charger is, its plugs and power, and the operator fees MOBI.E publishes.
-// nap-dashboard builds it once a week (scripts/ohmigo_dataset.py over there)
+// nap-dashboard builds it four times a day (scripts/ohmigo_dataset.py there)
 // and publishes it at DEFAULT_URL. Things that change by the minute (is the
 // charger free?) are NOT here: live.js reads them from the NAP when asked.
 //
@@ -41,7 +41,7 @@ import { revalidate } from './live.js';
 // ~9k sites; a truncated or tampered one must not replace it.
 export const MAX_DATASET_BYTES = 64 * 1024 * 1024;
 export const MIN_SITES = 1000;
-// Same ratio as AmpereArchive's collector (minRatio): a weekly rebuild never
+// Same ratio as AmpereArchive's collector (minRatio): a healthy rebuild never
 // loses half the network, a broken one does.
 export const MIN_RATIO = 0.5;
 

@@ -60,7 +60,7 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `CEME_API_KEY` | none | ceme-v2 API key. Without it, the server borrows an anonymous web session, rate-limited to 60 requests/min per IP: fine for development, not for production. |
 | `DATASET_PATH` | none | read the dataset from this file |
 | `DATASET_URL` | the Pages URL | read the dataset from this URL |
-| `DATASET_CHECK_HOURS` | `6` | how often to check for a new dataset |
+| `DATASET_CHECK_HOURS` | `1` | how often to check for a new dataset |
 | `LIVE_TTL_SECONDS` | `300` | how long a live feed copy counts as fresh (±10 %) |
 | `SITE_USAGE_URL` | `data/sites/` next to the dataset | where the per-site usage files are (`src/usage.js`) |
 | `SITE_USAGE_TTL_SECONDS` | `3600` | how long a usage file's summaries are kept |

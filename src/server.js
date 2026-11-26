@@ -34,8 +34,8 @@ import { COMMIT, SOURCE_URL, VERSION } from './version.js';
 const PORT = Number(process.env.PORT || 3002);
 const HOST = process.env.HOST || '127.0.0.1';
 const MAX_BODY = 256 * 1024;
-// How often to ask whether a new weekly dataset is out. See below.
-const DATASET_CHECK_MS = Number(process.env.DATASET_CHECK_HOURS || 6) * 3600_000;
+// How often to ask whether a new dataset is out. See below.
+const DATASET_CHECK_MS = Number(process.env.DATASET_CHECK_HOURS || 1) * 3600_000;
 
 // A CDN hiccup at boot shouldn't crash-loop the container. 4 tries of 15 s
 // with 2/4/8 s between them is ~74 s, inside Zerops' 120 s readiness
@@ -62,8 +62,8 @@ const usage = new SiteUsage();
 // at the same second. A request before then just triggers it itself.
 if (process.env.LIVE_WARMUP !== '0') setTimeout(() => live.refresh(), Math.random() * 20_000).unref();
 
-// The dataset changes once a week (Monday morning), but the server may run for
-// weeks without a restart. So every few hours it asks "has it changed?" with
+// The dataset changes four times a day, but the server may run for weeks
+// without a restart. So every hour it asks "has it changed?" with
 // the ETag of the copy it has. Unchanged: the answer is a 304 of a few hundred
 // bytes and nothing else happens. Changed: it downloads the new file and
 // swaps it in; requests already running finish on the old one.
@@ -231,8 +231,9 @@ function health(detail) {
     ...(ceme.rateLimitedUntil ? ['ceme-v2: rate limited'] : []),
   ];
   const ageH = (Date.now() - Date.parse(ds.generatedAt)) / 3600_000;
-  // The dataset is rebuilt weekly; past ~9 days the pipeline has missed one.
-  if (ageH > 9 * 24) problems.push('dataset: older than 9 days');
+  // The dataset is rebuilt four times a day; GitHub can run a scheduled job
+  // hours late, but past 2 days the pipeline is broken.
+  if (ageH > 2 * 24) problems.push('dataset: older than 2 days');
   if (datasetRefused) problems.push('dataset: last update refused');
   const summary = {
     ok: true, status: problems.length ? 'degraded' : 'ok', problems, version: VERSION, commit: COMMIT, source: SOURCE_URL,

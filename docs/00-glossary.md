@@ -49,7 +49,7 @@ Everything above except the OPC fee (energy, TAR, IEC, EGME, VAT on the energy) 
 ## Data sources
 
 **NAP / PAN** — *National Access Point* (*Ponto de Acesso Nacional* in Portuguese). The government's open data portal where Portugal's public chargers are published, MOBI.E's and those outside it (Tesla, Continente...), in a European XML format called **DATEX II**. Two feeds:
-- *static*: every site and charger, plugs, power, address, payment methods (once a week is plenty);
+- *static*: every site and charger, plugs, power, address, payment methods (a few refreshes a day is plenty);
 - *dynamic*: the live status of every charger plus the OPC fees (republished every few minutes).
 
 **MOBI.E tariff file** — a CSV with every socket's official OPC fee, including per-minute tiers ("0.18 €/min after 30 min") and the ad hoc price.

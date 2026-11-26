@@ -81,7 +81,7 @@ test('healthz: the public answer is the summary, with no raw error strings', asy
     }
     assert.equal(h.status, 'degraded');
     assert.ok(h.problems.includes('live: last refresh failed'), h.problems.join());
-    for (const p of h.problems) assert.match(p, /^(live: last refresh failed|ceme-v2: unavailable|ceme-v2: rate limited|dataset: older than 9 days)$/);
+    for (const p of h.problems) assert.match(p, /^(live: last refresh failed|ceme-v2: unavailable|ceme-v2: rate limited|dataset: older than 2 days)$/);
   }
 });
 
