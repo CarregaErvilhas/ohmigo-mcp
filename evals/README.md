@@ -1,16 +1,8 @@
 # Evals
 
-`npm test` checks the server: given these arguments, this answer. It can't
-check the other half: given what a user writes, does an assistant pick the
-right tool, pass the right arguments and present the result honestly? That
-half depends on the words in `src/mcp.js` (instructions, tool and argument
-descriptions) and in the results (`assumptions`, `notes`, from `src/i18n.js`),
-and a model reading them. These evals put a model in front of them.
+`npm test` checks the server: given these arguments, this answer. It can't check the other half: given what a user writes, does an assistant pick the right tool, pass the right arguments and present the result honestly? That half depends on the words in `src/mcp.js` (instructions, tool and argument descriptions) and in the results (`assumptions`, `notes`, from `src/i18n.js`), and a model reading them. These evals put a model in front of them.
 
-Run them when you change any of that, and before you merge. They aren't in CI
-(they need a model to run); in Claude Code, the `ohmigo-evals` skill
-(`.claude/skills/ohmigo-evals/SKILL.md`) drives a whole run with Haiku
-sub-agents.
+Run them when you change any of that, and before you merge. They aren't in CI (they need a model to run); in Claude Code, the `ohmigo-evals` skill (`.claude/skills/ohmigo-evals/SKILL.md`) drives a whole run with Haiku sub-agents.
 
 ## How a run works
 
@@ -33,19 +25,11 @@ sub-agents.
 
 What the server works with:
 
-- **Dataset**: a frozen copy of the public one in `evals/.cache/` (downloaded
-  on the first run; `--refresh-data` takes this week's), so two runs compare on
-  the same chargers.
-- **CEME prices**: the real ceme-v2, like `npm start` (anonymous session, or
-  `CEME_API_KEY` if you set it). Tariffs and campaigns change, which is why
-  cases declare what they need (`requires`, below) and are skipped when it's
-  gone.
-- **Live status**: off (every socket "unknown"), the same on every run.
-  `--live` fetches the NAP feed.
+- **Dataset**: a frozen copy of the public one in `evals/.cache/` (downloaded on the first run; `--refresh-data` takes this week's), so two runs compare on the same chargers.
+- **CEME prices**: the real ceme-v2, like `npm start` (anonymous session, or `CEME_API_KEY` if you set it). Tariffs and campaigns change, which is why cases declare what they need (`requires`, below) and are skipped when it's gone.
+- **Live status**: off (every socket "unknown"), the same on every run. `--live` fetches the NAP feed.
 
-Variants (`--variant`) show the assistant the instructions whole (`full`), cut
-at `INSTRUCTIONS_MAX` characters (`src/mcp.js`) like Claude Code does (`cut`), or not at all (`none`, like
-a client that ignores them: then the tool descriptions have to carry it).
+Variants (`--variant`) show the assistant the instructions whole (`full`), cut at `INSTRUCTIONS_MAX` characters (`src/mcp.js`) like Claude Code does (`cut`), or not at all (`none`, like a client that ignores them: then the tool descriptions have to carry it).
 
 ## A case
 
@@ -60,8 +44,7 @@ a client that ignores them: then the tool descriptions have to carry it).
 | `requires` | What it needs that isn't frozen (optional): `{"site": "<id>"}` in the dataset (with `"has": "<field>"`, a site that has that field, e.g. `history`), `{"models": "<id>"}` / `{"photos": "<id>"}` a site with charger models / a photo in it; `{"tariff": "<name query>", "id": "<regex>", "audience": "<id>", "newCustomersOnly": true}` or `{"promo": "<target regex>", "newCustomers": true}` in ceme-v2 |
 | `expect` | What a good assistant does (below) |
 
-`message` and `memory` can say `{{month}}` and `{{year}}` (the current ones,
-in Portuguese) instead of a date that would go stale.
+`message` and `memory` can say `{{month}}` and `{{year}}` (the current ones, in Portuguese) instead of a date that would go stale.
 
 `expect`:
 
@@ -69,12 +52,9 @@ in Portuguese) instead of a date that would go stale.
 - `noCalls`: none may match;
 - `every`: every call (to `tool`, if given) must match, e.g. `lang`;
 - `answer.match` / `answer.noMatch`: regexes on the reply (case-insensitive);
-- `judge`: yes/no questions for a judge model, phrased so "yes" is right; a
-  question can allow "n/a" ("Answer n/a if…") for things the data may not show.
+- `judge`: yes/no questions for a judge model, phrased so "yes" is right; a question can allow "n/a" ("Answer n/a if…") for things the data may not show.
 
-A call expectation is `{"tool": "<regex>", "args": {…}, "ok": true}`. `tool`
-matches the whole name (`"estimate_charging_cost|lookup_charger"`), `ok: true`
-skips calls that came back as errors, and each argument is matched by:
+A call expectation is `{"tool": "<regex>", "args": {…}, "ok": true}`. `tool` matches the whole name (`"estimate_charging_cost|lookup_charger"`), `ok: true` skips calls that came back as errors, and each argument is matched by:
 
 | Matcher | Means |
 |---|---|
@@ -83,31 +63,16 @@ skips calls that came back as errors, and each argument is matched by:
 | `"regex"` | the value (JSON, for arrays and objects) matches |
 | `"*": "regex"` | all the arguments, as JSON, match: "place or lat/lon" |
 
-Write cases about behaviour, never about prices or exact words: prices move
-every week and a good answer can be phrased many ways. One rule per case, so a
-failure says what broke. Prefer a mechanical check to a judge question when one
-exists: it's free and never wrong about itself.
+Write cases about behaviour, never about prices or exact words: prices move every week and a good answer can be phrased many ways. One rule per case, so a failure says what broke. Prefer a mechanical check to a judge question when one exists: it's free and never wrong about itself.
 
 ## Reading the results
 
-`node evals/grade.mjs <run dir>` prints the failures; `report.md` in the run
-directory has every case with its checks, calls and answer. When a case fails,
-read its calls and answer before blaming the change: it can be the model
-having a bad day (run with `--repeat 3`), a case that asks too much, or a real
-regression. `node evals/grade.mjs <run A> <run B>` puts two runs side by side,
-per case.
+`node evals/grade.mjs <run dir>` prints the failures; `report.md` in the run directory has every case with its checks, calls and answer. When a case fails, read its calls and answer before blaming the change: it can be the model having a bad day (run with `--repeat 3`), a case that asks too much, or a real regression. `node evals/grade.mjs <run A> <run B>` puts two runs side by side, per case.
 
 ## Limits
 
-- The assistant is a Haiku sub-agent in Claude Code reading a brief, not
-  ChatGPT or the Claude app: their system prompts, memory and tool handling
-  differ. Read the results as "is the guidance clear enough for a small
-  model", not as a forecast for each app.
-- Claude Code cuts long command output, so results over `PRINT_MAX` characters
-  (`evals/call.mjs`) reach the agent as their summary lines plus a file to read.
-- There's no web search: the agent uses what it knows about cars, as a model
-  without search would.
-- One try per case is a coin flip for borderline behaviour: compare versions
-  with `--repeat 3`.
-- To run them in CI, the same cases and grader would need a runner that calls
-  a model's API instead of sub-agents.
+- The assistant is a Haiku sub-agent in Claude Code reading a brief, not ChatGPT or the Claude app: their system prompts, memory and tool handling differ. Read the results as "is the guidance clear enough for a small model", not as a forecast for each app.
+- Claude Code cuts long command output, so results over `PRINT_MAX` characters (`evals/call.mjs`) reach the agent as their summary lines plus a file to read.
+- There's no web search: the agent uses what it knows about cars, as a model without search would.
+- One try per case is a coin flip for borderline behaviour: compare versions with `--repeat 3`.
+- To run them in CI, the same cases and grader would need a runner that calls a model's API instead of sub-agents.
