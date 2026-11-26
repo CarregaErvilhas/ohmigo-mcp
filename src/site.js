@@ -43,6 +43,9 @@ const S = JSON.parse(source.match(/<script type="application\/json" id="strings"
 // before the first paint. Copied as is into the legal pages, so the two can't
 // drift; the server allows it there by its hash, as on the landing page.
 export const THEME_SCRIPT = source.match(/<head>[\s\S]*?(<script>[\s\S]*?<\/script>)/)[1];
+// "Atalho no ecrã principal": the same script as the group's other sites
+// (site/install.js), inlined so the CSP's script hashes cover it.
+const INSTALL_SCRIPT = readFileSync(new URL('../site/install.js', import.meta.url), 'utf8');
 
 // Each legal page's sections, in order: [heading key, then paragraph keys].
 // An array of keys is a bulleted list; 'CTA' is the row of contact buttons.
@@ -218,6 +221,9 @@ export function render(lang) {
     .replace(/(<(\w+)\b[^>]*\bdata-i="([^"]+)"[^>]*>)(<\/\2>)/g, (m, open, tag, key, close) => open + (t[key] ?? '') + close)
     // Names for screen readers: an attribute, so data-i can't fill them.
     .replace(/data-aria="([^"]+)"/g, (m, key) => `aria-label="${attr(t[key] ?? '')}"`)
+    // What a copy button says once it has copied (site/install.js).
+    .replace(/data-copied-i="([^"]+)"/g, (m, key) => `data-copied="${attr(t[key] ?? '')}"`)
+    .replace(/<!-- install:[^>]*-->/, () => `<script>${INSTALL_SCRIPT}</script>`)
     .replace(/ aria-current="page"/g, '')
     .replace(`data-lang="${lang}"`, `data-lang="${lang}" aria-current="page"`);
   return lang === 'en' ? englishLegalLinks(html) : html;
@@ -324,8 +330,11 @@ export const PAGES = { pt: Buffer.from(render('pt')), en: Buffer.from(render('en
 
 // Every HTML page by URL, as Markdown (see toMarkdown).
 export const MARKDOWN = {};
-MARKDOWN['/'] = Buffer.from(toMarkdown(PAGES.pt.toString()));
-MARKDOWN['/en'] = Buffer.from(toMarkdown(PAGES.en.toString()));
+// The home-screen banner and its steps are for people on a phone, not for an
+// assistant reading the page.
+const withoutInstall = html => html.replace(/<div class="install-bar"[\s\S]*?<\/dialog>\n?/, '');
+MARKDOWN['/'] = Buffer.from(toMarkdown(withoutInstall(PAGES.pt.toString())));
+MARKDOWN['/en'] = Buffer.from(toMarkdown(withoutInstall(PAGES.en.toString())));
 
 // URL -> its HTML: one copy per URL, rendered once at boot.
 export const LEGAL_PAGES = Object.fromEntries(Object.entries(LEGAL).flatMap(([page, { paths }]) =>
@@ -381,8 +390,12 @@ export const MANIFEST = JSON.stringify({
   short_name: 'ohmigo',
   description: text(S.pt['meta.desc']),
   lang: 'pt-PT',
+  // Installable from the home page's "Atalho no ecrã principal". `id` is the
+  // start URL, so a copy installed before `id` existed stays the same app.
+  id: '/',
   start_url: '/',
-  display: 'browser',
+  scope: '/',
+  display: 'standalone',
   background_color: '#fbfaf5',
   theme_color: '#16a34a',
   icons: [

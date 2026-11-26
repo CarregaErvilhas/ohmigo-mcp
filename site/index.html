@@ -11,6 +11,7 @@
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
+<meta name="apple-mobile-web-app-title" content="ohmigo">
 <script>
 // Runs before the first paint, here and, copied by src/site.js, on the
 // privacy, support and terms pages. A theme picked with this page's header
@@ -372,6 +373,44 @@ try {
     .avatar { width: 48px; height: 48px; }
     .avatar svg { width: 36px; height: 47px; }
   }
+  /* "Atalho no ecrã principal" (site/install.js): footer button, phone banner, steps dialog */
+  .linkbtn { font: inherit; color: var(--green); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+  .linkbtn[data-install-open] { display: none; }
+  :root[data-install="ready"] .linkbtn[data-install-open] { display: inline; }
+  .install-bar[hidden], .install-dlg [hidden] { display: none; }
+  .install-bar { position: fixed; z-index: 40; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto;
+    display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 12px; padding: 10px 6px 10px 12px;
+    background: var(--card); color: var(--fg); border: 2px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .install-bar img { display: block; border-radius: 22%; }
+  .install-bar p { margin: 0; font-size: 14px; line-height: 1.35; color: var(--muted); }
+  .install-bar strong { display: block; color: var(--fg); font-size: 16px; font-weight: 800; }
+  .install-bar .add { background: var(--green); border-color: var(--green); color: var(--on-green); }
+  .install-x { width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; }
+  .install-x:hover { color: var(--fg); background: var(--bg-alt); }
+  .install-dlg { width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 20px 22px 18px; border: 0; border-radius: var(--radius);
+    background: var(--card); color: var(--fg); font-family: var(--font); }
+  .install-dlg::backdrop { background: rgba(15, 23, 42, .5); }
+  .install-dlg h2 { margin: 14px 0 6px; font-size: 22px; font-weight: 800; }
+  .install-tile { display: grid; justify-items: center; gap: 6px; padding: 18px 0 12px; border-radius: 14px; background: var(--bg-alt); }
+  .install-tile img { border-radius: 22%; box-shadow: var(--shadow); }
+  .install-tile span { font-size: 12px; font-weight: 800; }
+  .install-lede { margin: 0 0 14px; color: var(--muted); }
+  .install-steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .install-steps li { counter-increment: step; position: relative; min-height: 28px; padding: 3px 0 0 38px; }
+  .install-steps li::before { content: counter(step); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px;
+    border-radius: 50%; background: var(--green-soft); color: var(--green-ink); font-weight: 800; font-size: 14px; }
+  .install-list { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; }
+  .install-note { margin: 12px 0 0; font-size: 14px; color: var(--muted); }
+  .install-glyph { width: 1.25em; height: 1.25em; vertical-align: -.25em; padding: 1px; border: 1px solid var(--line); border-radius: 5px; color: var(--green); }
+  .install-copy { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 0; }
+  .install-copy code { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; font: 13px var(--mono); padding: 6px 8px; border-radius: 10px; background: var(--bg-alt); }
+  .install-actions { margin: 18px 0 0; display: flex; justify-content: flex-end; }
+  /* On a narrow phone the banner keeps the title and the button; the dialog says the rest. */
+  @media (max-width: 420px) { .install-bar { gap: 10px; } .install-bar p span { display: none; } }
+  @media (max-width: 600px) {
+    .install-dlg { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: var(--radius) var(--radius) 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  }
+  .install-dlg[open] { transition: translate .22s ease-out; @starting-style { translate: 0 24px; } }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
     .js .reveal, .msg { opacity: 1; transform: none; }
@@ -415,6 +454,7 @@ try {
       <path d="M12 0V24M0 12H24" stroke="#fff" stroke-width="7"/><path d="M12 0V24M0 12H24" stroke="#c8102e" stroke-width="4"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 14V3M8 7l4-4 4 4M7 10H5v11h14V10h-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-law" viewBox="0 0 24 24"><path d="M12 3v18M5 21h14M6 7h12M6 7l-3 6a3 3 0 0 0 6 0zM18 7l-3 6a3 3 0 0 0 6 0z"/></symbol>
   </defs>
 </svg>
@@ -721,10 +761,30 @@ try {
     <p data-i="foot.guides"></p>
     <p data-i="foot.more"></p>
     <p data-i="foot.code"></p>
-    <p><a href="/privacidade" data-i="foot.privacy"></a> · <a href="/suporte" data-i="foot.support"></a> · <a href="/termos" data-i="foot.terms"></a></p>
+    <p><a href="/privacidade" data-i="foot.privacy"></a> · <a href="/suporte" data-i="foot.support"></a> · <a href="/termos" data-i="foot.terms"></a> · <button class="linkbtn" type="button" data-install-open data-i="home.open"></button></p>
   </div>
 </footer>
 
+<div class="install-bar" id="install-bar" data-install-key="ohmigo.install" hidden>
+  <img src="/icon-192.png" alt="" width="44" height="44">
+  <p><strong data-i="home.bar.title"></strong> <span data-i="home.bar.text"></span></p>
+  <button class="btn-small add" type="button" data-install-open data-i="home.bar.add"></button>
+  <button class="install-x" type="button" data-install-dismiss data-aria="home.later">×</button>
+</div>
+<dialog class="install-dlg" id="install-dialog" closedby="any" aria-labelledby="install-title">
+  <div class="install-tile" aria-hidden="true"><img src="/icon-192.png" alt="" width="64" height="64"><span>ohmigo</span></div>
+  <h2 id="install-title" data-i="home.title"></h2>
+  <p class="install-lede" data-i="home.lede"></p>
+  <div data-install-hint="ios-safari" hidden><ol class="install-steps"><li data-i="home.ios.1"></li><li data-i="home.ios.2"></li><li data-i="home.ios.3"></li></ol><p class="install-note" data-i="home.ios.note"></p></div>
+  <div data-install-hint="ios-other" hidden><ol class="install-steps"><li data-i="home.iosother.1"></li><li data-i="home.iosother.2"></li></ol><p class="install-note" data-i="home.iosother.note"></p></div>
+  <div data-install-hint="in-app" hidden><p class="install-note" data-i="home.inapp.note"></p><ol class="install-steps"><li data-i="home.inapp.1"></li><li data-i="home.inapp.2"></li></ol><p class="install-note" data-i="home.inapp.copy"></p>
+    <p class="install-copy"><code data-install-url></code> <button class="btn-small" type="button" data-install-copy data-copied-i="home.copied" data-i="home.copy"></button></p></div>
+  <div data-install-hint="android-firefox" hidden><ol class="install-steps"><li data-i="home.ffx.1"></li><li data-i="home.ffx.2"></li><li data-i="home.ffx.3"></li></ol></div>
+  <div data-install-hint="samsung" hidden><ol class="install-steps"><li data-i="home.samsung.1"></li><li data-i="home.samsung.2"></li></ol></div>
+  <div data-install-hint="android" hidden><ol class="install-steps"><li data-i="home.android.1"></li><li data-i="home.android.2"></li><li data-i="home.android.3"></li></ol><p class="install-note" data-i="home.android.note"></p></div>
+  <div data-install-hint="desktop" hidden><ul class="install-list"><li data-i="home.desk.1"></li><li data-i="home.desk.2"></li><li data-i="home.desk.3"></li></ul><p class="install-note" data-i="home.desk.note"></p></div>
+  <p class="install-actions"><button class="btn-small" type="button" data-install-close data-i="home.close"></button></p>
+</dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- Every sentence on the page, in both languages. test/site.test.js checks
@@ -914,7 +974,41 @@ try {
     "foot.terms": "Termos",
     "toast.url": "Endereço copiado! Agora cola-o no assistente 🎉",
     "toast.prompt": "Pergunta copiada! Cola-a no teu assistente 💬",
-    "toast.fail": "Não deu para copiar. Seleciona o texto e copia à mão."
+    "toast.fail": "Não deu para copiar. Seleciona o texto e copia à mão.",
+    "home.open": "Atalho no ecrã principal",
+    "home.bar.title": "ohmigo no ecrã principal",
+    "home.bar.text": "Abre como uma app, sem lojas nem downloads.",
+    "home.bar.add": "Adicionar",
+    "home.later": "Agora não",
+    "home.title": "Pôr o ohmigo no ecrã principal",
+    "home.lede": "Não há nada para descarregar: fica um ícone no ecrã principal e esta página abre em ecrã inteiro, como as outras apps. As perguntas continuas a fazê-las no ChatGPT, no Claude ou no Grok; isto é um atalho para aqui.",
+    "home.ios.1": "Toca em Partilhar <svg class=\"install-glyph\" aria-hidden=\"true\"><use href=\"#i-share\"/></svg> na barra do Safari. Se não o vires, toca primeiro em ⋯.",
+    "home.ios.2": "Escolhe «Adicionar ao ecrã principal» (se não aparecer, desliza a lista para cima).",
+    "home.ios.3": "Toca em «Adicionar».",
+    "home.ios.note": "Abriste o link dentro de outra app (WhatsApp, Gmail…)? Toca no ícone do Safari, em baixo, para abrir lá, e repete.",
+    "home.iosother.1": "Toca em Partilhar <svg class=\"install-glyph\" aria-hidden=\"true\"><use href=\"#i-share\"/></svg>: está na barra de endereço ou no menu do browser (⋯ ou ☰).",
+    "home.iosother.2": "Escolhe «Adicionar ao ecrã principal» e depois «Adicionar».",
+    "home.iosother.note": "Não encontras a opção? Abre esta página no Safari e repete.",
+    "home.inapp.note": "Estás no browser de outra app (Facebook, Instagram, Messenger…), que não instala sites.",
+    "home.inapp.1": "Toca em ⋯ ou ⋮, em cima, e escolhe abrir no browser (Safari ou Chrome).",
+    "home.inapp.2": "Lá, toca outra vez em «Atalho no ecrã principal», no fim da página.",
+    "home.inapp.copy": "Ou copia o link e cola-o no browser:",
+    "home.copy": "Copiar link",
+    "home.copied": "Copiado",
+    "home.ffx.1": "Toca no menu ⋮ do Firefox.",
+    "home.ffx.2": "Escolhe «Instalar» ou «Adicionar ao ecrã principal».",
+    "home.ffx.3": "Confirma.",
+    "home.samsung.1": "Se a barra de endereço mostrar o ícone de instalar, toca nele.",
+    "home.samsung.2": "Senão, abre o menu ≡ (em baixo) e adiciona a página ao ecrã principal.",
+    "home.android.1": "Toca no menu do browser (⋮, em cima à direita).",
+    "home.android.2": "Escolhe «Instalar app» ou «Adicionar ao ecrã principal».",
+    "home.android.3": "Confirma.",
+    "home.android.note": "Abriste o link dentro de outra app e o menu só deixa abrir no browser? Abre-o lá e repete.",
+    "home.desk.1": "Chrome e Edge: clica no ícone de instalar, à direita na barra de endereço.",
+    "home.desk.2": "Safari no Mac: menu Ficheiro → «Adicionar à Dock».",
+    "home.desk.3": "Firefox: se a tua versão não tiver a opção, usa um dos outros.",
+    "home.desk.note": "No telemóvel é igual: abre o site lá e toca em «Atalho no ecrã principal».",
+    "home.close": "Fechar"
   },
   "en": {
     "meta.title": "ohmigo · EV charging prices and know-how for Portugal",
@@ -1096,7 +1190,41 @@ try {
     "foot.terms": "Terms",
     "toast.url": "Address copied! Now paste it into your assistant 🎉",
     "toast.prompt": "Question copied! Paste it into your assistant 💬",
-    "toast.fail": "Couldn't copy. Select the text and copy it by hand."
+    "toast.fail": "Couldn't copy. Select the text and copy it by hand.",
+    "home.open": "Home screen shortcut",
+    "home.bar.title": "ohmigo on your home screen",
+    "home.bar.text": "Opens like an app, no app store, no download.",
+    "home.bar.add": "Add",
+    "home.later": "Not now",
+    "home.title": "Put ohmigo on your home screen",
+    "home.lede": "Nothing to download: you get an icon on your home screen and this page opens full screen, like your other apps. You still ask your questions in ChatGPT, Claude or Grok; this is a shortcut to here.",
+    "home.ios.1": "Tap Share <svg class=\"install-glyph\" aria-hidden=\"true\"><use href=\"#i-share\"/></svg> in Safari’s toolbar. If you can’t see it, tap ⋯ first.",
+    "home.ios.2": "Choose “Add to Home Screen” (scroll the list up if it isn’t there).",
+    "home.ios.3": "Tap “Add”.",
+    "home.ios.note": "Opened the link inside another app (WhatsApp, Gmail…)? Tap the Safari icon at the bottom to open it there, then try again.",
+    "home.iosother.1": "Tap Share <svg class=\"install-glyph\" aria-hidden=\"true\"><use href=\"#i-share\"/></svg>: it’s in the address bar or in the browser’s menu (⋯ or ☰).",
+    "home.iosother.2": "Choose “Add to Home Screen”, then “Add”.",
+    "home.iosother.note": "Can’t find it? Open this page in Safari and try again.",
+    "home.inapp.note": "You’re in another app’s browser (Facebook, Instagram, Messenger…), which can’t install sites.",
+    "home.inapp.1": "Tap ⋯ or ⋮ at the top and open the page in your browser (Safari or Chrome).",
+    "home.inapp.2": "There, tap “Home screen shortcut” again, at the bottom of the page.",
+    "home.inapp.copy": "Or copy the link and paste it into your browser:",
+    "home.copy": "Copy link",
+    "home.copied": "Copied",
+    "home.ffx.1": "Tap Firefox’s ⋮ menu.",
+    "home.ffx.2": "Choose “Install” or “Add to Home screen”.",
+    "home.ffx.3": "Confirm.",
+    "home.samsung.1": "If the address bar shows an install icon, tap it.",
+    "home.samsung.2": "Otherwise open the ≡ menu (at the bottom) and add the page to the Home screen.",
+    "home.android.1": "Tap the browser menu (⋮, top right).",
+    "home.android.2": "Choose “Install app” or “Add to Home screen”.",
+    "home.android.3": "Confirm.",
+    "home.android.note": "Opened the link inside another app and the menu only offers to open it in the browser? Do that, then try again.",
+    "home.desk.1": "Chrome and Edge: click the install icon at the right of the address bar.",
+    "home.desk.2": "Safari on a Mac: File menu → “Add to Dock”.",
+    "home.desk.3": "Firefox: if your version lacks the option, use one of the others.",
+    "home.desk.note": "On your phone it’s the same: open the site there and tap “Home screen shortcut”.",
+    "home.close": "Close"
   }
 }
 </script>
@@ -1258,5 +1386,6 @@ try {
   }
 })();
 </script>
+<!-- install: site/install.js, inlined by src/site.js -->
 </body>
 </html>
