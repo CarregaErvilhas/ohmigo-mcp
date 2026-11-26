@@ -100,6 +100,9 @@ export const GROUP = [
   { id: 'voltaria', site: 'https://voltaria.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/voltaria' },
   { id: 'ceme', site: 'https://ceme.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/CEME' },
   { id: 'nap', site: 'https://nap.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/nap-dashboard' },
+  { id: 'oop', site: 'https://olhaoposto.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/OlhaOPosto' },
+  // olh'o'posto's own Panoramax server, shown with the Panoramax logo; its config lives in olh'o'posto's repo.
+  { id: 'pano', site: 'https://panoramax.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/OlhaOPosto/tree/main/panoramax' },
   { id: 'ampere', repo: 'https://github.com/CarregaErvilhas/AmpereArchive', private: true },
 ];
 export const GROUP_PATHS = { pt: '/grupo', en: '/group' };
