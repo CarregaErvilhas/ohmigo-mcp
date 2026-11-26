@@ -13,7 +13,7 @@ Words in **bold** are in the [glossary](00-glossary.md).
    │  calls find_cheapest_charging { place, battery_kwh, start_pct, lang, ... }
    ▼
  ohmigo (this repo)
-   ├── dataset: sites, plugs, power, OPC fees     ◄── nap-dashboard, weekly
+   ├── dataset: sites, plugs, power, OPC fees     ◄── nap-dashboard, 4× a day
    ├── live status (+ NAP fees as a fallback)     ◄── NAP dynamic feed, on demand
    ├── CEME energy prices                         ◄── ceme-v2 API
    └── direct offers (TPA, apps, subscriptions)   ◄── offers/, scraped weekly + manual
@@ -63,7 +63,7 @@ Whether a model actually follows all this is what `evals/` checks: a model plays
 
 | File | What it does |
 |---|---|
-| `src/server.js` | HTTP server, boot, health check, landing page, weekly dataset swap |
+| `src/server.js` | HTTP server, boot, health check, landing page, dataset swap |
 | `src/mcp.js` | Tools, argument schemas, the instructions the assistant reads |
 | `src/i18n.js` | Every user-facing sentence, in English and Portuguese |
 | `src/clean.js` | Limits third-party text when a dataset loads: which OSM fields pass, the length of free text, the shape of contacts |
