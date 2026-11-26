@@ -665,7 +665,7 @@ test('http: the landing page is rendered in each language at its own URL, for cr
   assert.match(pt, /<link rel="canonical" href="https:\/\/ohmigo\.ocarroeletrico\.com\/">/);
   assert.match(pt, /hreflang="en" href="https:\/\/ohmigo\.ocarroeletrico\.com\/en"/);
   assert.match(pt, /og:image" content="https:\/\/ohmigo\.ocarroeletrico\.com\/og\.png\?v=[0-9a-f]{10}"/);
-  assert.match(pt, /href="https:\/\/ceme\.ocarroeletrico\.com">comparador/);
+  assert.match(pt, /href="https:\/\/ceme\.ocarroeletrico\.com" target="_blank" rel="noopener">comparador/);
   const ld = JSON.parse(pt.match(/<script type="application\/ld\+json">(.*?)<\/script>/)[1]);
   assert.equal(ld['@type'], 'WebApplication');
   assert.doesNotMatch(pt, /data-i="[^"]+"><\//, 'no element left empty');

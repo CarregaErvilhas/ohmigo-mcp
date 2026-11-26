@@ -265,8 +265,8 @@ function linkUp(html, lang, paths) {
 function mate(g, t) {
   const k = `group.${g.id}`, img = GROUP_IMAGES[`/grupo/${g.id}.svg`];
   const go = g.here ? `<span class="here">${t['group.here']}</span>`
-    : g.site ? `<a class="btn btn-main" href="${g.site}">${t['group.open']} →</a>` : '';
-  const code = `<a class="btn btn-line" href="${g.repo}"><svg aria-hidden="true"><use href="#${g.private ? 'i-lock' : 'i-code'}"/></svg>${t[g.private ? 'group.private' : 'group.code']}</a>`;
+    : g.site ? `<a class="btn btn-main" href="${g.site}" ${NEW_TAB}>${t['group.open']} →</a>` : '';
+  const code = `<a class="btn btn-line" href="${g.repo}" ${NEW_TAB}><svg aria-hidden="true"><use href="#${g.private ? 'i-lock' : 'i-code'}"/></svg>${t[g.private ? 'group.private' : 'group.code']}</a>`;
   const note = g.private ? `<p class="mate-note">${t[`${k}.note`]}</p>` : '';
   return `<li class="mate m-${g.id}">`
     + `<div class="mate-pic"><img src="/grupo/${g.id}.svg" alt="${attr(t[`${k}.mascot`])}" width="${img.w}" height="${img.h}" loading="lazy"></div>`
