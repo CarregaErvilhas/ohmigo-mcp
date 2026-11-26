@@ -93,6 +93,7 @@ Whether a model actually follows all this is what `evals/` checks: a model plays
 | `src/version.js` | The version, read from `package.json` |
 | `ui/results.html` | The inline results page |
 | `site/index.html` | The landing page: what ohmigo answers (prices, and the Voltaria guides), why to trust it and how to install it, every sentence in both languages |
+| `site/install.js` | "Atalho no ecrã principal": the same script as the group's other sites, inlined into the landing page by `src/site.js`. It picks the steps for the browser in use (`test/install.test.js` checks it with real user agents) or opens Chrome's own install dialog when it can |
 | `site/legal.html` | The privacy, support and terms pages, every sentence in both languages |
 | `site/grupo.html` | The group page: the other sites of O Carro Elétrico's community, each one's mascot beside a speech bubble, every sentence in both languages |
 | `site/grupo/*.svg` | The mascots on the group page, each one the art of its own site |

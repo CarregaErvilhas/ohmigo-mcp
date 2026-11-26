@@ -31,7 +31,8 @@ test('site: the top links are a named <nav>', () => {
 });
 
 test('site: every inline SVG is hidden from screen readers or has a name', () => {
-  for (const [tag] of html.matchAll(/<svg\b[^>]*>/g)) assert.match(tag, /aria-hidden="true"|aria-label=|data-aria=/, tag);
+  // Inside the #strings JSON the quotes are escaped (aria-hidden=\"true\").
+  for (const [tag] of html.matchAll(/<svg\b[^>]*>/g)) assert.match(tag, /aria-hidden=\\?"true\\?"|aria-label=|data-aria=/, tag);
 });
 
 test('site: focus is visible', () => {
