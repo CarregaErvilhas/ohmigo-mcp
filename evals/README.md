@@ -2,7 +2,7 @@
 
 `npm test` checks the server: given these arguments, this answer. It can't check the other half: given what a user writes, does an assistant pick the right tool, pass the right arguments and present the result honestly? That half depends on the words in `src/mcp.js` (instructions, tool and argument descriptions) and in the results (`assumptions`, `notes`, from `src/i18n.js`), and a model reading them. These evals put a model in front of them.
 
-Run them when you change any of that, and before you merge. They aren't in CI (they need a model to run); in Claude Code, the `ohmigo-evals` skill (`.claude/skills/ohmigo-evals/SKILL.md`) drives a whole run with Haiku sub-agents.
+Run them when you change any of that, and before you merge. In Claude Code, the `ohmigo-evals` skill (`.claude/skills/ohmigo-evals/SKILL.md`) drives a whole run with Haiku sub-agents. CI runs them only on a pull request that moves the `voltaria/` submodule (see [In CI](#in-ci)).
 
 ## How a run works
 
@@ -30,6 +30,10 @@ What the server works with:
 - **Live status**: off (every socket "unknown"), the same on every run. `--live` fetches the NAP feed.
 
 Variants (`--variant`) show the assistant the instructions whole (`full`), cut at `INSTRUCTIONS_MAX` characters (`src/mcp.js`) like Claude Code does (`cut`), or not at all (`none`, like a client that ignores them: then the tool descriptions have to carry it).
+
+## In CI
+
+`.github/workflows/evals.yml` runs `evals/ci.sh`, which does the skill's steps with headless Claude Code and fails unless every case that ran passed. It needs the `ANTHROPIC_API_KEY` secret, and fails without it. Dependabot's pull requests don't get Actions secrets: the key has to be a Dependabot secret too. A failure can be the model's, so read the case before blaming the change (see [Reading the results](#reading-the-results)).
 
 ## A case
 
@@ -75,4 +79,3 @@ Write cases about behaviour, never about prices or exact words: prices move ever
 - Claude Code cuts long command output, so results over `PRINT_MAX` characters (`evals/call.mjs`) reach the agent as their summary lines plus a file to read.
 - There's no web search: the agent uses what it knows about cars, as a model without search would.
 - One try per case is a coin flip for borderline behaviour: compare versions with `--repeat 3`.
-- To run them in CI, the same cases and grader would need a runner that calls a model's API instead of sub-agents.
