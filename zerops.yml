@@ -11,6 +11,9 @@ zerops:
       base: nodejs@24
       buildCommands:
         - npm ci --omit=dev
+        # Zerops has no variable for the commit, so keep it in a file for
+        # /healthz (src/version.js). No .git in the build: no file, commit null.
+        - git rev-parse HEAD > src/commit.txt 2>/dev/null || rm -f src/commit.txt
       deployFiles:
         - src
         - ui

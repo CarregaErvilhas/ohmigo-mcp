@@ -4,3 +4,6 @@ data/
 .env
 evals/.cache/
 evals/runs/
+
+# Written by the Zerops build (src/version.js)
+src/commit.txt

@@ -70,7 +70,7 @@ Chat apps need a public HTTPS URL, so they only work once it's deployed.
 | `LIVE_MAX_STALE_SECONDS` | `3600` | how old a live feed copy can be and still answer at once while it refreshes in the background, flagged stale; past it, a request waits. `0` always waits |
 | `LIVE_WARMUP` | on | `0` skips the boot download |
 | `HEALTHZ_TOKEN` | none | unlocks the detail on `/healthz`, sent in the `x-healthz-token` header. Without it the detail stays private. |
-| `GIT_SHA` | none | the commit this build came from; `/healthz` shows it as `commit`, with `source` linking to that tree, so anyone can check what runs matches the public repo (AGPL section 13). Set it at deploy time; anything that isn't a 7-40 character hex SHA is ignored |
+| `GIT_SHA` | none | the commit this build came from; `/healthz` shows it as `commit`, with `source` linking to that tree, so anyone can check what runs matches the public repo (AGPL section 13). Unset, the server reads `src/commit.txt`, which the Zerops build writes with `git rev-parse HEAD`; anything that isn't a 7-40 character hex SHA is ignored |
 | `OPENAI_APPS_CHALLENGE` | none | the token OpenAI's plugin submission gives for domain verification, served as plain text at `/.well-known/openai-apps-challenge`; unset, that path is a 404 |
 | `OHMIGO_QA` | off | `1` turns on QA mode: every result carries the quarter-hour `timeline` and a `debug` block, and the assistant is told to show them. Never in production |
 | `INDEXNOW` | off | `on` (set in `zerops.yml`) sends the sitemap's URLs to IndexNow a minute after start, so Bing hears of new pages after every deploy (`src/indexnow.js`). A failure is only logged |
