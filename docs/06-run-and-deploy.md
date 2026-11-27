@@ -107,12 +107,12 @@ cd /some/empty/dir && zcli push <service-id> -P <project-id> --setup mcp --no-gi
 
 ### Domain and DNS
 
-The procedure is the group's: [How a Zerops service is exposed](https://github.com/CarregaErvilhas/OCarroEletrico/blob/main/docs/zerops-exposure.md) (Zerops routing first, one proxied `AAAA` record, the certificate, the Access Policy that only admits Cloudflare, and how to check it). ohmigo's values:
+The procedure is the group's: [How a Zerops service is exposed](https://github.com/CarregaErvilhas/Architecture/blob/main/Docs/zerops-exposure.md) (Zerops routing first, one proxied `AAAA` record, the certificate, the Access Policy that only admits Cloudflare, and how to check it). ohmigo's values:
 
 - Routing: `ohmigo.ocarroeletrico.com` → service `mcp`, port 3002, with SSL.
 - Path to check it with: `/healthz`. Direct requests to the origin must answer 403; through Cloudflare, 200.
 
-The process runs as its own user without sudo (`zerops.yml`; [the pattern](https://github.com/CarregaErvilhas/OCarroEletrico/blob/main/docs/zerops-exposure.md#non-root-process)).
+The process runs as its own user without sudo (`zerops.yml`; [the pattern](https://github.com/CarregaErvilhas/Architecture/blob/main/Docs/zerops-exposure.md#non-root-process)).
 
 ## Rate limiting and load
 
@@ -128,6 +128,6 @@ The server has no per-client limit, on purpose. Calls from ChatGPT and Claude co
 
 **The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets (`src/mcp.js`) on the event loop. The tool takes a place before it searches: `MAX_RANKINGS` run at once and `MAX_RANKINGS_QUEUED` wait, and past that it says to try again in a few seconds. `rank()` in `src/quote.js` first works out the sessions, then fires the calls together and waits for them, then prices in chunks of `RANK_CHUNK` with a turn for the event loop between them, so `/healthz` keeps answering. A request that's abandoned, in either tool, leaves the line and stops at the next chunk; its calls still waiting are dropped unless another request is waiting on the same one. All of these limits are per process and shared by everyone: a burst from one client still slows the others, and can get them refused.
 
-**The edge.** None of this stops anyone from sending requests, or keeps one client from spending the shared quota. In front of the server, a Cloudflare rate limiting rule on `/mcp` is a flood guard, not a quota. It isn't in this repo and a deploy doesn't change it. It's the only one the zone's plan allows and it also matches other hosts: read [Rate limiting](https://github.com/CarregaErvilhas/OCarroEletrico/blob/main/docs/cloudflare-zone.md#rate-limiting-the-only-rule) before touching it.
+**The edge.** None of this stops anyone from sending requests, or keeps one client from spending the shared quota. In front of the server, a Cloudflare rate limiting rule on `/mcp` is a flood guard, not a quota. It isn't in this repo and a deploy doesn't change it. It's the only one the zone's plan allows and it also matches other hosts: read [Rate limiting](https://github.com/CarregaErvilhas/Architecture/blob/main/Docs/cloudflare-zone.md#rate-limiting-the-only-rule) before touching it.
 
 While the quota is spent, `/healthz` is `degraded` with `ceme-v2: rate limited` in `problems`. With the token, `ceme` shows `rateLimitedUntil` and the size of the cache.
