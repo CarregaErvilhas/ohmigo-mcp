@@ -21,6 +21,21 @@ updates:
           - "minor"
           - "patch"
 
+  # voltaria/, the knowledge base the assistant reads. A bump runs the evals
+  # (.github/workflows/evals.yml). No cooldown beyond Dependabot's default:
+  # it's our own content, and a long one would hold back every new fact.
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 1
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps(voltaria)"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
