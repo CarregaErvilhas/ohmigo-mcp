@@ -1,0 +1,66 @@
+{
+  "status": {
+    "publicationTime": "2000-01-01T12:00:00.000+00:00",
+    "points": {
+      "QA0001/1": { "status": "available", "fees": [{ "policy": "pricePerDeliveryUnit", "eur": 0.25 }, { "policy": "pricePerChargingTime", "eur": 0.05 }] },
+      "QA0001/2": { "status": "charging", "fees": [] },
+      "QA0001/3": { "status": "blocked", "fees": [{ "policy": "flatRate", "eur": 1.5 }] },
+      "QA0002/1": { "status": "outOfOrder", "fees": [] },
+      "QA0002/4": { "status": "other", "fees": [] },
+      "QA0002/5": { "status": "other", "fees": [] },
+      "QA0002/6": { "status": "other", "fees": [] },
+      "QA0002/7": { "status": "inoperative", "fees": [{ "policy": "pricePerDeliveryUnit", "eur": 0.3 }, { "policy": "flatRate", "eur": 0.5 }] },
+      "QA0002/8": { "status": "unknown", "fees": [] },
+      "QA0002/9": { "status": "planned", "fees": [] },
+      "QA0002/10": { "status": "charging", "fees": [] },
+      "QA0003/1": { "status": "available", "fees": [] }
+    }
+  },
+  "static": {
+    "sites": {
+      "QS0001": {
+        "externalId": "QS-EXT-1", "name": "Estação São João",
+        "lat": "40.000001", "lon": "-8.000001",
+        "postcode": "0000-001", "city": "Vila Exemplo", "countryCode": "PT", "street": "Rua do Exemplo 1",
+        "operatorId": "ZZZ", "operatorName": "Operador Exemplo", "operatorWebsite": "https://operator.example.com/",
+        "locationDescription": "Parque coberto, piso -1", "hours": "24/7",
+        "vehicles": ["bus", "car"], "auth": ["apps", "rfid"]
+      },
+      "QS0002": {
+        "externalId": null, "name": "Example Park North",
+        "lat": "41.5", "lon": "-8.5",
+        "postcode": "0000-002", "city": "Aldeia Exemplo", "countryCode": "PT", "street": null,
+        "operatorId": "ZZZ", "operatorName": "Operador Exemplo", "operatorWebsite": null,
+        "locationDescription": null, "hours": "Mo-Fr 08:00-20:00; Sa 09:00-24:00; Su off",
+        "vehicles": [], "auth": []
+      },
+      "QS0003": {
+        "externalId": "QS-EXT-3", "name": "Posto Três",
+        "lat": "39.25", "lon": "-9.25",
+        "postcode": null, "city": null, "countryCode": null, "street": null,
+        "operatorId": "YYY", "operatorName": "Outro Operador", "operatorWebsite": null,
+        "locationDescription": null, "hours": null,
+        "vehicles": [], "auth": []
+      }
+    },
+    "points": {
+      "QS0001/P1": {
+        "externalId": "QS-P1", "usageType": "public", "greenEnergy": "true", "availablePowerW": 50000,
+        "connectors": [
+          { "type": "iec62196T2", "mode": "mode3AC3p", "format": "socket", "powerW": 22000, "volts": 400, "amps": 32 },
+          { "type": "iec62196T2COMBO", "mode": "mode4DC", "format": "cableMode3", "powerW": 50000, "volts": 500, "amps": 125 }
+        ]
+      },
+      "QS0001/P2": { "externalId": "QS-P2", "usageType": null, "greenEnergy": null, "availablePowerW": null, "connectors": [] },
+      "QS0001/P3": {
+        "externalId": "QS-P3", "usageType": null, "greenEnergy": null, "availablePowerW": 1000000,
+        "connectors": [{ "type": "mcs", "mode": "mode4DC", "format": "cableMode3", "powerW": 1000000, "volts": null, "amps": null }]
+      },
+      "QS0002/P1": {
+        "externalId": "QS-2-P1", "usageType": "public", "greenEnergy": "false", "availablePowerW": null,
+        "connectors": [{ "type": "domesticF", "mode": null, "format": null, "powerW": 3700, "volts": null, "amps": null }]
+      },
+      "QS0003/P1": { "externalId": "QS-3-P1", "usageType": null, "greenEnergy": null, "availablePowerW": null, "connectors": [] }
+    }
+  }
+}
