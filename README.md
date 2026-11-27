@@ -79,6 +79,6 @@ Not covered by that license:
 
 - **Third-party data**, which keeps its own terms: OpenStreetMap data is ODbL, and `offers/custofinal.json` is Alexandre Moleiro's, who allows its public use with no restrictions. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 - **The name and the art**: "ohmigo", its mascot and icons, and "O Carro Elétrico". A fork needs its own name.
-- **The other sites' mascots** in `site/grupo/` (the group page) belong to their own sites (O Carro Elétrico, Voltaria, the CEME comparator, Postos PT, olh'o'posto, AmpereArchive) and are outside these licenses. `pano.svg` is the Panoramax logo, the Panoramax project's.
+- **The other sites' mascots** in `brand/grupo/` (the group page) belong to their own sites (O Carro Elétrico, Voltaria, the CEME comparator, Postos PT, olh'o'posto, AmpereArchive) and are outside these licenses. `pano.svg` is the Panoramax logo, the Panoramax project's. The rest of `brand/` comes from the group's [Brand repo](https://github.com/CarregaErvilhas/Brand), under its own licenses.
 
 Contributions need the [Contributor License Agreement](CLA.md), signed once by a comment on the first pull request ([CONTRIBUTING.md](CONTRIBUTING.md)).

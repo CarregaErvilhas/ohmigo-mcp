@@ -1,4 +1,4 @@
-// site/install.js picks the steps for the browser in use from its user agent.
+// brand/install.js picks the steps for the browser in use from its user agent.
 // The browser pane only runs Chrome, so the other browsers are checked here
 // with real user agents.
 import { test } from 'node:test';
@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
 const sandbox = {};
-runInNewContext(readFileSync(new URL('../site/install.js', import.meta.url), 'utf8'), sandbox);
+runInNewContext(readFileSync(new URL('../brand/install.js', import.meta.url), 'utf8'), sandbox);
 const { installHint } = sandbox;
 
 const CASES = [

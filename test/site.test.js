@@ -4,9 +4,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { CTA, GROUP, GROUP_IMAGES, GROUP_PAGES, GROUP_PATHS, LEGAL, LEGAL_PAGES, OG_IMAGE_URL, PAGES, SITEMAP, THEME_SCRIPT } from '../src/site.js';
+import { CTA, GROUP, GROUP_IMAGES, GROUP_PAGES, GROUP_PATHS, GROUP_STRINGS, LEGAL, LEGAL_PAGES, OG_IMAGE_URL, PAGES, SITEMAP, THEME_SCRIPT } from '../src/site.js';
 
 const html = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
 const S = JSON.parse(html.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
@@ -242,7 +242,7 @@ test('sitemap: every legal URL lists both languages', () => {
   }
 });
 
-// The group page (site/grupo.html): the community's sites, from GROUP.
+// The group page (site/grupo.html): the community's sites, from brand/.
 const grupo = readFileSync(new URL('../site/grupo.html', import.meta.url), 'utf8');
 const G = JSON.parse(grupo.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
 
@@ -250,12 +250,25 @@ test('group: en and pt have the same keys, and every key used has a string', () 
   assert.deepEqual(Object.keys(G.pt).sort(), Object.keys(G.en).sort());
   const used = [...grupo.matchAll(/data-(?:i|aria)="([^"]+)"/g)].map(m => m[1]);
   for (const g of GROUP) for (const f of ['name', 'host', 'desc', 'mascot']) used.push(`group.${g.id}.${f}`);
-  for (const k of used) assert.ok(k in G.pt, `missing ${k}`);
+  for (const lang of ['pt', 'en']) for (const k of used) assert.ok(GROUP_STRINGS[lang][k], `missing ${lang} ${k}`);
+});
+
+// A site added in the Brand repo needs its colour here, or its circle is blank.
+test('group: this site is in the list, and every site has its colour', () => {
+  assert.equal(GROUP.filter(g => g.here).length, 1);
+  for (const { id } of GROUP) assert.match(grupo, new RegExp(`\\.m-${id} \\{ --c:`), id);
+});
+
+test('brand: the mascots and the install script served are the submodule\'s, with no copy in site/', () => {
+  const brand = path => readFileSync(new URL(`../brand/${path}`, import.meta.url));
+  for (const [path, { body }] of Object.entries(GROUP_IMAGES)) assert.deepEqual(body, brand(path.slice(1)), path);
+  for (const page of Object.values(PAGES)) assert.ok(page.toString().includes(`<script>${brand('install.js')}</script>`));
+  for (const copy of ['grupo', 'install.js']) assert.ok(!existsSync(new URL(`../site/${copy}`, import.meta.url)), copy);
 });
 
 for (const [lang, path] of Object.entries(GROUP_PATHS)) {
   test(`group ${path}: every site in order, with its mascot and its buttons, in one language`, () => {
-    const h = GROUP_PAGES[path].toString(), t = G[lang], other = G[lang === 'pt' ? 'en' : 'pt'];
+    const h = GROUP_PAGES[path].toString(), t = GROUP_STRINGS[lang], other = GROUP_STRINGS[lang === 'pt' ? 'en' : 'pt'];
     assert.ok(h.includes(`<link rel="canonical" href="${ORIGIN}${path}">`), 'canonical');
     const items = [...h.matchAll(/<li class="mate m-(\w+)">([\s\S]*?)<\/li>/g)];
     assert.deepEqual(items.map(m => m[1]), GROUP.map(g => g.id), 'order');

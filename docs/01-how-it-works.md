@@ -93,10 +93,10 @@ Whether a model actually follows all this is what `evals/` checks: a model plays
 | `src/version.js` | The version, read from `package.json` |
 | `ui/results.html` | The inline results page |
 | `site/index.html` | The landing page: what ohmigo answers (prices, and the Voltaria guides), why to trust it and how to install it, every sentence in both languages |
-| `site/install.js` | "Atalho no ecrã principal": the same script as the group's other sites, inlined into the landing page by `src/site.js`. It picks the steps for the browser in use (`test/install.test.js` checks it with real user agents) or opens Chrome's own install dialog when it can |
 | `site/legal.html` | The privacy, support and terms pages, every sentence in both languages |
-| `site/grupo.html` | The group page: the other sites of O Carro Elétrico's community, each one's mascot beside a speech bubble, every sentence in both languages |
-| `site/grupo/*.svg` | The mascots on the group page, each one the art of its own site |
+| `site/grupo.html` | The group page: the other sites of O Carro Elétrico's community, each one's mascot beside a speech bubble; its own sentences in both languages, the shared ones from `brand/group.json` |
+| `brand/` | The group's [Brand repo](https://github.com/CarregaErvilhas/Brand), a submodule pinned to a release. `group.json` has the group page's sites, their order and shared texts; `grupo/*.svg` the mascots, each one the art of its own site |
+| `brand/install.js` | "Atalho no ecrã principal": the group's shared script, inlined into the landing page by `src/site.js`. It picks the steps for the browser in use (`test/install.test.js` checks it with real user agents) or opens Chrome's own install dialog when it can |
 | `src/site.js` | Renders those pages on the server (landing at `/` and `/en`, privacy at `/privacidade` and `/privacy`, support at `/suporte` and `/support`, terms at `/termos` and `/terms`, the group at `/grupo` and `/group`), with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD on the landing page), `/sitemap.xml` and `/llms.txt` |
 | `site/og.png` | The image link previews show (WhatsApp, Facebook, X) |
 | `site/dados.html` | `/dados`: browse what `src/dump.js` returns. Public, `noindex`, cached by Cloudflare ([Cache Rule on the zone](https://github.com/CarregaErvilhas/Architecture/blob/main/Docs/cloudflare-zone.md#cache-rules), TTLs from the headers in `src/server.js`); Portuguese only |

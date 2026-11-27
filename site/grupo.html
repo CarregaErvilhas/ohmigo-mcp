@@ -252,13 +252,12 @@
   </div>
 </footer>
 
-<!-- strings: the page in both languages, never sent to the browser.
-     src/site.js renders /grupo and /group from here, with the sites in the
-     order of its GROUP list, and drops this block. Values are trusted HTML
-     (written here, never user input). test/site.test.js checks that pt and en
-     have the same keys. The other sites of the group have the same page in
-     their own style (O Carro Elétrico's is the original, at
-     ocarroeletrico.com/grupo/): keep the descriptions in step with theirs. -->
+<!-- strings: the page's own voice in both languages, never sent to the browser.
+     src/site.js renders /grupo and /group from here and drops this block. The
+     sites, their order and the texts that read the same on every site of the
+     group come from brand/group.json: change those in the Brand repo. Values
+     here are trusted HTML (written here, never user input). test/site.test.js
+     checks that pt and en have the same keys. -->
 <script type="application/json" id="strings">
 {
   "pt": {
@@ -276,45 +275,7 @@
     "group.eyebrow": "O grupo",
     "group.h1": "Eu ligo-te aos preços. Para o resto, <span class=\"hl\">apresento-te os amigos.</span>",
     "group.lead": "Quanto custa carregar e onde fica mais barato, isso é comigo. O que diz a lei sobre a garagem do prédio, que tarifário te convém, o que se passa na rede de postos: cada pergunta tem o seu site, feito pela mesma comunidade, com o código aberto no GitHub.",
-    "group.bubble": "Somos todos da mesma tomada! 🔌",
-    "group.open": "Abrir o site",
-    "group.here": "Estás aqui",
-    "group.code": "Código no GitHub",
-    "group.private": "GitHub (privado, por agora)",
-
-    "group.carro.name": "O Carro Elétrico",
-    "group.carro.host": "ocarroeletrico.com",
-    "group.carro.desc": "A mobilidade elétrica em Portugal explicada a quem conduz: carregar em casa e na rua, condomínio, instalação, apoios e impostos. Cada facto com a lei e a fonte.",
-    "group.carro.mascot": "O carrinho repórter d'O Carro Elétrico, cor de laranja, com chapéu de imprensa e microfone",
-    "group.ohmigo.name": "ohmigo",
-    "group.ohmigo.host": "ohmigo.ocarroeletrico.com",
-    "group.ohmigo.desc": "Pergunta ao ChatGPT ou ao Claude quanto custa carregar e onde fica mais barato. O ohmigo conhece os preços de todos os postos públicos do país, dentro e fora da rede MOBI.E.",
-    "group.ohmigo.mascot": "O ohmi, a ficha verde com cara do ohmigo",
-    "group.voltaria.name": "Voltaria",
-    "group.voltaria.host": "voltaria.ocarroeletrico.com",
-    "group.voltaria.desc": "O conhecimento por trás dos outros: a lei, as normas e as regras da mobilidade elétrica em Portugal, escritas para assistentes de IA. Cada facto com a sua fonte.",
-    "group.voltaria.mascot": "O livro azul do Voltaria, com um raio na capa",
-    "group.ceme.name": "Comparador CEME",
-    "group.ceme.host": "ceme.ocarroeletrico.com",
-    "group.ceme.desc": "Compara os tarifários de quem te vende a energia na rede MOBI.E. Faz as contas com as tarifas de acesso às redes, o preço do mercado ibérico e os impostos, à hora a que carregas.",
-    "group.ceme.mascot": "A mascote do Comparador CEME, uma calculadora cor-de-rosa com um raio no ecrã",
-    "group.nap.name": "Postos PT",
-    "group.nap.host": "nap.ocarroeletrico.com",
-    "group.nap.desc": "Todos os postos públicos que o Ponto de Acesso Nacional publica. Procura perto de ti, vê o estado ao vivo, as estatísticas da rede e os erros nos dados.",
-    "group.nap.mascot": "O pino de mapa azul do Postos PT, com cara e um raio",
-    "group.oop.name": "olh'o'posto",
-    "group.oop.host": "olhaoposto.ocarroeletrico.com",
-    "group.oop.desc": "Fotos dos postos e das tomadas, tiradas pela comunidade. Cada posto tem um link que nunca muda, pelo ID oficial, para qualquer app ou mapa mostrar como é o posto antes de lá chegares.",
-    "group.oop.mascot": "O Pic, a ficha Type 2 cor de âmbar do olh'o'posto, com uma objetiva e um flash",
-    "group.pano.name": "Panoramax",
-    "group.pano.host": "panoramax.ocarroeletrico.com",
-    "group.pano.desc": "Onde ficam guardadas as fotos do olh'o'posto, com o mapa e o visualizador. É um servidor Panoramax, o software livre de fotos de rua que o OpenStreetMap usa, montado só para postos de carregamento.",
-    "group.pano.mascot": "O logótipo do Panoramax",
-    "group.ampere.name": "AmpereArchive",
-    "group.ampere.host": "ohm-age.ocarroeletrico.com",
-    "group.ampere.desc": "Guarda a história dos postos. Lê o NAP a cada minuto e arquiva o que mudou, porque o NAP só mostra o presente. É daqui que o ohmigo tira o estado ao vivo e o Postos PT o histórico.",
-    "group.ampere.note": "Não tem página para visitar: é um arquivo de dados que os outros leem.",
-    "group.ampere.mascot": "A caixa de arquivo roxa do AmpereArchive, de óculos e com um cronómetro"
+    "group.bubble": "Somos todos da mesma tomada! 🔌"
   },
   "en": {
     "a11y.skip": "Skip to content",
@@ -331,45 +292,7 @@
     "group.eyebrow": "The group",
     "group.h1": "I plug you into the prices. For the rest, <span class=\"hl\">meet my friends.</span>",
     "group.lead": "What a charge costs and where it's cheapest: that's me. What the law says about your building's garage, which tariff suits you, what's going on across the charging network: each question has its own site, made by the same community, with the code open on GitHub.",
-    "group.bubble": "We're all plugged into the same socket! 🔌",
-    "group.open": "Open the site",
-    "group.here": "You are here",
-    "group.code": "Code on GitHub",
-    "group.private": "GitHub (private, for now)",
-
-    "group.carro.name": "O Carro Elétrico",
-    "group.carro.host": "ocarroeletrico.com",
-    "group.carro.desc": "Electric mobility in Portugal explained for drivers: charging at home and on the road, condos, installation, grants and tax. Every fact with the law and its source.",
-    "group.carro.mascot": "O Carro Elétrico's little reporter car, orange, with a press hat and a microphone",
-    "group.ohmigo.name": "ohmigo",
-    "group.ohmigo.host": "ohmigo.ocarroeletrico.com",
-    "group.ohmigo.desc": "Ask ChatGPT or Claude what a charge costs and where it's cheapest. ohmigo knows the prices of every public charger in the country, on the MOBI.E network and off it.",
-    "group.ohmigo.mascot": "Ohmi, ohmigo's green plug with a face",
-    "group.voltaria.name": "Voltaria",
-    "group.voltaria.host": "voltaria.ocarroeletrico.com",
-    "group.voltaria.desc": "The knowledge behind the others: the law, the standards and the rules of electric mobility in Portugal, written for AI assistants. Every fact with its source.",
-    "group.voltaria.mascot": "Voltaria's blue book, with a lightning bolt on the cover",
-    "group.ceme.name": "CEME comparator",
-    "group.ceme.host": "ceme.ocarroeletrico.com",
-    "group.ceme.desc": "Compares the tariffs of whoever sells you the energy on the MOBI.E network. It does the maths with the grid access tariffs, the Iberian market price and the taxes, at the hour you charge.",
-    "group.ceme.mascot": "The CEME comparator's mascot, a pink calculator with a lightning bolt on its screen",
-    "group.nap.name": "Postos PT",
-    "group.nap.host": "nap.ocarroeletrico.com",
-    "group.nap.desc": "Every public charger the National Access Point publishes. Search near you, see the live status, the network's statistics and the errors in the data.",
-    "group.nap.mascot": "Postos PT's blue map pin, with a face and a lightning bolt",
-    "group.oop.name": "olh'o'posto",
-    "group.oop.host": "olhaoposto.ocarroeletrico.com",
-    "group.oop.desc": "Photos of chargers and their sockets, taken by the community. Every charger has a link that never changes, by its official ID, so any app or map can show what it looks like before you get there.",
-    "group.oop.mascot": "Pic, olh'o'posto's amber Type 2 plug, with a lens and a flash",
-    "group.pano.name": "Panoramax",
-    "group.pano.host": "panoramax.ocarroeletrico.com",
-    "group.pano.desc": "Where olh'o'posto's photos are stored, with the map and the viewer. It's a Panoramax server, the free street-photo software OpenStreetMap uses, set up for charging stations only.",
-    "group.pano.mascot": "The Panoramax logo",
-    "group.ampere.name": "AmpereArchive",
-    "group.ampere.host": "ohm-age.ocarroeletrico.com",
-    "group.ampere.desc": "Keeps the chargers' history. It reads the NAP every minute and archives what changed, because the NAP only shows the present. ohmigo gets its live status from here, and Postos PT its history.",
-    "group.ampere.note": "There's no page to visit: it's a data archive the others read.",
-    "group.ampere.mascot": "AmpereArchive's purple archive box, with glasses and a stopwatch"
+    "group.bubble": "We're all plugged into the same socket! 🔌"
   }
 }
 </script>

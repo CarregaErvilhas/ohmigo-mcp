@@ -20,7 +20,8 @@
 //
 // site/grupo.html is the group page (/grupo and /group): the other sites of
 // O Carro Elétrico's community, each one's mascot beside a speech bubble. It
-// is rendered like the legal pages, with the sites from GROUP below.
+// is rendered like the legal pages. The sites, their order, texts and mascots
+// come from brand/, the group's Brand repo as a git submodule (brand/README.md).
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -43,9 +44,10 @@ const S = JSON.parse(source.match(/<script type="application\/json" id="strings"
 // before the first paint. Copied as is into the legal pages, so the two can't
 // drift; the server allows it there by its hash, as on the landing page.
 export const THEME_SCRIPT = source.match(/<head>[\s\S]*?(<script>[\s\S]*?<\/script>)/)[1];
-// "Atalho no ecrã principal": the same script as the group's other sites
-// (site/install.js), inlined so the CSP's script hashes cover it.
-const INSTALL_SCRIPT = readFileSync(new URL('../site/install.js', import.meta.url), 'utf8');
+const brand = path => readFileSync(new URL(`../brand/${path}`, import.meta.url));
+// "Atalho no ecrã principal": the group's shared script, inlined so the CSP's
+// script hashes cover it.
+const INSTALL_SCRIPT = brand('install.js').toString();
 
 // Each legal page's sections, in order: [heading key, then paragraph keys].
 // An array of keys is a bulleted list; 'CTA' is the row of contact buttons.
@@ -92,27 +94,20 @@ export const CTA = [
   { key: 's1.cta3', attrs: `class="sec" href="https://m.me/OCarroEletricoDotCom" ${NEW_TAB}` },
 ];
 
-// The group's sites, in the order every site of the group lists them (O Carro
-// Elétrico's GRUPO, in its scripts/oce.py). Each mascot is site/grupo/<id>.svg,
-// that site's own art; its texts are the group.<id>.* strings in
-// site/grupo.html. `here` is this site: no button to open it, a "you are here"
-// instead. AmpereArchive has no page to visit and its code is private.
-export const GROUP = [
-  { id: 'carro', site: 'https://ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/OCarroEletrico' },
-  { id: 'ohmigo', here: true, repo: REPO_URL },
-  { id: 'voltaria', site: 'https://voltaria.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/voltaria' },
-  { id: 'ceme', site: 'https://ceme.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/CEME' },
-  { id: 'nap', site: 'https://nap.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/nap-dashboard' },
-  { id: 'oop', site: 'https://olhaoposto.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/OlhaOPosto' },
-  // olh'o'posto's own Panoramax server, shown with the Panoramax logo; its config lives in olh'o'posto's repo.
-  { id: 'pano', site: 'https://panoramax.ocarroeletrico.com/', repo: 'https://github.com/CarregaErvilhas/OlhaOPosto/tree/main/panoramax' },
-  { id: 'ampere', repo: 'https://github.com/CarregaErvilhas/AmpereArchive', private: true },
-];
+// The group's sites, in the order every site of the group lists them. `here`
+// is this site: no button to open it, a "you are here" instead. A site with no
+// page to visit has no `site`.
+const KIT = JSON.parse(brand('group.json'));
+if (KIT.schema !== 1) throw new Error(`brand/group.json: unknown schema ${KIT.schema}`);
+export const GROUP = KIT.sites.map(s => {
+  const here = s.id === 'ohmigo';
+  return { id: s.id, here, site: here ? null : s.url, repo: s.repo, private: s.private };
+});
 export const GROUP_PATHS = { pt: '/grupo', en: '/group' };
 // Each mascot's file, and its size from its viewBox: width and height on the
 // <img> keep the page from jumping as the images load.
-export const GROUP_IMAGES = Object.fromEntries(GROUP.map(({ id }) => {
-  const body = readFileSync(new URL(`../site/grupo/${id}.svg`, import.meta.url));
+export const GROUP_IMAGES = Object.fromEntries(KIT.sites.map(({ id, mascot }) => {
+  const body = brand(mascot.file);
   const [, w, h] = body.toString().match(/viewBox="[\d.-]+ [\d.-]+ ([\d.]+) ([\d.]+)"/);
   return [`/grupo/${id}.svg`, { body, w, h }];
 }));
@@ -121,6 +116,29 @@ const legalSource = readFileSync(new URL('../site/legal.html', import.meta.url),
 const L = JSON.parse(legalSource.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
 const groupSource = readFileSync(new URL('../site/grupo.html', import.meta.url), 'utf8');
 const G = JSON.parse(groupSource.match(/<script type="application\/json" id="strings">([\s\S]*?)<\/script>/)[1]);
+
+// What every site of the group words the same way, under the page's string keys.
+// Plain text, unlike the page's own strings: escape it where it goes into HTML.
+function kitStrings(lang) {
+  const out = Object.fromEntries(Object.entries(KIT.labels).map(([k, v]) => [`group.${k}`, v[lang]]));
+  for (const s of KIT.sites) {
+    const k = `group.${s.id}`;
+    out[`${k}.name`] = s.name[lang];
+    out[`${k}.host`] = s.host;
+    out[`${k}.desc`] = s.desc[lang];
+    out[`${k}.mascot`] = s.mascot.alt[lang];
+    if (s.note) out[`${k}.note`] = s.note[lang];
+  }
+  return out;
+}
+// The group page's strings: its own voice (site/grupo.html) plus the kit's. A
+// key in both would silently shadow one of them, so it stops the boot.
+export const GROUP_STRINGS = Object.fromEntries(Object.keys(GROUP_PATHS).map(lang => {
+  const kit = kitStrings(lang);
+  const twice = Object.keys(kit).filter(k => k in G[lang]);
+  if (twice.length) throw new Error(`site/grupo.html redefines brand/group.json strings: ${twice.join(', ')}`);
+  return [lang, { ...G[lang], ...kit }];
+}));
 
 const attr = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 // Strings may hold markup (<span class="hl">); <title> and meta want text.
@@ -221,7 +239,7 @@ export function render(lang) {
     .replace(/(<(\w+)\b[^>]*\bdata-i="([^"]+)"[^>]*>)(<\/\2>)/g, (m, open, tag, key, close) => open + (t[key] ?? '') + close)
     // Names for screen readers: an attribute, so data-i can't fill them.
     .replace(/data-aria="([^"]+)"/g, (m, key) => `aria-label="${attr(t[key] ?? '')}"`)
-    // What a copy button says once it has copied (site/install.js).
+    // What a copy button says once it has copied (brand/install.js).
     .replace(/data-copied-i="([^"]+)"/g, (m, key) => `data-copied="${attr(t[key] ?? '')}"`)
     .replace(/<!-- install:[^>]*-->/, () => `<script>${INSTALL_SCRIPT}</script>`)
     .replace(/ aria-current="page"/g, '')
@@ -270,18 +288,19 @@ function linkUp(html, lang, paths) {
 // bubble with the host, the name, what it does and its buttons.
 function mate(g, t) {
   const k = `group.${g.id}`, img = GROUP_IMAGES[`/grupo/${g.id}.svg`];
-  const go = g.here ? `<span class="here">${t['group.here']}</span>`
-    : g.site ? `<a class="btn btn-main" href="${g.site}" ${NEW_TAB}>${t['group.open']} →</a>` : '';
-  const code = `<a class="btn btn-line" href="${g.repo}" ${NEW_TAB}><svg aria-hidden="true"><use href="#${g.private ? 'i-lock' : 'i-code'}"/></svg>${t[g.private ? 'group.private' : 'group.code']}</a>`;
-  const note = g.private ? `<p class="mate-note">${t[`${k}.note`]}</p>` : '';
+  const kit = key => attr(t[key]);
+  const go = g.here ? `<span class="here">${kit('group.here')}</span>`
+    : g.site ? `<a class="btn btn-main" href="${attr(g.site)}" ${NEW_TAB}>${kit('group.open')} →</a>` : '';
+  const code = `<a class="btn btn-line" href="${attr(g.repo)}" ${NEW_TAB}><svg aria-hidden="true"><use href="#${g.private ? 'i-lock' : 'i-code'}"/></svg>${kit(g.private ? 'group.private' : 'group.code')}</a>`;
+  const note = t[`${k}.note`] ? `<p class="mate-note">${kit(`${k}.note`)}</p>` : '';
   return `<li class="mate m-${g.id}">`
-    + `<div class="mate-pic"><img src="/grupo/${g.id}.svg" alt="${attr(t[`${k}.mascot`])}" width="${img.w}" height="${img.h}" loading="lazy"></div>`
-    + `<div class="mate-bubble"><p class="mate-host">${t[`${k}.host`]}</p><h2>${t[`${k}.name`]}</h2><p>${t[`${k}.desc`]}</p>${note}`
+    + `<div class="mate-pic"><img src="/grupo/${g.id}.svg" alt="${kit(`${k}.mascot`)}" width="${img.w}" height="${img.h}" loading="lazy"></div>`
+    + `<div class="mate-bubble"><p class="mate-host">${kit(`${k}.host`)}</p><h2>${kit(`${k}.name`)}</h2><p>${kit(`${k}.desc`)}</p>${note}`
     + `<p class="mate-links">${go}${code}</p></div></li>`;
 }
 
 export function renderGroup(lang) {
-  const t = G[lang];
+  const t = GROUP_STRINGS[lang];
   const title = text(t['group.title']), desc = text(t['group.desc']);
   const ld = {
     '@context': 'https://schema.org',
