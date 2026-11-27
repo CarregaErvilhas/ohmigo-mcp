@@ -1,9 +1,11 @@
 name: Evals
 
 # The behaviour evals (evals/README.md) for a pull request that moves
-# voltaria/: it changes what the assistant reads. Needs the ANTHROPIC_API_KEY
-# secret, in the Dependabot secrets too (Dependabot's runs get no others).
-# Without it the job fails rather than pass without having run.
+# voltaria/: it changes what the assistant reads.
+#
+# Off for now (`if: false` below): there is no model API key yet, and the
+# provider won't be Anthropic. Before turning it on, evals/ci.sh and the steps
+# here, which drive Claude Code with ANTHROPIC_API_KEY, need a provider switch.
 
 on:
   pull_request:
@@ -20,6 +22,7 @@ concurrency:
 
 jobs:
   evals:
+    if: false # see the top of this file
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
