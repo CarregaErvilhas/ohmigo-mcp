@@ -119,7 +119,7 @@ The routing's `accessPolicy` only accepts Cloudflare: `defaultPolicy: deny`, `ci
 
 ## Rate limiting and load
 
-There's no per-client limit, on purpose. Calls from ChatGPT and Claude come from their servers, not from the user's device, so a per-IP limit would throttle all of a platform's users as one. What the server protects instead is the ceme-v2 key everyone shares, and its own process.
+The server has no per-client limit, on purpose. Calls from ChatGPT and Claude come from their servers, not from the user's device, so a per-IP limit would throttle all of a platform's users as one. What the server protects instead is the ceme-v2 key everyone shares, and its own process.
 
 **The key.** The expensive part is the ceme-v2 call, so `src/ceme.js` keeps it from running away:
 
@@ -131,6 +131,6 @@ There's no per-client limit, on purpose. Calls from ChatGPT and Claude come from
 
 **The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets (`src/mcp.js`) on the event loop. The tool takes a place before it searches: `MAX_RANKINGS` run at once and `MAX_RANKINGS_QUEUED` wait, and past that it says to try again in a few seconds. `rank()` in `src/quote.js` first works out the sessions, then fires the calls together and waits for them, then prices in chunks of `RANK_CHUNK` with a turn for the event loop between them, so `/healthz` keeps answering. A request that's abandoned, in either tool, leaves the line and stops at the next chunk; its calls still waiting are dropped unless another request is waiting on the same one. All of these limits are per process and shared by everyone: a burst from one client still slows the others, and can get them refused.
 
-**What this doesn't do.** None of it stops anyone from sending requests, or keeps one client from spending the shared quota. For that you need a limit at the edge: a Cloudflare rate limiting rule on `POST /mcp`, set high enough to pass a whole platform's traffic. That rule isn't in this repo and isn't set up by a deploy; it's the maintainer's to add in the Cloudflare dashboard. Cloudflare's DDoS protection is in front either way.
+**The edge.** None of this stops anyone from sending requests, or keeps one client from spending the shared quota. In front of the server, a Cloudflare rate limiting rule on `/mcp` (any method) blocks for a short while an IP that floods it, counted per Cloudflare data center. It's a flood guard, not a quota: it's set high on purpose, because a whole platform arrives from few addresses. The rule lives in the zone's WAF settings in the Cloudflare dashboard, which own its numbers; it isn't in this repo and a deploy doesn't change it. It matches the path on every host of the zone, and it's the only rate limiting rule the zone's plan allows. Cloudflare's DDoS protection is in front either way.
 
 While the quota is spent, `/healthz` is `degraded` with `ceme-v2: rate limited` in `problems`. With the token, `ceme` shows `rateLimitedUntil` and the size of the cache.

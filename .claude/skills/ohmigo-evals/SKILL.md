@@ -1,5 +1,6 @@
 ---
-name: ohmigo-evals description: Run ohmigo's behaviour evals (does an assistant call the right tools with the right arguments and present prices honestly?) with Haiku sub-agents, and optionally compare with another git ref. Use after changing tool or argument descriptions, INSTRUCTIONS or result notes (src/mcp.js, src/i18n.js), or when asked to run or compare the evals.
+name: ohmigo-evals
+description: Run ohmigo's behaviour evals (does an assistant call the right tools with the right arguments and present prices honestly?) with Haiku sub-agents, and optionally compare with another git ref. Use after changing tool or argument descriptions, INSTRUCTIONS or result notes (src/mcp.js, src/i18n.js), or when asked to run or compare the evals.
 ---
 
 # Run the ohmigo evals
