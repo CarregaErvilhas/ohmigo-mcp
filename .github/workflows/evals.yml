@@ -38,7 +38,12 @@ jobs:
           [ "$HAS_KEY" = true ] || { echo "::error::No ANTHROPIC_API_KEY secret, so the evals didn't run (evals/README.md, In CI)."; exit 1; }
       - run: npm ci
       # Pinned by hand: Dependabot doesn't see a global install.
-      - run: npm install -g @anthropic-ai/claude-code@2.1.322
-      - run: evals/ci.sh
+      - run: npm install -g @anthropic-ai/claude-code@2.1.331
+      # Only the cases that read Voltaria: a bump changes nothing else, and the
+      # price cases would fail for reasons of their own (one try, live ceme-v2).
+      - name: Run the Voltaria cases
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cases=$(node -p 'require("./evals/cases.json").cases.filter(c => /ev_rules_portugal/.test(JSON.stringify(c))).map(c => c.id).join(",")')
+          evals/ci.sh --cases "$cases"

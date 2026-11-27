@@ -2,7 +2,7 @@
 
 `npm test` checks the server: given these arguments, this answer. It can't check the other half: given what a user writes, does an assistant pick the right tool, pass the right arguments and present the result honestly? That half depends on the words in `src/mcp.js` (instructions, tool and argument descriptions) and in the results (`assumptions`, `notes`, from `src/i18n.js`), and a model reading them. These evals put a model in front of them.
 
-Run them when you change any of that, and before you merge. In Claude Code, the `ohmigo-evals` skill (`.claude/skills/ohmigo-evals/SKILL.md`) drives a whole run with Haiku sub-agents. CI runs them only on a pull request that moves the `voltaria/` submodule (see [In CI](#in-ci)).
+Run them when you change any of that, and before you merge. In Claude Code, the `ohmigo-evals` skill (`.claude/skills/ohmigo-evals/SKILL.md`) drives a whole run with Haiku sub-agents. CI runs the cases that read Voltaria on a pull request that moves the `voltaria/` submodule (see [In CI](#in-ci)).
 
 ## How a run works
 
@@ -33,7 +33,7 @@ Variants (`--variant`) show the assistant the instructions whole (`full`), cut a
 
 ## In CI
 
-`.github/workflows/evals.yml` runs `evals/ci.sh`, which does the skill's steps with headless Claude Code and fails unless every case that ran passed. It needs the `ANTHROPIC_API_KEY` secret, and fails without it. Dependabot's pull requests don't get Actions secrets: the key has to be a Dependabot secret too. A failure can be the model's, so read the case before blaming the change (see [Reading the results](#reading-the-results)).
+`.github/workflows/evals.yml` picks the cases whose checks name `ev_rules_portugal` and runs them with `evals/ci.sh`, which does the skill's steps with headless Claude Code and fails unless every case that ran passed. It needs the `ANTHROPIC_API_KEY` secret, and fails without it. Dependabot's pull requests don't get Actions secrets: the key has to be a Dependabot secret too. A failure can be the model's, so read the case before blaming the change (see [Reading the results](#reading-the-results)).
 
 ## A case
 
