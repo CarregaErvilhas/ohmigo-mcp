@@ -107,15 +107,12 @@ cd /some/empty/dir && zcli push <service-id> -P <project-id> --setup mcp --no-gi
 
 ### Domain and DNS
 
-The same setup as ceme-v2 (its `infra.md`, section 3, has the API calls):
+The procedure is the group's: [How a Zerops service is exposed](https://github.com/CarregaErvilhas/Architecture/blob/main/Docs/zerops-exposure.md) (Zerops routing first, one proxied `AAAA` record, the certificate, the Access Policy that only admits Cloudflare, and how to check it). ohmigo's values:
 
-1. Zerops: a public HTTP routing for `ohmigo.ocarroeletrico.com` → `mcp` port 3002, with SSL, then sync the project's routing.
-2. Cloudflare: **one `AAAA` record** to the project's dedicated IPv6, **proxy on**. No `A` record: the shared IPv4 can't route a proxied domain.
-3. Zerops: trigger the DNS check; the Let's Encrypt certificate follows.
+- Routing: `ohmigo.ocarroeletrico.com` → service `mcp`, port 3002, with SSL.
+- Path to check it with: `/healthz`. Direct requests to the origin must answer 403; through Cloudflare, 200.
 
-**The origin IP is never written in this repo.** Read it from the Zerops API (`GET /project/<id>` → `publicIpV6`) or the Cloudflare record.
-
-The routing's `accessPolicy` only accepts Cloudflare: `defaultPolicy: deny`, `cidr` = the lists at `https://www.cloudflare.com/ips-v4` and `ips-v6`. Leave **`setRealIpFrom` empty**: with it set, the balancer swaps in the user's IP from `X-Forwarded-For`, that IP isn't Cloudflare's, and every request gets 403. Direct requests to the origin must answer 403; through Cloudflare, 200.
+The process runs as its own user without sudo (`zerops.yml`; [the pattern](https://github.com/CarregaErvilhas/Architecture/blob/main/Docs/zerops-exposure.md#non-root-process)).
 
 ## Rate limiting and load
 
@@ -131,6 +128,6 @@ The server has no per-client limit, on purpose. Calls from ChatGPT and Claude co
 
 **The process.** A ranking prices up to `MAX_RANKED_POINTS` sockets (`src/mcp.js`) on the event loop. The tool takes a place before it searches: `MAX_RANKINGS` run at once and `MAX_RANKINGS_QUEUED` wait, and past that it says to try again in a few seconds. `rank()` in `src/quote.js` first works out the sessions, then fires the calls together and waits for them, then prices in chunks of `RANK_CHUNK` with a turn for the event loop between them, so `/healthz` keeps answering. A request that's abandoned, in either tool, leaves the line and stops at the next chunk; its calls still waiting are dropped unless another request is waiting on the same one. All of these limits are per process and shared by everyone: a burst from one client still slows the others, and can get them refused.
 
-**The edge.** None of this stops anyone from sending requests, or keeps one client from spending the shared quota. In front of the server, a Cloudflare rate limiting rule on `/mcp` (any method) blocks for a short while an IP that floods it, counted per Cloudflare data center. It's a flood guard, not a quota: it's set high on purpose, because a whole platform arrives from few addresses. The rule lives in the zone's WAF settings in the Cloudflare dashboard, which own its numbers; it isn't in this repo and a deploy doesn't change it. It matches the path on every host of the zone, and it's the only rate limiting rule the zone's plan allows. Cloudflare's DDoS protection is in front either way.
+**The edge.** None of this stops anyone from sending requests, or keeps one client from spending the shared quota. In front of the server, a Cloudflare rate limiting rule on `/mcp` is a flood guard, not a quota. It isn't in this repo and a deploy doesn't change it. It's the only one the zone's plan allows and it also matches other hosts: read [Rate limiting](https://github.com/CarregaErvilhas/Architecture/blob/main/Docs/cloudflare-zone.md#rate-limiting-the-only-rule) before touching it.
 
 While the quota is spent, `/healthz` is `degraded` with `ceme-v2: rate limited` in `problems`. With the token, `ceme` shows `rateLimitedUntil` and the size of the cache.
