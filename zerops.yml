@@ -17,6 +17,7 @@ zerops:
         - site
         - offers
         - voltaria
+        - brand
         - node_modules
         - package.json
     deploy:

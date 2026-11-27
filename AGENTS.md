@@ -7,6 +7,7 @@ ohmigo is an MCP server (Node 24, plain `node:http`, ESM, no build step) that pr
 ## Commands
 
 ```sh
+git submodule update --init               # voltaria/ and brand/
 npm ci
 npm test                                  # node --test test/*.test.js
 npm start                                 # http://127.0.0.1:3002/mcp

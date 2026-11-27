@@ -21,10 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          submodules: true # voltaria/, the knowledge base src/voltaria.js reads
+          submodules: true # voltaria/ (src/voltaria.js) and brand/ (src/site.js)
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
+      # The server reads these straight from brand/: the kit must be intact.
+      - name: Check the brand kit
+        run: |
+          python3 brand/check.py
+          python3 brand/check.py --against brand grupo install
       - run: npm ci
       - run: npm test

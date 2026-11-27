@@ -21,21 +21,24 @@ updates:
           - "minor"
           - "patch"
 
-  # voltaria/, the knowledge base the assistant reads. The evals CI for a bump
-  # is off for now (.github/workflows/evals.yml): run the evals by hand. No
-  # cooldown beyond Dependabot's default: it's our own content, and a long one
-  # would hold back every new fact.
+  # Both submodules: voltaria/, the knowledge base the assistant reads, and
+  # brand/, the group's shared texts, mascots and install script (it moves
+  # between release tags). Room for one pull request each, so neither bump
+  # blocks the other. The evals CI for a voltaria/ bump is off for now
+  # (.github/workflows/evals.yml): run the evals by hand. No cooldown beyond
+  # Dependabot's default: it's our own content, and a long one would hold back
+  # every new fact.
   - package-ecosystem: "gitsubmodule"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "09:00"
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
     commit-message:
-      prefix: "deps(voltaria)"
+      prefix: "deps(submodules)"
 
   - package-ecosystem: "github-actions"
     directory: "/"

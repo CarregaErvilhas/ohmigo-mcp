@@ -5,6 +5,7 @@
 You need Node.js 24.
 
 ```bash
+git submodule update --init   # voltaria/ and brand/
 npm ci
 npm test
 npm start                 # http://127.0.0.1:3002/mcp
@@ -24,7 +25,7 @@ Progress messages go to stderr, the JSON result to stdout.
 
 `GET /privacidade`, `GET /suporte` and `GET /termos` are the privacy, support and terms pages that the assistants' directories ask for, in Portuguese; `GET /privacy`, `GET /support` and `GET /terms` are their English copies. They work the same way: one source, `site/legal.html`, with the same two-language strings block and parity test, and `src/site.js` renders one copy per URL at boot (`LEGAL` lists each page's sections). Their only script is the landing page's theme script (`THEME_SCRIPT` in `src/site.js`), and their CSP allows that one by its hash: the language buttons are plain links, an old `?lang=` link redirects too, and the links home carry `?lang=` so the landing page's script saves the language being read. If the server starts keeping or sending anything new about the user, update the privacy page first.
 
-`GET /grupo` and `GET /group` are the group page: the sites of the same community, in the order `GROUP` in `src/site.js` lists them, with ohmigo marked "you are here". It's built like the legal pages (its own source, `site/grupo.html`, the theme script as its only script, one copy per URL at boot). The mascots are local files in `site/grupo/`, served at `/grupo/<id>.svg`, so the page asks no other host for anything. The other sites have the same page in their own style; when a description changes on one, bring the others in step.
+`GET /grupo` and `GET /group` are the group page: the sites of the same community, in the order `brand/group.json` lists them, with ohmigo marked "you are here". It's built like the legal pages (its own source, `site/grupo.html`, the theme script as its only script, one copy per URL at boot). The mascots are served at `/grupo/<id>.svg` from `brand/grupo/`, so the page asks no other host for anything. The other sites have the same page in their own style: the page's title, lead and speech bubble are in `site/grupo.html`, and everything that reads the same on every site comes from the `brand/` submodule. Change that in the [Brand repo](https://github.com/CarregaErvilhas/Brand), release it, and merge Dependabot's bump here. A new site there also needs its `.m-<id>` colour in `site/grupo.html` (`test/site.test.js` checks).
 
 `GET /.well-known/security.txt` is the RFC 9116 file with the contact for reporting a security problem. It's generated per request (`securityTxt` in `src/server.js`), so `Expires` is always ahead of today.
 
