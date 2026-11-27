@@ -1,0 +1,52 @@
+name: Evals
+
+# The behaviour evals (evals/README.md) for a pull request that moves
+# voltaria/: it changes what the assistant reads.
+#
+# Off for now (`if: false` below): there is no model API key yet, and the
+# provider won't be Anthropic. Before turning it on, evals/ci.sh and the steps
+# here, which drive Claude Code with ANTHROPIC_API_KEY, need a provider switch.
+
+on:
+  pull_request:
+    branches: [main]
+    paths: [voltaria]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evals:
+    if: false # see the top of this file
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Check for the model key
+        env:
+          HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          [ "$HAS_KEY" = true ] || { echo "::error::No ANTHROPIC_API_KEY secret, so the evals didn't run (evals/README.md, In CI)."; exit 1; }
+      - run: npm ci
+      # Pinned by hand: Dependabot doesn't see a global install.
+      - run: npm install -g @anthropic-ai/claude-code@2.1.331
+      # Only the cases that read Voltaria: a bump changes nothing else, and the
+      # price cases would fail for reasons of their own (one try, live ceme-v2).
+      - name: Run the Voltaria cases
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cases=$(node -p 'require("./evals/cases.json").cases.filter(c => /ev_rules_portugal/.test(JSON.stringify(c))).map(c => c.id).join(",")')
+          evals/ci.sh --cases "$cases"
