@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic DATEX II evChargingInfra. Every id, name, place and number is invented. See README.md. -->
+<ns4:payload xmlns="http://datex2.eu/schema/3/common" xmlns:ns2="http://datex2.eu/schema/3/facilities" xmlns:ns3="http://datex2.eu/schema/3/energyInfrastructure" xmlns:lr="http://datex2.eu/schema/3/locationReferencing" xmlns:le="http://datex2.eu/schema/3/locationExtension" xmlns:ns4="http://datex2.eu/schema/3/d2Payload" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <publicationTime>2000-01-01T12:00:00.000+00:00</publicationTime>
+  <!-- QS0001: every field filled, two stations, open all hours -->
+  <ns3:energyInfrastructureSite id="QS0001">
+    <ns2:externalIdentifier>QS-EXT-1</ns2:externalIdentifier>
+    <ns2:lastUpdated>2000-01-01T00:00:00.000+00:00</ns2:lastUpdated>
+    <ns2:name><values><value lang="pt">Estação São João</value></values></ns2:name>
+    <ns2:operator>
+      <ns2:name><values><value lang="pt">Operador Exemplo</value></values></ns2:name>
+      <ns2:nationalOrganisationNumber>ZZZ</ns2:nationalOrganisationNumber>
+      <ns2:linkToGeneralInformation>https://operator.example.com/</ns2:linkToGeneralInformation>
+      <ns2:telephoneNumber>+000000000000</ns2:telephoneNumber>
+    </ns2:operator>
+    <ns2:locationReference>
+      <lr:pointCoordinates><lr:latitude>40.000001</lr:latitude><lr:longitude>-8.000001</lr:longitude></lr:pointCoordinates>
+      <lr:facilityLocation>
+        <le:address>
+          <le:postcode>0000-001</le:postcode>
+          <le:city><values><value lang="pt">Vila Exemplo</value></values></le:city>
+          <le:countryCode>PT</le:countryCode>
+          <le:addressLine><le:type>building</le:type><values><value lang="pt">Bloco B</value></values></le:addressLine>
+          <le:addressLine><le:type>street</le:type><values><value lang="pt">Rua do Exemplo 1</value></values></le:addressLine>
+        </le:address>
+      </lr:facilityLocation>
+      <lr:locationDescription><values><value lang="en">covered car park</value><value lang="pt">Parque   coberto,
+        piso -1</value></values></lr:locationDescription>
+    </ns2:locationReference>
+    <ns2:operatingHours xsi:type="OpenAllHours"/>
+    <ns3:applicableForVehicles>car</ns3:applicableForVehicles>
+    <ns3:applicableForVehicles>bus</ns3:applicableForVehicles>
+    <ns3:applicableForVehicles>car</ns3:applicableForVehicles>
+    <ns3:energyInfrastructureStation id="QS0001-A">
+      <ns3:authenticationAndIdentificationMethods>rfid</ns3:authenticationAndIdentificationMethods>
+      <ns3:authenticationAndIdentificationMethods>apps</ns3:authenticationAndIdentificationMethods>
+      <!-- P1: two connectors -->
+      <ns3:refillPoint id="P1">
+        <ns2:externalIdentifier>QS-P1</ns2:externalIdentifier>
+        <ns2:brandsAccepted>BRAND-X</ns2:brandsAccepted>
+        <ns3:usageType>public</ns3:usageType>
+        <ns3:isGreenEnergy>true</ns3:isGreenEnergy>
+        <ns3:availableChargingPower>50000</ns3:availableChargingPower>
+        <ns3:connector>
+          <ns3:connectorType>iec62196T2</ns3:connectorType>
+          <ns3:chargingMode>mode3AC3p</ns3:chargingMode>
+          <ns3:connectorFormat>socket</ns3:connectorFormat>
+          <ns3:maxPowerAtSocket>22000</ns3:maxPowerAtSocket>
+          <ns3:voltage>400</ns3:voltage>
+          <ns3:maximumCurrent>32</ns3:maximumCurrent>
+        </ns3:connector>
+        <ns3:connector>
+          <ns3:connectorType>iec62196T2COMBO</ns3:connectorType>
+          <ns3:chargingMode>mode4DC</ns3:chargingMode>
+          <ns3:connectorFormat>cableMode3</ns3:connectorFormat>
+          <ns3:maxPowerAtSocket>50000.0</ns3:maxPowerAtSocket>
+          <ns3:voltage>500</ns3:voltage>
+          <ns3:maximumCurrent>125</ns3:maximumCurrent>
+        </ns3:connector>
+      </ns3:refillPoint>
+      <!-- P2: no connectors, no optional fields -->
+      <ns3:refillPoint id="P2">
+        <ns2:externalIdentifier>QS-P2</ns2:externalIdentifier>
+      </ns3:refillPoint>
+    </ns3:energyInfrastructureStation>
+    <ns3:energyInfrastructureStation id="QS0001-B">
+      <!-- P3: a Megawatt Charging System socket, which DATEX II 3.3 can only call "other" -->
+      <ns3:refillPoint id="P3">
+        <ns2:externalIdentifier>QS-P3</ns2:externalIdentifier>
+        <ns3:availableChargingPower>1000000</ns3:availableChargingPower>
+        <ns3:connector>
+          <ns3:connectorType>other</ns3:connectorType>
+          <ns3:otherConnector>MCS</ns3:otherConnector>
+          <ns3:chargingMode>mode4DC</ns3:chargingMode>
+          <ns3:connectorFormat>cableMode3</ns3:connectorFormat>
+          <ns3:maxPowerAtSocket>1000000</ns3:maxPowerAtSocket>
+        </ns3:connector>
+      </ns3:refillPoint>
+    </ns3:energyInfrastructureStation>
+  </ns3:energyInfrastructureSite>
+  <!-- QS0002: weekly hours, no site externalIdentifier, untidy text -->
+  <ns3:energyInfrastructureSite id="QS0002">
+    <ns2:name><values><value lang="en">Example   Park
+      North</value><value lang="pt">Parque Exemplo Norte</value></values></ns2:name>
+    <ns2:operator>
+      <ns2:name><values><value lang="pt">Operador Exemplo</value></values></ns2:name>
+      <ns2:nationalOrganisationNumber>ZZZ</ns2:nationalOrganisationNumber>
+    </ns2:operator>
+    <ns2:locationReference>
+      <lr:pointCoordinates><lr:latitude>41.5</lr:latitude><lr:longitude>-8.5</lr:longitude></lr:pointCoordinates>
+      <lr:facilityLocation>
+        <le:address>
+          <le:postcode>0000-002</le:postcode>
+          <le:city><values><value lang="en"></value><value lang="pt">Aldeia Exemplo</value></values></le:city>
+          <le:countryCode>PT</le:countryCode>
+        </le:address>
+      </lr:facilityLocation>
+    </ns2:locationReference>
+    <ns2:operatingHours xsi:type="OperatingHoursSpecification">
+      <validPeriod>
+        <recurringTimePeriodOfDay><startTimeOfPeriod>08:00:00.000</startTimeOfPeriod><endTimeOfPeriod>20:00:00.000</endTimeOfPeriod></recurringTimePeriodOfDay>
+        <recurringDayWeekMonthPeriod>
+          <applicableDay>monday</applicableDay><applicableDay>tuesday</applicableDay><applicableDay>wednesday</applicableDay><applicableDay>thursday</applicableDay><applicableDay>friday</applicableDay>
+        </recurringDayWeekMonthPeriod>
+      </validPeriod>
+      <validPeriod>
+        <recurringTimePeriodOfDay><startTimeOfPeriod>09:00:00.000</startTimeOfPeriod><endTimeOfPeriod>23:59:00.000</endTimeOfPeriod></recurringTimePeriodOfDay>
+        <recurringDayWeekMonthPeriod><applicableDay>saturday</applicableDay></recurringDayWeekMonthPeriod>
+      </validPeriod>
+    </ns2:operatingHours>
+    <ns3:energyInfrastructureStation id="QS0002-A">
+      <!-- P1: same point id as QS0001/P1, a different socket -->
+      <ns3:refillPoint id="P1">
+        <ns2:externalIdentifier>QS-2-P1</ns2:externalIdentifier>
+        <ns3:usageType>public</ns3:usageType>
+        <ns3:isGreenEnergy>false</ns3:isGreenEnergy>
+        <ns3:connector>
+          <ns3:connectorType>domesticF</ns3:connectorType>
+          <ns3:maxPowerAtSocket>3700</ns3:maxPowerAtSocket>
+        </ns3:connector>
+      </ns3:refillPoint>
+    </ns3:energyInfrastructureStation>
+  </ns3:energyInfrastructureSite>
+  <!-- QS0003: hours with no period, a slash in a point id -->
+  <ns3:energyInfrastructureSite id="QS0003">
+    <ns2:externalIdentifier>QS-EXT-3</ns2:externalIdentifier>
+    <ns2:name><values><value lang="pt">Posto Três</value></values></ns2:name>
+    <ns2:operator>
+      <ns2:name><values><value lang="pt">Outro Operador</value></values></ns2:name>
+      <ns2:nationalOrganisationNumber>YYY</ns2:nationalOrganisationNumber>
+    </ns2:operator>
+    <ns2:locationReference>
+      <lr:pointCoordinates><lr:latitude>39.25</lr:latitude><lr:longitude>-9.25</lr:longitude></lr:pointCoordinates>
+    </ns2:locationReference>
+    <ns2:operatingHours xsi:type="OperatingHoursSpecification"/>
+    <ns3:energyInfrastructureStation id="QS0003-A">
+      <ns3:refillPoint id="P1">
+        <ns2:externalIdentifier>QS-3-P1</ns2:externalIdentifier>
+      </ns3:refillPoint>
+      <!-- P/9: a slash in a point id makes SITE/POINT ambiguous -->
+      <ns3:refillPoint id="P/9">
+        <ns2:externalIdentifier>QS-3-P9</ns2:externalIdentifier>
+      </ns3:refillPoint>
+    </ns3:energyInfrastructureStation>
+  </ns3:energyInfrastructureSite>
+</ns4:payload>

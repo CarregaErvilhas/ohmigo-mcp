@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic DATEX II evActualStatus. Every id is invented. See README.md. -->
+<ns4:payload xmlns="http://datex2.eu/schema/3/common" xmlns:ns2="http://datex2.eu/schema/3/facilities" xmlns:ns3="http://datex2.eu/schema/3/energyInfrastructure" xmlns:ns4="http://datex2.eu/schema/3/d2Payload">
+  <publicationTime>2000-01-01T12:00:00.000+00:00</publicationTime>
+  <ns3:energyInfrastructureSiteStatus>
+    <ns2:reference id="QA0001"/>
+    <!-- 1: available, two fees in two overrides -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="1"/>
+      <ns3:status>available</ns3:status>
+      <ns3:electricEnergyMixOverride energyMixIndex="0">
+        <ns3:rates>
+          <ns2:energyPricingPolicy>
+            <ns3:pricingPolicy>pricePerDeliveryUnit</ns3:pricingPolicy>
+            <ns3:minimumDeliveryFee>0.25</ns3:minimumDeliveryFee>
+          </ns2:energyPricingPolicy>
+          <ns2:applicableCurrency>EUR</ns2:applicableCurrency>
+        </ns3:rates>
+      </ns3:electricEnergyMixOverride>
+      <ns3:electricEnergyMixOverride energyMixIndex="1">
+        <ns3:rates>
+          <ns2:energyPricingPolicy>
+            <ns3:pricingPolicy>pricePerChargingTime</ns3:pricingPolicy>
+            <ns3:minimumDeliveryFee>0.05</ns3:minimumDeliveryFee>
+          </ns2:energyPricingPolicy>
+          <ns2:applicableCurrency>EUR</ns2:applicableCurrency>
+        </ns3:rates>
+      </ns3:electricEnergyMixOverride>
+    </ns3:refillPointStatus>
+    <!-- 2: status padded with whitespace -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="2"/>
+      <ns3:status>
+        charging
+      </ns3:status>
+    </ns3:refillPointStatus>
+    <!-- 3: flat fee -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="3"/>
+      <ns3:status>blocked</ns3:status>
+      <ns3:electricEnergyMixOverride energyMixIndex="0">
+        <ns3:rates>
+          <ns2:energyPricingPolicy>
+            <ns3:pricingPolicy>flatRate</ns3:pricingPolicy>
+            <ns3:minimumDeliveryFee>1.5</ns3:minimumDeliveryFee>
+          </ns2:energyPricingPolicy>
+          <ns2:applicableCurrency>EUR</ns2:applicableCurrency>
+        </ns3:rates>
+      </ns3:electricEnergyMixOverride>
+    </ns3:refillPointStatus>
+  </ns3:energyInfrastructureSiteStatus>
+  <ns3:energyInfrastructureSiteStatus>
+    <ns2:reference id="QA0002"/>
+    <!-- 1: same point id as QA0001/1, a different socket -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="1"/>
+      <ns3:status>outOfOrder</ns3:status>
+    </ns3:refillPointStatus>
+    <!-- 4: a status value outside the known set -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="4"/>
+      <ns3:status>reserved</ns3:status>
+    </ns3:refillPointStatus>
+    <!-- 5: empty status element -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="5"/>
+      <ns3:status/>
+    </ns3:refillPointStatus>
+    <!-- 6: no status element -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="6"/>
+    </ns3:refillPointStatus>
+    <!-- 7: one rates block with two pricing policies -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="7"/>
+      <ns3:status>inoperative</ns3:status>
+      <ns3:electricEnergyMixOverride energyMixIndex="0">
+        <ns3:rates>
+          <ns2:energyPricingPolicy>
+            <ns3:pricingPolicy>pricePerDeliveryUnit</ns3:pricingPolicy>
+            <ns3:minimumDeliveryFee>0.3</ns3:minimumDeliveryFee>
+          </ns2:energyPricingPolicy>
+          <ns2:energyPricingPolicy>
+            <ns3:pricingPolicy>flatRate</ns3:pricingPolicy>
+            <ns3:minimumDeliveryFee>0.5</ns3:minimumDeliveryFee>
+          </ns2:energyPricingPolicy>
+          <ns2:applicableCurrency>EUR</ns2:applicableCurrency>
+        </ns3:rates>
+      </ns3:electricEnergyMixOverride>
+    </ns3:refillPointStatus>
+    <!-- 8: pricing policy with an empty fee -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="8"/>
+      <ns3:status>unknown</ns3:status>
+      <ns3:electricEnergyMixOverride energyMixIndex="0">
+        <ns3:rates>
+          <ns2:energyPricingPolicy>
+            <ns3:pricingPolicy>pricePerDeliveryUnit</ns3:pricingPolicy>
+            <ns3:minimumDeliveryFee/>
+          </ns2:energyPricingPolicy>
+          <ns2:applicableCurrency>EUR</ns2:applicableCurrency>
+        </ns3:rates>
+      </ns3:electricEnergyMixOverride>
+    </ns3:refillPointStatus>
+    <!-- 9: pricing policy with a fee that is not a number -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="9"/>
+      <ns3:status>planned</ns3:status>
+      <ns3:electricEnergyMixOverride energyMixIndex="0">
+        <ns3:rates>
+          <ns2:energyPricingPolicy>
+            <ns3:pricingPolicy>pricePerDeliveryUnit</ns3:pricingPolicy>
+            <ns3:minimumDeliveryFee>n/a</ns3:minimumDeliveryFee>
+          </ns2:energyPricingPolicy>
+          <ns2:applicableCurrency>EUR</ns2:applicableCurrency>
+        </ns3:rates>
+      </ns3:electricEnergyMixOverride>
+    </ns3:refillPointStatus>
+    <!-- no reference: no id to key it by -->
+    <ns3:refillPointStatus>
+      <ns3:status>available</ns3:status>
+    </ns3:refillPointStatus>
+    <!-- A/B: a slash in a point id makes SITE/POINT ambiguous -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="A/B"/>
+      <ns3:status>available</ns3:status>
+    </ns3:refillPointStatus>
+    <!-- 10 twice: the later entry is the current one -->
+    <ns3:refillPointStatus>
+      <ns2:reference id="10"/>
+      <ns3:status>available</ns3:status>
+    </ns3:refillPointStatus>
+    <ns3:refillPointStatus>
+      <ns2:reference id="10"/>
+      <ns3:status>charging</ns3:status>
+    </ns3:refillPointStatus>
+  </ns3:energyInfrastructureSiteStatus>
+  <!-- a site with no reference: its points have no site to be keyed under -->
+  <ns3:energyInfrastructureSiteStatus>
+    <ns3:refillPointStatus>
+      <ns2:reference id="Z1"/>
+      <ns3:status>available</ns3:status>
+    </ns3:refillPointStatus>
+  </ns3:energyInfrastructureSiteStatus>
+  <ns3:energyInfrastructureSiteStatus>
+    <ns2:reference id="QA0003"/>
+    <!-- a publicationTime that is not the payload's own -->
+    <publicationTime>1999-01-01T00:00:00.000+00:00</publicationTime>
+    <ns3:refillPointStatus>
+      <ns2:reference id="1"/>
+      <ns3:status>available</ns3:status>
+    </ns3:refillPointStatus>
+  </ns3:energyInfrastructureSiteStatus>
+</ns4:payload>
