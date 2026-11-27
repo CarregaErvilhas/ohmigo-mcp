@@ -99,7 +99,7 @@ Whether a model actually follows all this is what `evals/` checks: a model plays
 | `site/grupo/*.svg` | The mascots on the group page, each one the art of its own site |
 | `src/site.js` | Renders those pages on the server (landing at `/` and `/en`, privacy at `/privacidade` and `/privacy`, support at `/suporte` and `/support`, terms at `/termos` and `/terms`, the group at `/grupo` and `/group`), with the tags search engines read (canonical, hreflang, Open Graph, JSON-LD on the landing page), `/sitemap.xml` and `/llms.txt` |
 | `site/og.png` | The image link previews show (WhatsApp, Facebook, X) |
-| `site/dados.html` | `/dados`: browse what `src/dump.js` returns. Public, `noindex`, cached by Cloudflare (Cache Rule on the zone, TTLs from the headers in `src/server.js`); Portuguese only |
+| `site/dados.html` | `/dados`: browse what `src/dump.js` returns. Public, `noindex`, cached by Cloudflare ([Cache Rule on the zone](https://github.com/CarregaErvilhas/OCarroEletrico/blob/main/docs/cloudflare-zone.md#cache-rules), TTLs from the headers in `src/server.js`); Portuguese only |
 | `offers/custofinal.json` | Direct offers scraped from the blog (generated) |
 | `offers/manual.json` | Hand-made corrections and additions to it |
 | `offers/audiences.json` | Groups with prices of their own (employees, ride-hailing drivers), hidden unless the driver claims one |
