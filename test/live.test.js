@@ -422,3 +422,19 @@ test('archive: unset, only the NAP is used', limit, async () => {
   assert.deepEqual(r.calls, { archive: 0, nap: 1 });
   assert.equal(live.info().source, 'nap');
 });
+
+test('withShared: a paired socket down while its partner charges is in use by it', async () => {
+  const { withShared, SHARED } = await import('../src/live.js');
+  const st = { 'S/A': 'outOfOrder', 'S/B': 'charging', 'S/C': 'inoperative', 'S/D': 'available', 'S/E': 'outOfOrder' };
+  const snap = { get: (s, p) => (st[`${s}/${p}`] ? { status: st[`${s}/${p}`], fees: [] } : null), info: () => ({}) };
+  const site = { id: 'S', points: [{ id: 'A', pair: ['B'] }, { id: 'B', pair: ['A'] }, { id: 'C', pair: ['D'] }, { id: 'D' }, { id: 'E' }] };
+  const v = withShared(snap, new Map([['S', site]]));
+  assert.equal(v.get('S', 'A').status, SHARED);
+  assert.equal(v.get('S', 'A').declared, 'outOfOrder');
+  assert.equal(v.get('S', 'B').status, 'charging');
+  // Partner not charging: still a fault. No pair: as declared.
+  assert.equal(v.get('S', 'C').status, 'inoperative');
+  assert.equal(v.get('S', 'E').status, 'outOfOrder');
+  assert.equal(v.get('S', 'Z'), null);
+  assert.equal(typeof v.info, 'function');
+});

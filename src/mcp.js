@@ -24,7 +24,7 @@ import { expandMonthKwh, promos, tariffs } from './ceme.js';
 import { clusterPlaces, directionLabel, onMotorway, PAIR_KM, sameStation, serviceAreas, sideFor } from './direction.js';
 import { haversineKm } from './geo.js';
 import { pickLang, translator } from './i18n.js';
-import { napEurPerKwh } from './live.js';
+import { napEurPerKwh, withShared } from './live.js';
 import { AUDIENCES, forAudiences, napNote, OFFERS, offersAt, perMinuteAt, SOURCE } from './offers.js';
 import { cardPayment, photoUrl, wheelchair } from './data.js';
 import { siteOpen } from './hours.js';
@@ -685,7 +685,7 @@ const liveMeta = live => { const { publishedAt, checkedAt, fresh, outdated, refr
 // the client why the answer is taking a while: a progress notification, which
 // chat apps show as a status line (only when the client asked for progress by
 // sending a progressToken).
-async function withLive(live, ctx, t) {
+async function withLive(live, ctx, t, ds) {
   const token = ctx?.mcpReq?._meta?.progressToken;
   await live.ensure({
     onWait: () => token != null && ctx.mcpReq.notify({
@@ -693,7 +693,8 @@ async function withLive(live, ctx, t) {
       params: { progressToken: token, progress: 0, message: t('progress.live') },
     }).catch(() => {}),
   });
-  return live.snapshot();
+  // Shared sockets read as busy, not broken (live.js withShared).
+  return withShared(live.snapshot(), ds.siteById);
 }
 
 // Old live data is answered with on purpose (src/live.js), so the result says
@@ -982,7 +983,7 @@ export function createServer(getDataset, live, usage) {
     // The usage history of the sites shown comes with the live status, never
     // in its way: a file that fails or is slow just leaves `history` out.
     const [status, used] = await Promise.all([
-      withLive(live, ctx, t),
+      withLive(live, ctx, t, ds),
       usage ? usage.get(results.slice(0, a.limit).map(h => h.site.id)).catch(() => undefined) : undefined,
     ]);
     notes.push(...liveNotes(status, t));
@@ -1015,7 +1016,7 @@ export function createServer(getDataset, live, usage) {
     const { everywhere, ...where } = w;
     const { total, results: all } = ds.search({ ...where, ...filterOf(a), region: a.region, limit: Infinity });
     if (!all.length) return err(t('err.noMatch'), 'noMatch');
-    const status = await withLive(live, ctx, t);
+    const status = await withLive(live, ctx, t, ds);
     // The other side of a motorway service area comes with the side shown,
     // even past the limit: they are the same stop, one per direction.
     const from = where.near && !where.route ? { point: where.near, name: w.resolvedPlace?.name ?? t('searchPoint') } : null;
@@ -1110,7 +1111,7 @@ export function createServer(getDataset, live, usage) {
       return await rankingSlot(signal, async () => {
         const { total, results } = ds.search({ ...w, ...filterOf(a), limit: Infinity });
         if (!results.length) return err(t('err.noMatch'), 'noMatch');
-        const status = await withLive(live, ctx, t);
+        const status = await withLive(live, ctx, t, ds);
         const { candidates, truncated: pointsCut } = rankCandidates(results, status, w.route != null);
         const ranked = await rank(candidates, car(a), {
           at: a.at ? new Date(a.at) : undefined, tariffIds: a.tariff_ids, shown: a.tariffs_shown, live: status, lang, audiences: a.audiences,
@@ -1207,7 +1208,7 @@ export function createServer(getDataset, live, usage) {
     if (a.private) return privateCost(a, ctx, lang, t);
     const where = targetsFor(ds, a, t);
     if (where.error) return err(where.error, where.code);
-    const status = await withLive(live, ctx, t);
+    const status = await withLive(live, ctx, t, ds);
     const targets = socketsFor(where, status);
     const assumptions = [...(where.assumptions ?? []), ...filterNotes(ds, a, t)];
     const signal = ctx?.mcpReq?.signal;

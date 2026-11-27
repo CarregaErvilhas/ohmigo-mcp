@@ -56,6 +56,30 @@ export const pointKey = (siteId, pointId) => `${siteId}/${pointId}`;
 // reporting a fault under a word we've never seen.
 const STATUSES = new Set(['available', 'charging', 'unknown', 'outOfOrder', 'inoperative', 'blocked', 'planned']);
 
+// Sockets that charge one at a time (CCS + CHAdeMO on one charger): while one
+// charges, the operator declares the other outOfOrder, inoperative or blocked.
+// The dataset's `pair` (learned by nap-dashboard from the AmpereArchive) lists
+// a socket's partners; while one of them is charging, the declared fault is
+// that partner's session, so the socket reads `otherSocketCharging`: busy, not
+// broken. A paired socket that is down with no partner charging stays down.
+const SHARED_FROM = new Set(['outOfOrder', 'inoperative', 'blocked']);
+export const SHARED = 'otherSocketCharging';
+
+// A snapshot (LiveStatus.snapshot) whose get() applies that rule. `siteById`:
+// the dataset's sites by id.
+export function withShared(snap, siteById) {
+  return {
+    ...snap,
+    get(siteId, pointId) {
+      const lp = snap.get(siteId, pointId);
+      if (!lp || !SHARED_FROM.has(lp.status)) return lp;
+      const pair = siteById.get(siteId)?.points.find(p => p.id === pointId)?.pair;
+      if (!pair?.length || !pair.some(q => snap.get(siteId, q)?.status === 'charging')) return lp;
+      return { ...lp, status: SHARED, declared: lp.status };
+    },
+  };
+}
+
 // Parses the feed from an async iterable of byte chunks.
 export async function parseStatus(chunks) {
   const points = new Map();

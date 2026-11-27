@@ -51,7 +51,10 @@ Some operators publish bare numbers as charger ids ("19", "160"), and the same n
 | `charging` | in use | no |
 | `outOfOrder`, `inoperative` | broken | no |
 | `blocked` | blocked | no |
+| `otherSocketCharging` | ours, not the NAP's: a shared socket in use by its partner (below) | no |
 | `planned` | not built yet | no |
 | `other` | a value ohmigo doesn't know | no |
+
+**Shared sockets.** Many CCS + CHAdeMO chargers (and some AC ones) charge one socket at a time, and while one charges the operator declares the other `outOfOrder`, `inoperative` or `blocked`. The dataset's `pair` (per point, learned by nap-dashboard from the AmpereArchive) lists the sockets a point shares power with. While one of them is `charging`, the point reads `otherSocketCharging`, with the declared value in `declared`: busy, not broken (`withShared` in `src/live.js`, applied to every tool's snapshot). A paired socket that is down while no partner charges stays as declared.
 
 Any other value in the feed becomes `other` (`src/live.js`), which is not kept either: a word we don't know could be a fault. The `[ohmigo] live:` log line counts them.
