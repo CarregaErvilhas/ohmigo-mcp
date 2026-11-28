@@ -2,7 +2,7 @@
 
 "The dataset" is the slow-changing half of the data: where each charger is, its plugs, power and voltage level, how the site lets you pay, and the operator fees from MOBI.E's tariff file. It's one JSON file, served gzipped (the URL is `DEFAULT_URL` in `src/data.js`).
 
-It is nap-dashboard's network model: the site at nap.ocarroeletrico.com reads the same file for what it shows about each charger, and checks on every refresh that it does (`scripts/model_parity.py` there). So a fix to how a charger's power, fees or regime are worked out goes into nap-dashboard, once, and both see it.
+It is nap-dashboard's network model: the site at postos.ocarroeletrico.com reads the same file for what it shows about each charger, and checks on every refresh that it does (`scripts/model_parity.py` there). So a fix to how a charger's power, fees or regime are worked out goes into nap-dashboard, once, and both see it.
 
 What's **not** in it: live status (changes by the minute, see [03](03-live-status.md)), CEME prices (ceme-v2's job), and operator direct offers (`offers/`, see [04](04-operator-offers.md)).
 
@@ -17,7 +17,7 @@ What's **not** in it: live status (changes by the minute, see [03](03-live-statu
  nap-dashboard's pages.yml
    │  publishes the newest one with the dashboard
    ▼
- https://nap.ocarroeletrico.com/ohmigo/chargers.json      (GitHub Pages, a CDN)
+ https://postos.ocarroeletrico.com/ohmigo/chargers.json      (GitHub Pages, a CDN)
    │
    ▼
  ohmigo: loaded at boot, re-checked every hour
