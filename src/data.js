@@ -74,7 +74,7 @@ import { fold } from './text.js';
 // How many site ids list_operators names per operator with no OPC fee on file.
 const NO_OPC_TARIFF_MAX = 20;
 
-export const DEFAULT_URL = 'https://nap.ocarroeletrico.com/ohmigo/chargers.json';
+export const DEFAULT_URL = 'https://postos.ocarroeletrico.com/ohmigo/chargers.json';
 // The photo thumbnails (photos/<id>.jpg) are published at the root of the
 // same site as the dataset: nap-dashboard's Pages deploy puts them there.
 export const photoUrl = src => new URL(src, new URL('/', process.env.DATASET_URL || DEFAULT_URL)).href;
@@ -115,7 +115,7 @@ export class Dataset {
         // charger's plate by the community) corrects the NAP's declaration,
         // nap-dashboard has already used OSM's value and kept the NAP's in
         // napKw/napV/napA/napCable for the answers to show. Its site shows the
-        // same values, so ohmigo and nap.ocarroeletrico.com never disagree
+        // same values, so ohmigo and postos.ocarroeletrico.com never disagree
         // about a socket (docs/05-dataset.md).
         // Where the max current comes from: OpenStreetMap (it corrected the
         // NAP, or confirmed it: osmSame) or only the operator's declaration.
